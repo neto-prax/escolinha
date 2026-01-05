@@ -1,0 +1,318 @@
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+
+const loginSchema = z.object({
+  email: z.string().email('Email inválido'),
+  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
+});
+
+const signupSchema = z.object({
+  fullName: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  email: z.string().email('Email inválido'),
+  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'As senhas não conferem',
+  path: ['confirmPassword'],
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
+type SignupFormData = z.infer<typeof signupSchema>;
+
+const Login = () => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
+  const { signIn, signUp, isAuthenticated } = useAuth();
+  const { toast } = useToast();
+
+  const loginForm = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
+
+  const signupForm = useForm<SignupFormData>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      fullName: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+    },
+  });
+
+  // Redirect if already authenticated
+  if (isAuthenticated) {
+    navigate('/app/dashboard', { replace: true });
+    return null;
+  }
+
+  const handleLogin = async (data: LoginFormData) => {
+    setIsLoading(true);
+    const { error } = await signIn(data.email, data.password);
+    setIsLoading(false);
+
+    if (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao entrar',
+        description: error.message === 'Invalid login credentials'
+          ? 'Email ou senha incorretos'
+          : error.message,
+      });
+      return;
+    }
+
+    toast({
+      title: 'Bem-vindo!',
+      description: 'Login realizado com sucesso.',
+    });
+    navigate('/app/dashboard');
+  };
+
+  const handleSignup = async (data: SignupFormData) => {
+    setIsLoading(true);
+    const { error } = await signUp(data.email, data.password, data.fullName);
+    setIsLoading(false);
+
+    if (error) {
+      let errorMessage = error.message;
+      if (error.message.includes('already registered')) {
+        errorMessage = 'Este email já está cadastrado. Tente fazer login.';
+      }
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao cadastrar',
+        description: errorMessage,
+      });
+      return;
+    }
+
+    toast({
+      title: 'Conta criada!',
+      description: 'Sua conta foi criada com sucesso. Você já pode fazer login.',
+    });
+    navigate('/app/dashboard');
+  };
+
+  return (
+    <div className="min-h-screen flex">
+      {/* Left side - Branding */}
+      <div className="hidden lg:flex lg:w-1/2 bg-primary items-center justify-center p-12">
+        <div className="max-w-md text-primary-foreground">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary-foreground/20 text-primary-foreground font-bold text-2xl">
+              I
+            </div>
+            <span className="text-2xl font-bold">Interagir ERP</span>
+          </div>
+          <h1 className="text-4xl font-bold mb-4">
+            Gestão escolar completa em um só lugar
+          </h1>
+          <p className="text-lg opacity-90">
+            Simplifique a administração da sua escola com nossa plataforma integrada.
+            Pedagógico, financeiro, comunicação e muito mais.
+          </p>
+        </div>
+      </div>
+
+      {/* Right side - Form */}
+      <div className="flex-1 flex items-center justify-center p-6 bg-background">
+        <Card className="w-full max-w-md border-0 shadow-lg">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4 lg:hidden">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-2xl">
+                I
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Acesse sua conta</CardTitle>
+            <CardDescription>
+              Entre ou crie uma conta para acessar o sistema
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="login">Entrar</TabsTrigger>
+                <TabsTrigger value="signup">Criar conta</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="login">
+                <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">Email</Label>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      placeholder="seu@email.com"
+                      {...loginForm.register('email')}
+                    />
+                    {loginForm.formState.errors.email && (
+                      <p className="text-sm text-destructive">
+                        {loginForm.formState.errors.email.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">Senha</Label>
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        {...loginForm.register('password')}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {loginForm.formState.errors.password && (
+                      <p className="text-sm text-destructive">
+                        {loginForm.formState.errors.password.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Entrando...
+                      </>
+                    ) : (
+                      'Entrar'
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="signup">
+                <form onSubmit={signupForm.handleSubmit(handleSignup)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-name">Nome completo</Label>
+                    <Input
+                      id="signup-name"
+                      placeholder="Seu nome"
+                      {...signupForm.register('fullName')}
+                    />
+                    {signupForm.formState.errors.fullName && (
+                      <p className="text-sm text-destructive">
+                        {signupForm.formState.errors.fullName.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email</Label>
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      placeholder="seu@email.com"
+                      {...signupForm.register('email')}
+                    />
+                    {signupForm.formState.errors.email && (
+                      <p className="text-sm text-destructive">
+                        {signupForm.formState.errors.email.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Senha</Label>
+                    <div className="relative">
+                      <Input
+                        id="signup-password"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        {...signupForm.register('password')}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {signupForm.formState.errors.password && (
+                      <p className="text-sm text-destructive">
+                        {signupForm.formState.errors.password.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-confirm">Confirmar senha</Label>
+                    <Input
+                      id="signup-confirm"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      {...signupForm.register('confirmPassword')}
+                    />
+                    {signupForm.formState.errors.confirmPassword && (
+                      <p className="text-sm text-destructive">
+                        {signupForm.formState.errors.confirmPassword.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Criando conta...
+                      </>
+                    ) : (
+                      'Criar conta'
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground text-center">
+              Ao continuar, você concorda com nossos{' '}
+              <a href="#" className="text-primary hover:underline">
+                Termos de Uso
+              </a>{' '}
+              e{' '}
+              <a href="#" className="text-primary hover:underline">
+                Política de Privacidade
+              </a>
+              .
+            </p>
+            <Link to="/" className="text-sm text-primary hover:underline">
+              ← Voltar para o site
+            </Link>
+          </CardFooter>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default Login;
