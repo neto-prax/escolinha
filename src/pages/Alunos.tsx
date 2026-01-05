@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,9 +20,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { StudentForm } from '@/components/forms/StudentForm';
+import { toast } from 'sonner';
 
 // Mock data
-const students = [
+const initialStudents = [
   { id: '1', name: 'Ana Beatriz Silva', class: '5º Ano A', guardian: 'Maria Silva', phone: '(11) 99999-1111', status: 'active' },
   { id: '2', name: 'Bruno Costa Santos', class: '5º Ano A', guardian: 'José Santos', phone: '(11) 99999-2222', status: 'active' },
   { id: '3', name: 'Carolina Oliveira', class: '4º Ano A', guardian: 'Paula Oliveira', phone: '(11) 99999-3333', status: 'active' },
@@ -31,13 +34,49 @@ const students = [
 ];
 
 const Alunos = () => {
+  const [students, setStudents] = useState(initialStudents);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<typeof initialStudents[0] | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredStudents = students.filter(student =>
+    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    student.class.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    student.guardian.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleCreateStudent = async (data: any) => {
+    const newStudent = {
+      id: String(Date.now()),
+      name: data.full_name,
+      class: 'A definir',
+      guardian: data.guardian_name,
+      phone: data.guardian_phone,
+      status: 'active',
+    };
+    setStudents([...students, newStudent]);
+    toast.success('Aluno cadastrado com sucesso!');
+  };
+
+  const handleEditStudent = async (data: any) => {
+    if (!editingStudent) return;
+    setStudents(students.map(s => 
+      s.id === editingStudent.id ? { ...s, name: data.full_name, guardian: data.guardian_name, phone: data.guardian_phone } : s
+    ));
+    setEditingStudent(null);
+    toast.success('Aluno atualizado com sucesso!');
+  };
+
+  const activeStudents = students.filter(s => s.status === 'active').length;
+  const inactiveStudents = students.filter(s => s.status === 'inactive').length;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Alunos"
         description="Gerencie os alunos da escola"
       >
-        <Button>
+        <Button onClick={() => setIsFormOpen(true)}>
           <UserPlus className="mr-2 h-4 w-4" />
           Novo Aluno
         </Button>
@@ -51,7 +90,7 @@ const Alunos = () => {
             <GraduationCap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">324</div>
+            <div className="text-2xl font-bold">{students.length}</div>
             <p className="text-xs text-muted-foreground">Matriculados</p>
           </CardContent>
         </Card>
@@ -61,17 +100,17 @@ const Alunos = () => {
             <GraduationCap className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success">318</div>
-            <p className="text-xs text-muted-foreground">98.1% do total</p>
+            <div className="text-2xl font-bold text-success">{activeStudents}</div>
+            <p className="text-xs text-muted-foreground">{Math.round(activeStudents / students.length * 100)}% do total</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Transferidos</CardTitle>
+            <CardTitle className="text-sm font-medium">Inativos</CardTitle>
             <GraduationCap className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-warning">4</div>
+            <div className="text-2xl font-bold text-warning">{inactiveStudents}</div>
             <p className="text-xs text-muted-foreground">Este ano</p>
           </CardContent>
         </Card>
@@ -93,7 +132,12 @@ const Alunos = () => {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar aluno..." className="pl-9" />
+              <Input
+                placeholder="Buscar aluno..."
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
             <Button variant="outline" size="icon">
               <Filter className="h-4 w-4" />
@@ -113,7 +157,7 @@ const Alunos = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {students.map((student) => (
+              {filteredStudents.map((student) => (
                 <TableRow key={student.id} className="table-row-interactive">
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -145,7 +189,12 @@ const Alunos = () => {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem>Ver ficha completa</DropdownMenuItem>
-                        <DropdownMenuItem>Editar cadastro</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setEditingStudent(student);
+                          setIsFormOpen(true);
+                        }}>
+                          Editar cadastro
+                        </DropdownMenuItem>
                         <DropdownMenuItem>Ver responsáveis</DropdownMenuItem>
                         <DropdownMenuItem>Histórico financeiro</DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive">
@@ -160,6 +209,22 @@ const Alunos = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Form Dialog */}
+      <StudentForm
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          setIsFormOpen(open);
+          if (!open) setEditingStudent(null);
+        }}
+        onSubmit={editingStudent ? handleEditStudent : handleCreateStudent}
+        initialData={editingStudent ? {
+          full_name: editingStudent.name,
+          guardian_name: editingStudent.guardian,
+          guardian_phone: editingStudent.phone,
+        } : undefined}
+        mode={editingStudent ? 'edit' : 'create'}
+      />
     </div>
   );
 };
