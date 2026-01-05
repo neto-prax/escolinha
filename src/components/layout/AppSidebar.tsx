@@ -95,16 +95,21 @@ const navigationGroups: NavGroup[] = [
 ];
 
 export const AppSidebar = () => {
-  const { hasPermission, school } = useAuth();
+  const { hasPermission, school, roles } = useAuth();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
   // Filter navigation items based on user permissions
+  // Se não há roles definidas, mostra tudo (modo desenvolvimento/setup inicial)
+  const hasAnyRoles = roles.length > 0;
+  
   const filteredGroups = navigationGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
         if (item.module === 'dashboard') return true;
+        // Mostra todos os itens se não há roles definidas
+        if (!hasAnyRoles) return true;
         return hasPermission(item.module);
       }),
     }))
