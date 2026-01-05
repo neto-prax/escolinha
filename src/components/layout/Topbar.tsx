@@ -31,7 +31,7 @@ export const Topbar = () => {
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-topbar px-4 lg:px-6">
-      <SidebarTrigger className="lg:hidden" />
+      <SidebarTrigger />
 
       {/* Logo e nome da escola */}
       <div className="hidden lg:flex items-center gap-3">
