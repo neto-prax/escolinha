@@ -22,6 +22,7 @@ import Relatorios from "./pages/Relatorios";
 import Setores from "./pages/Setores";
 import Configuracoes from "./pages/Configuracoes";
 import Usuarios from "./pages/Usuarios";
+import CRMMatriculas from "./pages/CRMMatriculas";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="setores" element={<Setores />} />
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="usuarios" element={<Usuarios />} />
+              <Route path="crm-matriculas" element={<CRMMatriculas />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />

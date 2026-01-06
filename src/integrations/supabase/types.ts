@@ -348,6 +348,99 @@ export type Database = {
           },
         ]
       }
+      contacts: {
+        Row: {
+          avatar_url: string | null
+          contact_type: string
+          created_at: string | null
+          email: string | null
+          full_name: string
+          guardian_id: string | null
+          id: string
+          lead_id: string | null
+          linked_student_ids: string[] | null
+          notes: string | null
+          phone: string
+          profile_id: string | null
+          school_id: string
+          student_id: string | null
+          tags: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          contact_type: string
+          created_at?: string | null
+          email?: string | null
+          full_name: string
+          guardian_id?: string | null
+          id?: string
+          lead_id?: string | null
+          linked_student_ids?: string[] | null
+          notes?: string | null
+          phone: string
+          profile_id?: string | null
+          school_id: string
+          student_id?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          contact_type?: string
+          created_at?: string | null
+          email?: string | null
+          full_name?: string
+          guardian_id?: string | null
+          id?: string
+          lead_id?: string | null
+          linked_student_ids?: string[] | null
+          notes?: string | null
+          phone?: string
+          profile_id?: string | null
+          school_id?: string
+          student_id?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "enrollment_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contracts: {
         Row: {
           contract_number: string | null
@@ -468,6 +561,139 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enrollment_lead_activities: {
+        Row: {
+          activity_type: string
+          created_at: string | null
+          description: string | null
+          id: string
+          lead_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          lead_id: string
+          user_id: string
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          lead_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrollment_lead_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "enrollment_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollment_lead_activities_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enrollment_leads: {
+        Row: {
+          assigned_to: string | null
+          created_at: string | null
+          expected_start: string | null
+          guardian_cpf: string | null
+          guardian_email: string | null
+          guardian_name: string
+          guardian_phone: string
+          id: string
+          interest_level: string | null
+          lost_reason: string | null
+          next_follow_up: string | null
+          notes: string | null
+          school_id: string
+          sector_id: string | null
+          source: string | null
+          status: string | null
+          student_birth_date: string | null
+          student_grade: string | null
+          student_name: string
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string | null
+          expected_start?: string | null
+          guardian_cpf?: string | null
+          guardian_email?: string | null
+          guardian_name: string
+          guardian_phone: string
+          id?: string
+          interest_level?: string | null
+          lost_reason?: string | null
+          next_follow_up?: string | null
+          notes?: string | null
+          school_id: string
+          sector_id?: string | null
+          source?: string | null
+          status?: string | null
+          student_birth_date?: string | null
+          student_grade?: string | null
+          student_name: string
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string | null
+          expected_start?: string | null
+          guardian_cpf?: string | null
+          guardian_email?: string | null
+          guardian_name?: string
+          guardian_phone?: string
+          id?: string
+          interest_level?: string | null
+          lost_reason?: string | null
+          next_follow_up?: string | null
+          notes?: string | null
+          school_id?: string
+          sector_id?: string | null
+          source?: string | null
+          status?: string | null
+          student_birth_date?: string | null
+          student_grade?: string | null
+          student_name?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrollment_leads_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollment_leads_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollment_leads_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
             referencedColumns: ["id"]
           },
         ]
@@ -949,6 +1175,67 @@ export type Database = {
           },
         ]
       }
+      quick_replies: {
+        Row: {
+          category: string | null
+          content: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          school_id: string
+          sector_id: string | null
+          shortcut: string
+          title: string
+        }
+        Insert: {
+          category?: string | null
+          content: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          school_id: string
+          sector_id?: string | null
+          shortcut: string
+          title: string
+        }
+        Update: {
+          category?: string | null
+          content?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          school_id?: string
+          sector_id?: string | null
+          shortcut?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quick_replies_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quick_replies_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quick_replies_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       schools: {
         Row: {
           address: string | null
@@ -1258,48 +1545,86 @@ export type Database = {
       }
       whatsapp_conversations: {
         Row: {
+          assigned_to: string | null
+          closed_at: string | null
+          contact_id: string | null
           contact_name: string | null
           created_at: string
           guardian_id: string | null
           id: string
           last_message_at: string | null
+          opened_at: string | null
           phone: string
+          priority: string | null
+          resolution_summary: string | null
           school_id: string
           sector_id: string | null
           status: string | null
           student_id: string | null
+          tags: string[] | null
+          ticket_status: string | null
           unread_count: number | null
           updated_at: string
         }
         Insert: {
+          assigned_to?: string | null
+          closed_at?: string | null
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string
           guardian_id?: string | null
           id?: string
           last_message_at?: string | null
+          opened_at?: string | null
           phone: string
+          priority?: string | null
+          resolution_summary?: string | null
           school_id: string
           sector_id?: string | null
           status?: string | null
           student_id?: string | null
+          tags?: string[] | null
+          ticket_status?: string | null
           unread_count?: number | null
           updated_at?: string
         }
         Update: {
+          assigned_to?: string | null
+          closed_at?: string | null
+          contact_id?: string | null
           contact_name?: string | null
           created_at?: string
           guardian_id?: string | null
           id?: string
           last_message_at?: string | null
+          opened_at?: string | null
           phone?: string
+          priority?: string | null
+          resolution_summary?: string | null
           school_id?: string
           sector_id?: string | null
           status?: string | null
           student_id?: string | null
+          tags?: string[] | null
+          ticket_status?: string | null
           unread_count?: number | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "whatsapp_conversations_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_conversations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "whatsapp_conversations_guardian_id_fkey"
             columns: ["guardian_id"]
@@ -1338,8 +1663,13 @@ export type Database = {
           direction: string
           external_id: string | null
           id: string
+          is_quick_reply: boolean | null
+          media_caption: string | null
+          media_filename: string | null
           media_url: string | null
           message_type: string | null
+          reaction: string | null
+          reply_to_id: string | null
           status: string | null
         }
         Insert: {
@@ -1349,8 +1679,13 @@ export type Database = {
           direction: string
           external_id?: string | null
           id?: string
+          is_quick_reply?: boolean | null
+          media_caption?: string | null
+          media_filename?: string | null
           media_url?: string | null
           message_type?: string | null
+          reaction?: string | null
+          reply_to_id?: string | null
           status?: string | null
         }
         Update: {
@@ -1360,8 +1695,13 @@ export type Database = {
           direction?: string
           external_id?: string | null
           id?: string
+          is_quick_reply?: boolean | null
+          media_caption?: string | null
+          media_filename?: string | null
           media_url?: string | null
           message_type?: string | null
+          reaction?: string | null
+          reply_to_id?: string | null
           status?: string | null
         }
         Relationships: [
@@ -1370,6 +1710,13 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_messages"
             referencedColumns: ["id"]
           },
         ]
