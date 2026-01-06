@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle,
+  Play,
+  RotateCcw,
 } from "lucide-react";
 import { Conversation } from "./ConversationCard";
 import { cn } from "@/lib/utils";
@@ -124,7 +126,78 @@ export function ChatHeader({
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
+        {/* Action buttons based on ticket status */}
+        {conversation.ticket_status === 'open' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-yellow-600 border-yellow-300 hover:bg-yellow-50"
+            onClick={() => onChangeStatus('pending')}
+          >
+            <Play className="h-3.5 w-3.5 mr-1.5" />
+            Aceitar
+          </Button>
+        )}
+
+        {conversation.ticket_status === 'pending' && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-green-600 border-green-300 hover:bg-green-50"
+              onClick={() => onChangeStatus('resolved')}
+            >
+              <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+              Resolver
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={onCloseTicket}
+            >
+              <XCircle className="h-3.5 w-3.5 mr-1.5" />
+              Fechar
+            </Button>
+          </>
+        )}
+
+        {conversation.ticket_status === 'resolved' && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-blue-600 border-blue-300 hover:bg-blue-50"
+              onClick={() => onChangeStatus('open')}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Reabrir
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={onCloseTicket}
+            >
+              <XCircle className="h-3.5 w-3.5 mr-1.5" />
+              Fechar
+            </Button>
+          </>
+        )}
+
+        {conversation.ticket_status === 'closed' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-blue-600 border-blue-300 hover:bg-blue-50"
+            onClick={() => onChangeStatus('open')}
+          >
+            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+            Reabrir
+          </Button>
+        )}
+
         <Button variant="ghost" size="icon" className="h-9 w-9">
           <Phone className="h-4 w-4" />
         </Button>
