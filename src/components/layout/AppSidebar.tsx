@@ -68,6 +68,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
       { title: 'Secretaria', url: '/app/secretaria', icon: Building2, module: 'secretaria' },
+      { title: 'CRM Matrículas', url: '/app/crm-matriculas', icon: Users, module: 'secretaria' },
     ],
   },
   {
