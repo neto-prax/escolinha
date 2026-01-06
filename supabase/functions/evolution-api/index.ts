@@ -94,6 +94,8 @@ serve(async (req) => {
         throw new Error(`Unknown action: ${action}`);
     }
 
+    console.log('Calling Evolution API:', { url: `${EVOLUTION_API_URL}${endpoint}`, method, body });
+
     const response = await fetch(`${EVOLUTION_API_URL}${endpoint}`, {
       method,
       headers: {
@@ -103,10 +105,20 @@ serve(async (req) => {
       ...(body && { body: JSON.stringify(body) }),
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
+    console.log('Evolution API response:', { status: response.status, body: responseText });
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      result = { rawResponse: responseText };
+    }
 
     if (!response.ok) {
-      throw new Error(result.message || 'Evolution API request failed');
+      const errorDetail = result.message || result.error || result.rawResponse || 'Evolution API request failed';
+      console.error('Evolution API error response:', result);
+      throw new Error(errorDetail);
     }
 
     return new Response(JSON.stringify(result), {
