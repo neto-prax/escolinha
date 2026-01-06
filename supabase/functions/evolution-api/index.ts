@@ -27,8 +27,32 @@ serve(async (req) => {
     let body: any = null;
 
     switch (action) {
+      case 'create-instance':
+        endpoint = `/instance/create`;
+        body = {
+          instanceName: data.instanceName,
+          qrcode: true,
+          integration: "WHATSAPP-BAILEYS",
+        };
+        break;
+
+      case 'delete-instance':
+        endpoint = `/instance/delete/${data.instanceName}`;
+        method = 'DELETE';
+        break;
+
+      case 'get-qrcode':
+        endpoint = `/instance/connect/${data.instanceName}`;
+        method = 'GET';
+        break;
+
+      case 'get-instance-status':
+        endpoint = `/instance/connectionState/${data.instanceName}`;
+        method = 'GET';
+        break;
+
       case 'send-text':
-        endpoint = `/message/sendText/${EVOLUTION_INSTANCE_NAME}`;
+        endpoint = `/message/sendText/${data.instanceName || EVOLUTION_INSTANCE_NAME}`;
         body = {
           number: data.phone,
           text: data.message,
@@ -36,7 +60,7 @@ serve(async (req) => {
         break;
 
       case 'send-media':
-        endpoint = `/message/sendMedia/${EVOLUTION_INSTANCE_NAME}`;
+        endpoint = `/message/sendMedia/${data.instanceName || EVOLUTION_INSTANCE_NAME}`;
         body = {
           number: data.phone,
           mediatype: data.mediaType,
@@ -47,25 +71,15 @@ serve(async (req) => {
         break;
 
       case 'send-audio':
-        endpoint = `/message/sendWhatsAppAudio/${EVOLUTION_INSTANCE_NAME}`;
+        endpoint = `/message/sendWhatsAppAudio/${data.instanceName || EVOLUTION_INSTANCE_NAME}`;
         body = {
           number: data.phone,
           audio: data.audioUrl,
         };
         break;
 
-      case 'get-instance-status':
-        endpoint = `/instance/connectionState/${EVOLUTION_INSTANCE_NAME}`;
-        method = 'GET';
-        break;
-
-      case 'get-qrcode':
-        endpoint = `/instance/connect/${EVOLUTION_INSTANCE_NAME}`;
-        method = 'GET';
-        break;
-
       case 'fetch-messages':
-        endpoint = `/chat/findMessages/${EVOLUTION_INSTANCE_NAME}`;
+        endpoint = `/chat/findMessages/${data.instanceName || EVOLUTION_INSTANCE_NAME}`;
         body = {
           where: {
             key: {
