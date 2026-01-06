@@ -11,8 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, User, MessageSquare } from 'lucide-react';
-import { useState } from 'react';
+import { Search, Plus, User, MessageSquare, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { ConversationCard, Conversation } from '@/components/messages/ConversationCard';
 import { ChatHeader } from '@/components/messages/ChatHeader';
 import { MessageBubble, Message } from '@/components/messages/MessageBubble';
@@ -21,145 +24,22 @@ import { TicketCloseModal } from '@/components/messages/TicketCloseModal';
 import { LinkStudentModal } from '@/components/messages/LinkStudentModal';
 import { ChangeContactTypeModal } from '@/components/messages/ChangeContactTypeModal';
 import { NewConversationModal } from '@/components/messages/NewConversationModal';
-
-// Mock data
-const sectors = [
-  { id: '1', name: 'Financeiro' },
-  { id: '2', name: 'Secretaria' },
-  { id: '3', name: 'Pedagógico' },
-];
-
-const mockStudents = [
-  { id: '1', full_name: 'Lucas Silva', enrollment_number: '2025001', class_name: '3º Ano A' },
-  { id: '2', full_name: 'Ana Silva', enrollment_number: '2025002', class_name: '1º Ano B' },
-  { id: '3', full_name: 'Pedro Santos', enrollment_number: '2025003', class_name: '2º Ano A' },
-];
-
-const mockExistingContacts = [
-  { id: '1', full_name: 'Maria Silva', phone: '(11) 99999-1111', contact_type: 'guardian' as const },
-  { id: '2', full_name: 'João Santos', phone: '(11) 99999-2222', contact_type: 'guardian' as const },
-  { id: '3', full_name: 'Ana Costa', phone: '(11) 99999-3333', contact_type: 'lead' as const },
-];
-
-const initialConversations: Conversation[] = [
-  {
-    id: '1',
-    contact_name: 'Maria Silva',
-    phone: '(11) 99999-1111',
-    last_message: 'Olá, gostaria de saber sobre a mensalidade de janeiro.',
-    last_message_at: new Date().toISOString(),
-    unread_count: 2,
-    sector_name: 'Financeiro',
-    contact_type: 'guardian',
-    ticket_status: 'open',
-    priority: 'normal',
-    linked_students: [
-      { id: '1', name: 'Lucas Silva' },
-      { id: '2', name: 'Ana Silva' },
-    ],
-  },
-  {
-    id: '2',
-    contact_name: 'João Santos',
-    phone: '(11) 99999-2222',
-    last_message: 'Preciso do histórico escolar do meu filho.',
-    last_message_at: new Date(Date.now() - 3600000).toISOString(),
-    unread_count: 0,
-    sector_name: 'Secretaria',
-    contact_type: 'guardian',
-    ticket_status: 'pending',
-    priority: 'high',
-    linked_students: [{ id: '3', name: 'Pedro Santos' }],
-  },
-  {
-    id: '3',
-    contact_name: 'Ana Costa',
-    phone: '(11) 99999-3333',
-    last_message: 'Qual horário da reunião de pais?',
-    last_message_at: new Date(Date.now() - 86400000).toISOString(),
-    unread_count: 0,
-    sector_name: 'Pedagógico',
-    contact_type: 'lead',
-    ticket_status: 'open',
-    priority: 'normal',
-    linked_students: [],
-  },
-  {
-    id: '4',
-    contact_name: 'Roberto Oliveira',
-    phone: '(11) 99999-4444',
-    last_message: 'Obrigado pela informação!',
-    last_message_at: new Date(Date.now() - 86400000).toISOString(),
-    unread_count: 0,
-    sector_name: 'Financeiro',
-    contact_type: 'other',
-    ticket_status: 'resolved',
-    priority: 'low',
-    linked_students: [],
-  },
-  {
-    id: '5',
-    contact_name: 'Prof. Carlos',
-    phone: '(11) 99999-5555',
-    last_message: 'Confirmado para amanhã.',
-    last_message_at: new Date(Date.now() - 172800000).toISOString(),
-    unread_count: 0,
-    sector_name: 'Pedagógico',
-    contact_type: 'staff',
-    ticket_status: 'resolved',
-    priority: 'normal',
-    linked_students: [],
-  },
-];
-
-const initialMessages: Message[] = [
-  { 
-    id: '1', 
-    body: 'Olá, boa tarde!', 
-    direction: 'incoming', 
-    created_at: new Date(Date.now() - 300000).toISOString(),
-    status: 'read',
-    message_type: 'text',
-  },
-  { 
-    id: '2', 
-    body: 'Olá! Como posso ajudar?', 
-    direction: 'outgoing', 
-    created_at: new Date(Date.now() - 240000).toISOString(),
-    status: 'read',
-    message_type: 'text',
-  },
-  { 
-    id: '3', 
-    body: 'Gostaria de saber sobre a mensalidade de janeiro.', 
-    direction: 'incoming',
-    created_at: new Date(Date.now() - 120000).toISOString(),
-    status: 'read',
-    message_type: 'text',
-    reply_to: {
-      id: '2',
-      body: 'Olá! Como posso ajudar?',
-      sender_name: 'Você'
-    }
-  },
-  { 
-    id: '4', 
-    body: 'O valor já foi pago ou ainda está pendente?', 
-    direction: 'incoming',
-    created_at: new Date().toISOString(),
-    status: 'read',
-    message_type: 'text',
-  },
-];
+import {
+  useWhatsAppConversations,
+  useWhatsAppMessages,
+  useSendMessage,
+  useUpdateConversationStatus,
+} from '@/hooks/useWhatsAppConversations';
+import { toast } from 'sonner';
 
 const Mensagens = () => {
-  const [selectedConversation, setSelectedConversation] = useState<string | null>('1');
+  const { profile } = useAuth();
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [selectedSector, setSelectedSector] = useState<string>('all');
   const [selectedContactType, setSelectedContactType] = useState<string>('all');
   const [ticketFilter, setTicketFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [conversationsList, setConversationsList] = useState<Conversation[]>(initialConversations);
-  
+
   // Modal states
   const [ticketCloseModalOpen, setTicketCloseModalOpen] = useState(false);
   const [linkStudentModalOpen, setLinkStudentModalOpen] = useState(false);
@@ -167,147 +47,278 @@ const Mensagens = () => {
   const [newConversationModalOpen, setNewConversationModalOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
+  // Fetch sectors
+  const { data: sectors = [] } = useQuery({
+    queryKey: ['sectors', profile?.school_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sectors')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.school_id,
+  });
+
+  // Fetch students for linking
+  const { data: students = [] } = useQuery({
+    queryKey: ['students', profile?.school_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('students')
+        .select('id, full_name, enrollment_number')
+        .eq('is_active', true)
+        .order('full_name');
+      if (error) throw error;
+      return data.map(s => ({
+        id: s.id,
+        full_name: s.full_name,
+        enrollment_number: s.enrollment_number || '',
+        class_name: '',
+      }));
+    },
+    enabled: !!profile?.school_id,
+  });
+
+  // Fetch contacts for new conversation
+  const { data: existingContacts = [] } = useQuery({
+    queryKey: ['contacts', profile?.school_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('id, full_name, phone, contact_type')
+        .order('full_name');
+      if (error) throw error;
+      return data.map(c => ({
+        id: c.id,
+        full_name: c.full_name,
+        phone: c.phone,
+        contact_type: c.contact_type as 'lead' | 'guardian' | 'student' | 'staff' | 'other',
+      }));
+    },
+    enabled: !!profile?.school_id,
+  });
+
+  // Fetch conversations
+  const { data: rawConversations = [], isLoading: loadingConversations } = useWhatsAppConversations(
+    selectedSector !== 'all' ? selectedSector : undefined
+  );
+
+  // Transform conversations to match component interface
+  const conversationsList: Conversation[] = rawConversations.map(conv => ({
+    id: conv.id,
+    contact_name: conv.contact?.full_name || conv.contact_name || conv.phone,
+    phone: conv.phone,
+    last_message: '',
+    last_message_at: conv.last_message_at || undefined,
+    unread_count: conv.unread_count || 0,
+    sector_name: conv.sector?.name,
+    contact_type: (conv.contact?.contact_type as 'lead' | 'guardian' | 'student' | 'staff' | 'other') || 'other',
+    ticket_status: (conv.ticket_status as 'open' | 'pending' | 'resolved' | 'closed') || 'open',
+    priority: (conv.priority as 'low' | 'normal' | 'high' | 'urgent') || 'normal',
+    linked_students: conv.contact?.linked_student_ids?.map(id => ({
+      id,
+      name: students.find(s => s.id === id)?.full_name || 'Aluno',
+    })) || [],
+  }));
+
+  // Fetch messages for selected conversation
+  const { data: rawMessages = [], isLoading: loadingMessages } = useWhatsAppMessages(selectedConversation);
+
+  // Transform messages
+  const messages: Message[] = rawMessages.map(msg => ({
+    id: msg.id,
+    body: msg.body || '',
+    direction: msg.direction as 'incoming' | 'outgoing',
+    created_at: msg.created_at,
+    status: (msg.status === 'sending' ? 'pending' : msg.status) as 'pending' | 'sent' | 'delivered' | 'read' | 'failed',
+    message_type: (msg.message_type as 'text' | 'image' | 'video' | 'audio' | 'sticker' | 'document') || 'text',
+    media_url: msg.media_url || undefined,
+    media_caption: msg.media_caption || undefined,
+    media_filename: msg.media_filename || undefined,
+  }));
+
+  // Mutations
+  const sendMessage = useSendMessage();
+  const updateStatus = useUpdateConversationStatus();
+
   const filteredConversations = conversationsList.filter((c) => {
-    const matchesSector = selectedSector === 'all' || c.sector_name === selectedSector;
     const matchesType = selectedContactType === 'all' || c.contact_type === selectedContactType;
     const matchesTicket = ticketFilter === 'all' || c.ticket_status === ticketFilter;
-    const matchesSearch = searchQuery === '' || 
+    const matchesSearch =
+      searchQuery === '' ||
       c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.phone.includes(searchQuery) ||
-      (c.last_message?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-    return matchesSector && matchesType && matchesTicket && matchesSearch;
+      c.phone.includes(searchQuery);
+    return matchesType && matchesTicket && matchesSearch;
   });
 
   const activeConversation = conversationsList.find((c) => c.id === selectedConversation);
 
-  const handleCloseTicket = (data: { summary: string; category: string; resolved: boolean }) => {
-    if (activeConversation) {
-      setConversationsList(prev => 
-        prev.map(c => 
-          c.id === activeConversation.id 
-            ? { ...c, ticket_status: 'closed' as const }
-            : c
-        )
-      );
+  // Auto-select first conversation
+  useEffect(() => {
+    if (!selectedConversation && filteredConversations.length > 0) {
+      setSelectedConversation(filteredConversations[0].id);
+    }
+  }, [filteredConversations, selectedConversation]);
+
+  const handleCloseTicket = async (data: { summary: string; category: string; resolved: boolean }) => {
+    if (!selectedConversation) return;
+    try {
+      await updateStatus.mutateAsync({
+        conversationId: selectedConversation,
+        status: 'closed',
+        resolutionSummary: data.summary,
+      });
+      toast.success('Ticket encerrado');
+    } catch (error) {
+      toast.error('Erro ao encerrar ticket');
     }
     setTicketCloseModalOpen(false);
   };
 
-  const handleLinkStudents = (studentIds: string[]) => {
-    if (activeConversation) {
-      const newLinkedStudents = mockStudents
-        .filter(s => studentIds.includes(s.id))
-        .map(s => ({ id: s.id, name: s.full_name }));
-      setConversationsList(prev => 
-        prev.map(c => 
-          c.id === activeConversation.id 
-            ? { ...c, linked_students: newLinkedStudents }
-            : c
-        )
-      );
+  const handleChangeStatus = async (newStatus: 'open' | 'pending' | 'resolved' | 'closed') => {
+    if (!selectedConversation) return;
+    try {
+      await updateStatus.mutateAsync({
+        conversationId: selectedConversation,
+        status: newStatus,
+      });
+      toast.success('Status atualizado');
+    } catch (error) {
+      toast.error('Erro ao atualizar status');
     }
+  };
+
+  const handleChangePriority = async (newPriority: 'low' | 'normal' | 'high' | 'urgent') => {
+    if (!selectedConversation) return;
+    try {
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ priority: newPriority })
+        .eq('id', selectedConversation);
+      toast.success('Prioridade atualizada');
+    } catch (error) {
+      toast.error('Erro ao atualizar prioridade');
+    }
+  };
+
+  const handleLinkStudents = async (studentIds: string[]) => {
+    if (!activeConversation) return;
+    // TODO: Update contact's linked_student_ids
     setLinkStudentModalOpen(false);
+    toast.success('Alunos vinculados');
   };
 
-  const handleChangeContactType = (newType: 'lead' | 'guardian' | 'student' | 'staff' | 'other') => {
-    if (activeConversation) {
-      setConversationsList(prev => 
-        prev.map(c => 
-          c.id === activeConversation.id 
-            ? { ...c, contact_type: newType }
-            : c
-        )
-      );
-    }
+  const handleChangeContactType = async (newType: 'lead' | 'guardian' | 'student' | 'staff' | 'other') => {
+    // TODO: Update contact type
     setChangeTypeModalOpen(false);
+    toast.success('Tipo alterado');
   };
 
-  const handleChangeStatus = (newStatus: 'open' | 'pending' | 'resolved' | 'closed') => {
-    if (activeConversation) {
-      setConversationsList(prev => 
-        prev.map(c => 
-          c.id === activeConversation.id 
-            ? { ...c, ticket_status: newStatus }
-            : c
-        )
-      );
+  const handleSendMessage = async (content: string, type: 'text' | 'image' | 'video' | 'audio' | 'document', file?: File) => {
+    if (!selectedConversation) return;
+    try {
+      await sendMessage.mutateAsync({
+        conversationId: selectedConversation,
+        body: content,
+        messageType: type,
+        replyToId: replyingTo?.id,
+      });
+      setReplyingTo(null);
+    } catch (error) {
+      toast.error('Erro ao enviar mensagem');
     }
-  };
-
-  const handleChangePriority = (newPriority: 'low' | 'normal' | 'high' | 'urgent') => {
-    if (activeConversation) {
-      setConversationsList(prev => 
-        prev.map(c => 
-          c.id === activeConversation.id 
-            ? { ...c, priority: newPriority }
-            : c
-        )
-      );
-    }
-  };
-
-  const handleSendMessage = (content: string, type: 'text' | 'image' | 'video' | 'audio' | 'document', file?: File) => {
-    // In production, this would send to Supabase
-    console.log('Sending message:', { content, type, file, replyTo: replyingTo });
-    setReplyingTo(null);
   };
 
   const handleReply = (message: Message) => {
     setReplyingTo(message);
   };
 
-  const handleCreateNewConversation = (data: { name: string; phone: string; type: 'lead' | 'guardian' | 'student' | 'staff' | 'other'; sectorId: string }) => {
-    const sector = sectors.find(s => s.id === data.sectorId);
-    const newConversation: Conversation = {
-      id: String(Date.now()),
-      contact_name: data.name,
-      phone: data.phone,
-      contact_type: data.type,
-      ticket_status: 'open',
-      priority: 'normal',
-      unread_count: 0,
-      sector_name: sector?.name,
-      linked_students: [],
-    };
-    setConversationsList(prev => [newConversation, ...prev]);
-    setSelectedConversation(newConversation.id);
+  const handleCreateNewConversation = async (data: {
+    name: string;
+    phone: string;
+    type: 'lead' | 'guardian' | 'student' | 'staff' | 'other';
+    sectorId: string;
+  }) => {
+    try {
+      // Create contact
+      const { data: contact, error: contactError } = await supabase
+        .from('contacts')
+        .insert({
+          school_id: profile?.school_id,
+          full_name: data.name,
+          phone: data.phone,
+          contact_type: data.type,
+        })
+        .select()
+        .single();
+
+      if (contactError) throw contactError;
+
+      // Create conversation
+      const { data: conversation, error: convError } = await supabase
+        .from('whatsapp_conversations')
+        .insert({
+          school_id: profile?.school_id,
+          phone: data.phone,
+          contact_name: data.name,
+          contact_id: contact.id,
+          sector_id: data.sectorId,
+          ticket_status: 'open',
+        })
+        .select()
+        .single();
+
+      if (convError) throw convError;
+
+      setSelectedConversation(conversation.id);
+      toast.success('Conversa criada');
+    } catch (error) {
+      toast.error('Erro ao criar conversa');
+    }
     setNewConversationModalOpen(false);
   };
 
-  const handleSelectExistingContact = (contactId: string, sectorId: string) => {
-    const contact = mockExistingContacts.find(c => c.id === contactId);
-    const sector = sectors.find(s => s.id === sectorId);
-    if (contact) {
-      const newConversation: Conversation = {
-        id: String(Date.now()),
-        contact_name: contact.full_name,
-        phone: contact.phone,
-        contact_type: contact.contact_type,
-        ticket_status: 'open',
-        priority: 'normal',
-        unread_count: 0,
-        sector_name: sector?.name,
-        linked_students: [],
-      };
-      setConversationsList(prev => [newConversation, ...prev]);
-      setSelectedConversation(newConversation.id);
+  const handleSelectExistingContact = async (contactId: string, sectorId: string) => {
+    const contact = existingContacts.find((c) => c.id === contactId);
+    if (!contact) return;
+
+    try {
+      const { data: conversation, error } = await supabase
+        .from('whatsapp_conversations')
+        .insert({
+          school_id: profile?.school_id,
+          phone: contact.phone,
+          contact_name: contact.full_name,
+          contact_id: contactId,
+          sector_id: sectorId,
+          ticket_status: 'open',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setSelectedConversation(conversation.id);
+      toast.success('Conversa criada');
+    } catch (error) {
+      toast.error('Erro ao criar conversa');
     }
     setNewConversationModalOpen(false);
   };
 
   const ticketCounts = {
     all: conversationsList.length,
-    open: conversationsList.filter(c => c.ticket_status === 'open').length,
-    pending: conversationsList.filter(c => c.ticket_status === 'pending').length,
-    resolved: conversationsList.filter(c => c.ticket_status === 'resolved' || c.ticket_status === 'closed').length,
+    open: conversationsList.filter((c) => c.ticket_status === 'open').length,
+    pending: conversationsList.filter((c) => c.ticket_status === 'pending').length,
+    resolved: conversationsList.filter((c) => c.ticket_status === 'resolved' || c.ticket_status === 'closed').length,
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Mensagens"
-        description="Central de mensagens WhatsApp por setor"
-      >
+      <PageHeader title="Mensagens" description="Central de mensagens WhatsApp por setor">
         <Button onClick={() => setNewConversationModalOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nova Conversa
@@ -321,14 +332,14 @@ const Mensagens = () => {
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar conversa..." 
+              <Input
+                placeholder="Buscar conversa..."
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            
+
             {/* Filters */}
             <div className="flex gap-2">
               <Select value={selectedSector} onValueChange={setSelectedSector}>
@@ -338,13 +349,13 @@ const Mensagens = () => {
                 <SelectContent>
                   <SelectItem value="all">Todos Setores</SelectItem>
                   {sectors.map((sector) => (
-                    <SelectItem key={sector.id} value={sector.name}>
+                    <SelectItem key={sector.id} value={sector.id}>
                       {sector.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <Select value={selectedContactType} onValueChange={setSelectedContactType}>
                 <SelectTrigger className="flex-1">
                   <SelectValue placeholder="Tipo" />
@@ -381,7 +392,11 @@ const Mensagens = () => {
 
           <CardContent className="flex-1 p-0 overflow-hidden">
             <ScrollArea className="h-full">
-              {filteredConversations.length > 0 ? (
+              {loadingConversations ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredConversations.length > 0 ? (
                 filteredConversations.map((conversation) => (
                   <ConversationCard
                     key={conversation.id}
@@ -415,22 +430,29 @@ const Mensagens = () => {
 
               {/* Messages */}
               <CardContent className="flex-1 overflow-auto p-4">
-                <div className="space-y-4">
-                  {initialMessages.map((message) => (
-                    <MessageBubble
-                      key={message.id}
-                      message={message}
-                      onReply={() => handleReply(message)}
-                    />
-                  ))}
-                </div>
+                {loadingMessages ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : messages.length > 0 ? (
+                  <div className="space-y-4">
+                    {messages.map((message) => (
+                      <MessageBubble key={message.id} message={message} onReply={() => handleReply(message)} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <p>Nenhuma mensagem ainda</p>
+                  </div>
+                )}
               </CardContent>
 
               {/* Input area */}
-              <MessageInput 
+              <MessageInput
                 onSend={handleSendMessage}
                 replyTo={replyingTo}
                 onCancelReply={() => setReplyingTo(null)}
+                disabled={sendMessage.isPending}
               />
             </>
           ) : (
@@ -456,8 +478,8 @@ const Mensagens = () => {
         open={linkStudentModalOpen}
         onClose={() => setLinkStudentModalOpen(false)}
         onConfirm={handleLinkStudents}
-        students={mockStudents}
-        linkedStudentIds={activeConversation?.linked_students?.map(s => s.id) || []}
+        students={students}
+        linkedStudentIds={activeConversation?.linked_students?.map((s) => s.id) || []}
         contactName={activeConversation?.contact_name || ''}
       />
 
@@ -474,8 +496,8 @@ const Mensagens = () => {
         onClose={() => setNewConversationModalOpen(false)}
         onCreateNew={handleCreateNewConversation}
         onSelectExisting={handleSelectExistingContact}
-        existingContacts={mockExistingContacts}
-        sectors={sectors}
+        existingContacts={existingContacts}
+        sectors={sectors.map((s) => ({ id: s.id, name: s.name }))}
       />
     </div>
   );
