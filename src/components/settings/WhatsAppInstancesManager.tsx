@@ -63,8 +63,11 @@ export function WhatsAppInstancesManager() {
       toast.success('Instância criada com sucesso!');
       setIsCreateOpen(false);
       setFormData({ instance_name: '', api_url: '', api_key: '' });
-    } catch (error) {
-      toast.error('Erro ao criar instância');
+    } catch (error: any) {
+      const message = error?.message?.includes('No school ID')
+        ? 'Seu usuário não está vinculado a uma escola. Configure isso primeiro.'
+        : 'Erro ao criar instância';
+      toast.error(message);
     }
   };
 
