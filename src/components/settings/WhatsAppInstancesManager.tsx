@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -26,17 +27,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, MoreHorizontal, Wifi, WifiOff, QrCode, RefreshCw, Trash2, Phone, Loader2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Wifi, WifiOff, QrCode, RefreshCw, Trash2, Phone, Loader2, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useEvolutionInstances,
   useDeleteEvolutionInstance,
   useUpdateEvolutionInstance,
   EvolutionInstance,
 } from '@/hooks/useEvolutionInstances';
-import { useQueryClient } from '@tanstack/react-query';
+
+interface Sector {
+  id: string;
+  name: string;
+}
 
 export function WhatsAppInstancesManager() {
   const { profile } = useAuth();
@@ -47,13 +53,54 @@ export function WhatsAppInstancesManager() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
+  const [isSectorsOpen, setIsSectorsOpen] = useState(false);
   const [selectedInstance, setSelectedInstance] = useState<EvolutionInstance | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [instanceName, setInstanceName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [isSavingSectors, setIsSavingSectors] = useState(false);
+  const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>([]);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+
+  // Fetch all sectors
+  const { data: sectors = [] } = useQuery({
+    queryKey: ['sectors', profile?.school_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sectors')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data as Sector[];
+    },
+    enabled: !!profile?.school_id,
+  });
+
+  // Fetch instance-sector relationships
+  const { data: instanceSectors = [] } = useQuery({
+    queryKey: ['instance-sectors', profile?.school_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('instance_sectors')
+        .select('instance_id, sector_id, sectors(name)');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.school_id,
+  });
+
+  // Get sectors for a specific instance
+  const getInstanceSectors = (instanceId: string) => {
+    return instanceSectors
+      .filter(is => is.instance_id === instanceId)
+      .map(is => ({
+        id: is.sector_id,
+        name: (is.sectors as any)?.name || '',
+      }));
+  };
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -176,12 +223,10 @@ export function WhatsAppInstancesManager() {
   };
 
   const startPollingStatus = (instance: EvolutionInstance) => {
-    // Clear existing interval
     if (pollingInterval) {
       clearInterval(pollingInterval);
     }
 
-    // Poll every 3 seconds
     const interval = setInterval(async () => {
       try {
         const { data: result } = await supabase.functions.invoke('evolution-api', {
@@ -216,7 +261,6 @@ export function WhatsAppInstancesManager() {
 
     setPollingInterval(interval);
 
-    // Stop polling after 2 minutes
     setTimeout(() => {
       clearInterval(interval);
       setPollingInterval(null);
@@ -251,6 +295,49 @@ export function WhatsAppInstancesManager() {
     }
   };
 
+  const handleOpenSectorsDialog = (instance: EvolutionInstance) => {
+    setSelectedInstance(instance);
+    const currentSectors = getInstanceSectors(instance.id);
+    setSelectedSectorIds(currentSectors.map(s => s.id));
+    setIsSectorsOpen(true);
+  };
+
+  const handleSaveSectors = async () => {
+    if (!selectedInstance) return;
+
+    setIsSavingSectors(true);
+    try {
+      // Delete existing relationships
+      await supabase
+        .from('instance_sectors')
+        .delete()
+        .eq('instance_id', selectedInstance.id);
+
+      // Insert new relationships
+      if (selectedSectorIds.length > 0) {
+        const inserts = selectedSectorIds.map(sectorId => ({
+          instance_id: selectedInstance.id,
+          sector_id: sectorId,
+        }));
+
+        const { error } = await supabase
+          .from('instance_sectors')
+          .insert(inserts);
+
+        if (error) throw error;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['instance-sectors'] });
+      toast.success('Setores vinculados com sucesso!');
+      setIsSectorsOpen(false);
+    } catch (error) {
+      console.error('Save sectors error:', error);
+      toast.error('Erro ao salvar setores');
+    } finally {
+      setIsSavingSectors(false);
+    }
+  };
+
   const handleCloseQrDialog = () => {
     if (pollingInterval) {
       clearInterval(pollingInterval);
@@ -261,6 +348,14 @@ export function WhatsAppInstancesManager() {
     setSelectedInstance(null);
   };
 
+  const toggleSector = (sectorId: string) => {
+    setSelectedSectorIds(prev =>
+      prev.includes(sectorId)
+        ? prev.filter(id => id !== sectorId)
+        : [...prev, sectorId]
+    );
+  };
+
   return (
     <>
       <Card>
@@ -269,13 +364,13 @@ export function WhatsAppInstancesManager() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Phone className="h-5 w-5" />
-                Instâncias WhatsApp
+                Conexões WhatsApp
               </CardTitle>
-              <CardDescription>Conecte números do WhatsApp para atendimento</CardDescription>
+              <CardDescription>Conecte números e vincule aos setores de atendimento</CardDescription>
             </div>
             <Button onClick={() => setIsCreateOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Nova Instância
+              Nova Conexão
             </Button>
           </div>
         </CardHeader>
@@ -284,7 +379,7 @@ export function WhatsAppInstancesManager() {
             <div className="text-center py-8 text-muted-foreground">Carregando...</div>
           ) : instances.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              Nenhuma instância configurada. Crie uma e escaneie o QR Code para conectar.
+              Nenhuma conexão configurada. Crie uma e escaneie o QR Code para conectar.
             </div>
           ) : (
             <Table>
@@ -292,63 +387,84 @@ export function WhatsAppInstancesManager() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Telefone Conectado</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Setores Vinculados</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {instances.map((instance) => (
-                  <TableRow key={instance.id}>
-                    <TableCell className="font-medium">{instance.instance_name}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={instance.status === 'connected' ? 'default' : 'secondary'}
-                        className={instance.status === 'connected' ? 'bg-green-500' : ''}
-                      >
-                        {instance.status === 'connected' ? (
-                          <><Wifi className="h-3 w-3 mr-1" /> Conectado</>
+                {instances.map((instance) => {
+                  const linkedSectors = getInstanceSectors(instance.id);
+                  return (
+                    <TableRow key={instance.id}>
+                      <TableCell className="font-medium">{instance.instance_name}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={instance.status === 'connected' ? 'default' : 'secondary'}
+                          className={instance.status === 'connected' ? 'bg-green-500' : ''}
+                        >
+                          {instance.status === 'connected' ? (
+                            <><Wifi className="h-3 w-3 mr-1" /> Conectado</>
+                          ) : (
+                            <><WifiOff className="h-3 w-3 mr-1" /> Desconectado</>
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {instance.connected_phone || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {linkedSectors.length === 0 ? (
+                          <span className="text-muted-foreground text-sm">Nenhum setor</span>
                         ) : (
-                          <><WifiOff className="h-3 w-3 mr-1" /> Desconectado</>
+                          <div className="flex flex-wrap gap-1">
+                            {linkedSectors.map(sector => (
+                              <Badge key={sector.id} variant="outline" className="text-xs">
+                                {sector.name}
+                              </Badge>
+                            ))}
+                          </div>
                         )}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {instance.connected_phone || '-'}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem 
-                            onClick={() => handleConnect(instance)}
-                            disabled={isConnecting}
-                          >
-                            <QrCode className="h-4 w-4 mr-2" />
-                            {instance.status === 'connected' ? 'Reconectar' : 'Conectar via QR Code'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleCheckStatus(instance)}
-                            disabled={isCheckingStatus}
-                          >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Verificar Status
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => handleDelete(instance)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Remover
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleOpenSectorsDialog(instance)}>
+                              <Settings2 className="h-4 w-4 mr-2" />
+                              Vincular Setores
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleConnect(instance)}
+                              disabled={isConnecting}
+                            >
+                              <QrCode className="h-4 w-4 mr-2" />
+                              {instance.status === 'connected' ? 'Reconectar' : 'Conectar via QR Code'}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleCheckStatus(instance)}
+                              disabled={isCheckingStatus}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Verificar Status
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDelete(instance)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Remover
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -359,7 +475,7 @@ export function WhatsAppInstancesManager() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova Instância WhatsApp</DialogTitle>
+            <DialogTitle>Nova Conexão WhatsApp</DialogTitle>
             <DialogDescription>
               Digite um nome para identificar esta conexão. Após criar, escaneie o QR Code com seu WhatsApp.
             </DialogDescription>
@@ -367,10 +483,10 @@ export function WhatsAppInstancesManager() {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="instance_name">Nome da Instância</Label>
+              <Label htmlFor="instance_name">Nome da Conexão</Label>
               <Input
                 id="instance_name"
-                placeholder="Ex: Secretaria, Financeiro, Atendimento..."
+                placeholder="Ex: Atendimento Principal, Suporte..."
                 value={instanceName}
                 onChange={(e) => setInstanceName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -390,6 +506,58 @@ export function WhatsAppInstancesManager() {
                 </>
               ) : (
                 'Criar e Conectar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sectors Management Dialog */}
+      <Dialog open={isSectorsOpen} onOpenChange={setIsSectorsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Vincular Setores</DialogTitle>
+            <DialogDescription>
+              Selecione quais setores esta conexão WhatsApp irá atender.
+              {selectedInstance && <span className="font-medium"> Conexão: {selectedInstance.instance_name}</span>}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {sectors.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhum setor cadastrado. Crie setores primeiro na página de Setores.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {sectors.map(sector => (
+                  <div key={sector.id} className="flex items-center space-x-3">
+                    <Checkbox
+                      id={`sector-${sector.id}`}
+                      checked={selectedSectorIds.includes(sector.id)}
+                      onCheckedChange={() => toggleSector(sector.id)}
+                    />
+                    <Label htmlFor={`sector-${sector.id}`} className="cursor-pointer">
+                      {sector.name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSectorsOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveSectors} disabled={isSavingSectors}>
+              {isSavingSectors ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                'Salvar'
               )}
             </Button>
           </DialogFooter>
