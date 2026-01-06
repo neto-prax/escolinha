@@ -116,7 +116,16 @@ serve(async (req) => {
     }
 
     if (!response.ok) {
-      const errorDetail = result.message || result.error || result.rawResponse || 'Evolution API request failed';
+      let errorDetail = 'Evolution API request failed';
+      if (result.response?.message) {
+        errorDetail = Array.isArray(result.response.message) 
+          ? result.response.message.join(', ') 
+          : result.response.message;
+      } else if (result.message) {
+        errorDetail = result.message;
+      } else if (result.error) {
+        errorDetail = result.error;
+      }
       console.error('Evolution API error response:', result);
       throw new Error(errorDetail);
     }
