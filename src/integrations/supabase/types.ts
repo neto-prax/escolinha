@@ -973,6 +973,42 @@ export type Database = {
           },
         ]
       }
+      instance_sectors: {
+        Row: {
+          created_at: string
+          id: string
+          instance_id: string
+          sector_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_id: string
+          sector_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_id?: string
+          sector_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instance_sectors_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "evolution_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instance_sectors_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           city: string | null
