@@ -34,20 +34,32 @@ serve(async (req) => {
           instanceName: data.instanceName,
           qrcode: true,
           integration: "WHATSAPP-BAILEYS",
+          webhook: {
+            url: `${SUPABASE_URL}/functions/v1/evolution-webhook`,
+            byEvents: false,
+            base64: false,
+            events: [
+              "MESSAGES_UPSERT",
+              "MESSAGES_UPDATE",
+              "CONNECTION_UPDATE",
+            ],
+          },
         };
         break;
 
       case 'set-webhook':
         endpoint = `/webhook/set/${data.instanceName}`;
         body = {
-          url: `${SUPABASE_URL}/functions/v1/evolution-webhook`,
-          webhook_by_events: false,
-          webhook_base64: false,
-          events: [
-            "MESSAGES_UPSERT",
-            "MESSAGES_UPDATE",
-            "CONNECTION_UPDATE",
-          ],
+          webhook: {
+            url: `${SUPABASE_URL}/functions/v1/evolution-webhook`,
+            byEvents: false,
+            base64: false,
+            events: [
+              "MESSAGES_UPSERT",
+              "MESSAGES_UPDATE",
+              "CONNECTION_UPDATE",
+            ],
+          },
         };
         break;
 
