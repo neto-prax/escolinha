@@ -565,6 +565,68 @@ export type Database = {
           },
         ]
       }
+      employee_details: {
+        Row: {
+          bank_account: string | null
+          bank_agency: string | null
+          bank_name: string | null
+          created_at: string
+          department: string | null
+          hire_date: string | null
+          id: string
+          notes: string | null
+          pix_key: string | null
+          position: string | null
+          salary: number | null
+          salary_type: string | null
+          school_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bank_account?: string | null
+          bank_agency?: string | null
+          bank_name?: string | null
+          created_at?: string
+          department?: string | null
+          hire_date?: string | null
+          id?: string
+          notes?: string | null
+          pix_key?: string | null
+          position?: string | null
+          salary?: number | null
+          salary_type?: string | null
+          school_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bank_account?: string | null
+          bank_agency?: string | null
+          bank_name?: string | null
+          created_at?: string
+          department?: string | null
+          hire_date?: string | null
+          id?: string
+          notes?: string | null
+          pix_key?: string | null
+          position?: string | null
+          salary?: number | null
+          salary_type?: string | null
+          school_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_details_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       enrollment_lead_activities: {
         Row: {
           activity_type: string
