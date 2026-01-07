@@ -15,6 +15,7 @@ serve(async (req) => {
     const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
     const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
     const EVOLUTION_INSTANCE_NAME = Deno.env.get('EVOLUTION_INSTANCE_NAME');
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 
     if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE_NAME) {
       throw new Error('Evolution API credentials not configured');
@@ -33,6 +34,20 @@ serve(async (req) => {
           instanceName: data.instanceName,
           qrcode: true,
           integration: "WHATSAPP-BAILEYS",
+        };
+        break;
+
+      case 'set-webhook':
+        endpoint = `/webhook/set/${data.instanceName}`;
+        body = {
+          url: `${SUPABASE_URL}/functions/v1/evolution-webhook`,
+          webhook_by_events: false,
+          webhook_base64: false,
+          events: [
+            "MESSAGES_UPSERT",
+            "MESSAGES_UPDATE",
+            "CONNECTION_UPDATE",
+          ],
         };
         break;
 
