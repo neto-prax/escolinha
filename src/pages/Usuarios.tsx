@@ -27,9 +27,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield } from 'lucide-react';
+import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppRole } from '@/types/auth';
@@ -41,6 +42,7 @@ import {
   useCreateUser,
   UserWithRoles,
 } from '@/hooks/useUsers';
+import { UserDetailsModal } from '@/components/users/UserDetailsModal';
 
 const ROLE_LABELS: Record<AppRole, string> = {
   director: 'Diretor(a)',
@@ -67,6 +69,7 @@ const Usuarios = () => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isRolesOpen, setIsRolesOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
 
   const [editForm, setEditForm] = useState({ full_name: '', phone: '' });
@@ -78,6 +81,11 @@ const Usuarios = () => {
     phone: '',
     roles: [] as AppRole[],
   });
+
+  const handleDetailsOpen = (userToView: UserWithRoles) => {
+    setSelectedUser(userToView);
+    setIsDetailsOpen(true);
+  };
 
   const handleEditOpen = (userToEdit: UserWithRoles) => {
     setSelectedUser(userToEdit);
@@ -262,6 +270,11 @@ const Usuarios = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleDetailsOpen(u)}>
+                            <Building2 className="h-4 w-4 mr-2" />
+                            Detalhes do Colaborador
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleEditOpen(u)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Editar Perfil
@@ -457,6 +470,13 @@ const Usuarios = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* User Details Modal */}
+      <UserDetailsModal
+        user={selectedUser}
+        open={isDetailsOpen}
+        onOpenChange={setIsDetailsOpen}
+      />
     </div>
   );
 };
