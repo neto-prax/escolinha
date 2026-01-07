@@ -134,7 +134,21 @@ export function WhatsAppInstancesManager() {
 
       if (evolutionError) throw evolutionError;
 
-      // 2. Save to database
+      // 2. Configure webhook for receiving messages
+      try {
+        await supabase.functions.invoke('evolution-api', {
+          body: {
+            action: 'set-webhook',
+            data: { instanceName: instanceName.trim() },
+          },
+        });
+        console.log('Webhook configured successfully');
+      } catch (webhookError) {
+        console.warn('Failed to configure webhook:', webhookError);
+        // Don't fail the entire process if webhook setup fails
+      }
+
+      // 3. Save to database
       const { data: dbInstance, error: dbError } = await supabase
         .from('evolution_instances')
         .insert({
@@ -147,7 +161,7 @@ export function WhatsAppInstancesManager() {
 
       if (dbError) throw dbError;
 
-      // 3. Show QR Code if returned
+      // 4. Show QR Code if returned
       if (evolutionResult?.qrcode?.base64) {
         setQrCode(evolutionResult.qrcode.base64);
         setSelectedInstance(dbInstance as EvolutionInstance);
