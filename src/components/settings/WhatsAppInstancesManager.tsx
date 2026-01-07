@@ -27,7 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Plus, MoreHorizontal, Wifi, WifiOff, QrCode, RefreshCw, Trash2, Phone, Loader2, Settings2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Wifi, WifiOff, QrCode, RefreshCw, Trash2, Phone, Loader2, Settings2, Link } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -309,6 +309,24 @@ export function WhatsAppInstancesManager() {
     }
   };
 
+  const handleConfigureWebhook = async (instance: EvolutionInstance) => {
+    try {
+      toast.info('Configurando webhook...');
+      const { error } = await supabase.functions.invoke('evolution-api', {
+        body: {
+          action: 'set-webhook',
+          data: { instanceName: instance.instance_name },
+        },
+      });
+
+      if (error) throw error;
+      toast.success('Webhook configurado com sucesso!');
+    } catch (error: any) {
+      console.error('Webhook config error:', error);
+      toast.error(error?.message || 'Erro ao configurar webhook');
+    }
+  };
+
   const handleOpenSectorsDialog = (instance: EvolutionInstance) => {
     setSelectedInstance(instance);
     const currentSectors = getInstanceSectors(instance.id);
@@ -465,6 +483,10 @@ export function WhatsAppInstancesManager() {
                             >
                               <RefreshCw className="h-4 w-4 mr-2" />
                               Verificar Status
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleConfigureWebhook(instance)}>
+                              <Link className="h-4 w-4 mr-2" />
+                              Configurar Webhook
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
