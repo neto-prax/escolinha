@@ -202,9 +202,38 @@ serve(async (req) => {
 
     // Handle message status updates
     if (event === 'messages.update') {
-      console.log('Message status update:', data);
-      // Could update message status here if needed
-      return new Response(JSON.stringify({ status: 'acknowledged' }), {
+      const keyId = data.keyId;
+      const status = data.status;
+      
+      console.log('Message status update:', { keyId, status });
+      
+      // Map Evolution status to our status
+      let mappedStatus = 'sent';
+      if (status === 'SERVER_ACK') {
+        mappedStatus = 'sent';
+      } else if (status === 'DELIVERY_ACK') {
+        mappedStatus = 'delivered';
+      } else if (status === 'READ' || status === 'PLAYED') {
+        mappedStatus = 'read';
+      }
+      
+      // Update message status by external_id
+      const { data: updated, error } = await supabase
+        .from('whatsapp_messages')
+        .update({ status: mappedStatus })
+        .eq('external_id', keyId)
+        .select('id')
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Error updating message status:', error);
+      } else if (updated) {
+        console.log('Message status updated:', updated.id, 'to', mappedStatus);
+      } else {
+        console.log('Message not found for keyId:', keyId);
+      }
+      
+      return new Response(JSON.stringify({ status: 'acknowledged', updated: !!updated }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

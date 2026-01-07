@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useEffect } from 'react';
 
 export interface WhatsAppConversation {
   id: string;
@@ -49,6 +50,31 @@ export interface WhatsAppMessage {
 
 export function useWhatsAppConversations(sectorId?: string) {
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Subscribe to realtime updates for conversations
+  useEffect(() => {
+    if (!profile?.school_id) return;
+
+    const channel = supabase
+      .channel('whatsapp-conversations-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'whatsapp_conversations',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.school_id, queryClient]);
 
   return useQuery({
     queryKey: ['whatsapp-conversations', sectorId, profile?.school_id],
@@ -71,10 +97,38 @@ export function useWhatsAppConversations(sectorId?: string) {
       return data as WhatsAppConversation[];
     },
     enabled: !!profile?.school_id,
+    refetchInterval: 10000, // Fallback polling every 10s
   });
 }
 
 export function useWhatsAppMessages(conversationId: string | null) {
+  const queryClient = useQueryClient();
+
+  // Subscribe to realtime updates for messages
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const channel = supabase
+      .channel(`whatsapp-messages-${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'whatsapp_messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['whatsapp-messages', conversationId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, queryClient]);
+
   return useQuery({
     queryKey: ['whatsapp-messages', conversationId],
     queryFn: async () => {
@@ -114,38 +168,22 @@ export function useSendMessage() {
       mediaFilename?: string;
       replyToId?: string;
     }) => {
-      // Insert message locally
-      const { data: message, error: msgError } = await supabase
-        .from('whatsapp_messages')
-        .insert({
-          conversation_id: conversationId,
-          body,
-          direction: 'outgoing',
-          message_type: messageType,
-          media_url: mediaUrl,
-          media_caption: mediaCaption,
-          media_filename: mediaFilename,
-          reply_to_id: replyToId,
-          status: 'sending',
-        })
-        .select()
-        .single();
-
-      if (msgError) throw msgError;
-
-      // Get conversation to send via Evolution
-      const { data: conversation } = await supabase
+      // Get conversation data first (in parallel with instance lookup)
+      const conversationPromise = supabase
         .from('whatsapp_conversations')
         .select('phone, sector_id')
         .eq('id', conversationId)
         .single();
 
-      if (conversation) {
-        // Find the instance linked to the sector or any connected instance
+      // Pre-fetch instance name in parallel
+      const instancePromise = (async () => {
+        // Try to find instance linked to sector first
+        const { data: conversation } = await conversationPromise;
+        if (!conversation) return null;
+
         let instanceName: string | null = null;
 
         if (conversation.sector_id) {
-          // Find instance linked to this sector
           const { data: instanceSector } = await supabase
             .from('instance_sectors')
             .select('instance_id')
@@ -165,7 +203,7 @@ export function useSendMessage() {
           }
         }
 
-        // Fallback: find any connected instance for this school
+        // Fallback: any connected instance
         if (!instanceName) {
           const { data: anyInstance } = await supabase
             .from('evolution_instances')
@@ -177,47 +215,120 @@ export function useSendMessage() {
           instanceName = anyInstance?.instance_name || null;
         }
 
-        if (!instanceName) {
-          console.error('No connected WhatsApp instance found');
-          throw new Error('Nenhuma instância WhatsApp conectada');
-        }
+        return { instanceName, phone: conversation.phone };
+      })();
 
-        // Send via Evolution API
-        try {
-          const { error: fnError } = await supabase.functions.invoke('evolution-api', {
-            body: {
-              action: messageType === 'text' ? 'send-text' : 'send-media',
-              data: {
-                instanceName,
-                phone: conversation.phone,
-                message: body,
-                mediaType: messageType,
-                mediaUrl,
-                caption: mediaCaption,
-                fileName: mediaFilename,
-              },
-            },
-          });
+      // Insert message with 'sending' status (optimistic)
+      const { data: message, error: msgError } = await supabase
+        .from('whatsapp_messages')
+        .insert({
+          conversation_id: conversationId,
+          body,
+          direction: 'outgoing',
+          message_type: messageType,
+          media_url: mediaUrl,
+          media_caption: mediaCaption,
+          media_filename: mediaFilename,
+          reply_to_id: replyToId,
+          status: 'sending',
+        })
+        .select()
+        .single();
 
-          if (fnError) {
-            console.error('Evolution API error:', fnError);
-            throw fnError;
-          }
-        } catch (err) {
-          console.error('Failed to send via Evolution:', err);
-          throw err;
-        }
-      }
+      if (msgError) throw msgError;
 
-      // Update conversation
-      await supabase
+      // Update conversation timestamp immediately
+      supabase
         .from('whatsapp_conversations')
         .update({ last_message_at: new Date().toISOString() })
-        .eq('id', conversationId);
+        .eq('id', conversationId)
+        .then(() => {});
+
+      // Get instance data
+      const instanceData = await instancePromise;
+
+      if (!instanceData?.instanceName) {
+        // Update message status to failed
+        await supabase
+          .from('whatsapp_messages')
+          .update({ status: 'failed' })
+          .eq('id', message.id);
+        throw new Error('Nenhuma instância WhatsApp conectada');
+      }
+
+      // Send via Evolution API (don't wait for this in UI)
+      supabase.functions.invoke('evolution-api', {
+        body: {
+          action: messageType === 'text' ? 'send-text' : 'send-media',
+          data: {
+            instanceName: instanceData.instanceName,
+            phone: instanceData.phone,
+            message: body,
+            mediaType: messageType,
+            mediaUrl,
+            caption: mediaCaption,
+            fileName: mediaFilename,
+          },
+        },
+      }).then(async ({ data: result, error: fnError }) => {
+        if (fnError) {
+          console.error('Evolution API error:', fnError);
+          await supabase
+            .from('whatsapp_messages')
+            .update({ status: 'failed' })
+            .eq('id', message.id);
+        } else if (result?.key?.id) {
+          // Save external_id for status tracking
+          await supabase
+            .from('whatsapp_messages')
+            .update({ 
+              external_id: result.key.id,
+              status: 'sent' 
+            })
+            .eq('id', message.id);
+        }
+      });
 
       return message;
     },
-    onSuccess: (_, variables) => {
+    onMutate: async (variables) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['whatsapp-messages', variables.conversationId] });
+      
+      // Snapshot previous value
+      const previousMessages = queryClient.getQueryData(['whatsapp-messages', variables.conversationId]);
+      
+      // Optimistically add the new message
+      queryClient.setQueryData(['whatsapp-messages', variables.conversationId], (old: WhatsAppMessage[] | undefined) => {
+        const optimisticMessage: WhatsAppMessage = {
+          id: `temp-${Date.now()}`,
+          conversation_id: variables.conversationId,
+          body: variables.body,
+          direction: 'outgoing',
+          message_type: variables.messageType || 'text',
+          media_url: variables.mediaUrl || null,
+          media_caption: variables.mediaCaption || null,
+          media_filename: variables.mediaFilename || null,
+          status: 'sending',
+          reply_to_id: variables.replyToId || null,
+          is_quick_reply: null,
+          reaction: null,
+          created_at: new Date().toISOString(),
+          external_id: null,
+        };
+        return [...(old || []), optimisticMessage];
+      });
+      
+      return { previousMessages };
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousMessages) {
+        queryClient.setQueryData(['whatsapp-messages', variables.conversationId], context.previousMessages);
+      }
+    },
+    onSettled: (_, __, variables) => {
+      // Refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: ['whatsapp-messages', variables.conversationId] });
       queryClient.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
     },
