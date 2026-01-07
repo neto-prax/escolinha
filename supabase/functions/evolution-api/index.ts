@@ -51,15 +51,17 @@ serve(async (req) => {
       case 'set-webhook':
         endpoint = `/webhook/set/${data.instanceName}`;
         body = {
-          enabled: true,
-          url: `${SUPABASE_URL}/functions/v1/evolution-webhook`,
-          byEvents: false,
-          base64: false,
-          events: [
-            "MESSAGES_UPSERT",
-            "MESSAGES_UPDATE",
-            "CONNECTION_UPDATE",
-          ],
+          webhook: {
+            enabled: true,
+            url: `${SUPABASE_URL}/functions/v1/evolution-webhook`,
+            byEvents: false,
+            base64: false,
+            events: [
+              "MESSAGES_UPSERT",
+              "MESSAGES_UPDATE",
+              "CONNECTION_UPDATE",
+            ],
+          },
         };
         break;
 
