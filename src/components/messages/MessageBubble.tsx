@@ -25,7 +25,8 @@ interface MessageBubbleProps {
   onReply?: (message: Message) => void;
 }
 
-const statusIcons = {
+const statusIcons: Record<string, React.ReactNode> = {
+  sending: <Clock className="h-3 w-3" />,
   pending: <Clock className="h-3 w-3" />,
   sent: <Check className="h-3 w-3" />,
   delivered: <CheckCheck className="h-3 w-3" />,
