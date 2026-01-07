@@ -136,17 +136,59 @@ export function useSendMessage() {
       // Get conversation to send via Evolution
       const { data: conversation } = await supabase
         .from('whatsapp_conversations')
-        .select('phone')
+        .select('phone, sector_id')
         .eq('id', conversationId)
         .single();
 
       if (conversation) {
+        // Find the instance linked to the sector or any connected instance
+        let instanceName: string | null = null;
+
+        if (conversation.sector_id) {
+          // Find instance linked to this sector
+          const { data: instanceSector } = await supabase
+            .from('instance_sectors')
+            .select('instance_id')
+            .eq('sector_id', conversation.sector_id)
+            .limit(1)
+            .maybeSingle();
+
+          if (instanceSector) {
+            const { data: instance } = await supabase
+              .from('evolution_instances')
+              .select('instance_name')
+              .eq('id', instanceSector.instance_id)
+              .eq('status', 'connected')
+              .maybeSingle();
+            
+            instanceName = instance?.instance_name || null;
+          }
+        }
+
+        // Fallback: find any connected instance for this school
+        if (!instanceName) {
+          const { data: anyInstance } = await supabase
+            .from('evolution_instances')
+            .select('instance_name')
+            .eq('status', 'connected')
+            .limit(1)
+            .maybeSingle();
+          
+          instanceName = anyInstance?.instance_name || null;
+        }
+
+        if (!instanceName) {
+          console.error('No connected WhatsApp instance found');
+          throw new Error('Nenhuma instância WhatsApp conectada');
+        }
+
         // Send via Evolution API
         try {
           const { error: fnError } = await supabase.functions.invoke('evolution-api', {
             body: {
               action: messageType === 'text' ? 'send-text' : 'send-media',
               data: {
+                instanceName,
                 phone: conversation.phone,
                 message: body,
                 mediaType: messageType,
@@ -159,9 +201,11 @@ export function useSendMessage() {
 
           if (fnError) {
             console.error('Evolution API error:', fnError);
+            throw fnError;
           }
         } catch (err) {
           console.error('Failed to send via Evolution:', err);
+          throw err;
         }
       }
 
