@@ -211,6 +211,21 @@ const Mensagens = () => {
     }
   };
 
+  const handleAcceptTicket = async () => {
+    if (!selectedConversation || !profile?.id) return;
+    try {
+      const { error } = await supabase
+        .from('whatsapp_conversations')
+        .update({ assigned_to: profile.id })
+        .eq('id', selectedConversation);
+      
+      if (error) throw error;
+      toast.success('Ticket aceito! Movido para Abertos.');
+    } catch (error) {
+      toast.error('Erro ao aceitar ticket');
+    }
+  };
+
   const handleChangePriority = async (newPriority: 'low' | 'normal' | 'high' | 'urgent') => {
     if (!selectedConversation) return;
     try {
@@ -446,6 +461,7 @@ const Mensagens = () => {
                   onChangeType={() => setChangeTypeModalOpen(true)}
                   onChangePriority={handleChangePriority}
                   onChangeStatus={handleChangeStatus}
+                  onAcceptTicket={handleAcceptTicket}
                 />
               </div>
 
