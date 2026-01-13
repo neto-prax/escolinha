@@ -149,6 +149,7 @@ export function useWhatsAppMessages(conversationId: string | null) {
 
 export function useSendMessage() {
   const queryClient = useQueryClient();
+  const { profile, school } = useAuth();
 
   return useMutation({
     mutationFn: async ({
@@ -168,6 +169,24 @@ export function useSendMessage() {
       mediaFilename?: string;
       replyToId?: string;
     }) => {
+      // Get school settings for signature
+      let finalBody = body;
+      
+      if (school?.id) {
+        const { data: schoolData } = await supabase
+          .from('schools')
+          .select('settings')
+          .eq('id', school.id)
+          .single();
+        
+        const settings = schoolData?.settings as Record<string, unknown> | null;
+        const automation = settings?.automation as { signature_enabled?: boolean } | undefined;
+        
+        if (automation?.signature_enabled !== false && profile?.full_name && messageType === 'text') {
+          // Add signature in bold before message
+          finalBody = `*${profile.full_name}:*\n${body}`;
+        }
+      }
       // Get conversation data first (in parallel with instance lookup)
       const conversationPromise = supabase
         .from('whatsapp_conversations')
@@ -223,7 +242,7 @@ export function useSendMessage() {
         .from('whatsapp_messages')
         .insert({
           conversation_id: conversationId,
-          body,
+          body: finalBody,
           direction: 'outgoing',
           message_type: messageType,
           media_url: mediaUrl,
@@ -263,7 +282,7 @@ export function useSendMessage() {
           data: {
             instanceName: instanceData.instanceName,
             phone: instanceData.phone,
-            message: body,
+            message: finalBody,
             mediaType: messageType,
             mediaUrl,
             caption: mediaCaption,
