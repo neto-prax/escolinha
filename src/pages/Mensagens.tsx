@@ -333,9 +333,9 @@ const Mensagens = () => {
         </Button>
       </PageHeader>
 
-      <div className="grid gap-6 lg:grid-cols-3 h-[calc(100vh-220px)]">
+      <div className="grid gap-6 lg:grid-cols-3" style={{ height: 'calc(100vh - 180px)' }}>
         {/* Conversations list */}
-        <Card className="lg:col-span-1 flex flex-col">
+        <Card className="lg:col-span-1 flex flex-col overflow-hidden">
           <div className="p-4 border-b space-y-4">
             {/* Search */}
             <div className="relative">
@@ -423,44 +423,46 @@ const Mensagens = () => {
           </CardContent>
         </Card>
 
-        {/* Chat area */}
+        {/* Chat area - fixed height container */}
         <Card className="lg:col-span-2 flex flex-col overflow-hidden">
           {activeConversation ? (
-            <>
-              <ChatHeader
-                conversation={activeConversation}
-                onCloseTicket={() => setTicketCloseModalOpen(true)}
-                onLinkStudent={() => setLinkStudentModalOpen(true)}
-                onChangeType={() => setChangeTypeModalOpen(true)}
-                onChangePriority={handleChangePriority}
-                onChangeStatus={handleChangeStatus}
-              />
+            <div className="flex flex-col h-full">
+              {/* Header - fixed */}
+              <div className="flex-shrink-0">
+                <ChatHeader
+                  conversation={activeConversation}
+                  onCloseTicket={() => setTicketCloseModalOpen(true)}
+                  onLinkStudent={() => setLinkStudentModalOpen(true)}
+                  onChangeType={() => setChangeTypeModalOpen(true)}
+                  onChangePriority={handleChangePriority}
+                  onChangeStatus={handleChangeStatus}
+                />
+              </div>
 
-              {/* Messages - scrollable area with flex-col-reverse for bottom-up scroll */}
-              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-                <div className="flex-1" />
-                <div className="p-4 space-y-4">
-                  {loadingMessages ? (
-                    <div className="flex items-center justify-center h-40">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : messages.length > 0 ? (
-                    <>
+              {/* Messages - scrollable, takes remaining space */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {loadingMessages ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : messages.length > 0 ? (
+                  <div className="flex flex-col justify-end min-h-full">
+                    <div className="space-y-4">
                       {messages.map((message) => (
                         <MessageBubble key={message.id} message={message} onReply={() => handleReply(message)} />
                       ))}
                       <div ref={messagesEndRef} />
-                    </>
-                  ) : (
-                    <div className="flex items-center justify-center h-40 text-muted-foreground">
-                      <p>Nenhuma mensagem ainda</p>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <p>Nenhuma mensagem ainda</p>
+                  </div>
+                )}
               </div>
 
               {/* Input area - fixed at bottom */}
-              <div className="border-t bg-background flex-shrink-0">
+              <div className="flex-shrink-0 border-t bg-background">
                 <MessageInput
                   onSend={handleSendMessage}
                   replyTo={replyingTo}
@@ -468,7 +470,7 @@ const Mensagens = () => {
                   disabled={sendMessage.isPending}
                 />
               </div>
-            </>
+            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center text-muted-foreground">
