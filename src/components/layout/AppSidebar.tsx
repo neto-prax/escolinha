@@ -67,6 +67,7 @@ const navigationGroups: NavGroup[] = [
     label: 'Secretaria',
     items: [
       { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
+      { title: 'Responsáveis', url: '/app/responsaveis', icon: Users, module: 'secretaria' },
       { title: 'Secretaria', url: '/app/secretaria', icon: Building2, module: 'secretaria' },
       { title: 'CRM Matrículas', url: '/app/crm-matriculas', icon: Users, module: 'secretaria' },
     ],
