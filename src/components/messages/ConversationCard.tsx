@@ -16,6 +16,8 @@ export interface Conversation {
   priority: 'low' | 'normal' | 'high' | 'urgent';
   linked_students?: { id: string; name: string }[];
   sector_name?: string;
+  resolution_summary?: string;
+  closed_at?: string;
 }
 
 interface ConversationCardProps {

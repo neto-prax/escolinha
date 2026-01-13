@@ -20,6 +20,7 @@ import { ConversationCard, Conversation } from '@/components/messages/Conversati
 import { ChatHeader } from '@/components/messages/ChatHeader';
 import { MessageBubble, Message } from '@/components/messages/MessageBubble';
 import { MessageInput } from '@/components/messages/MessageInput';
+import { SystemMessage } from '@/components/messages/SystemMessage';
 import { TicketCloseModal } from '@/components/messages/TicketCloseModal';
 import { LinkStudentModal } from '@/components/messages/LinkStudentModal';
 import { ChangeContactTypeModal } from '@/components/messages/ChangeContactTypeModal';
@@ -123,6 +124,8 @@ const Mensagens = () => {
       id,
       name: students.find(s => s.id === id)?.full_name || 'Aluno',
     })) || [],
+    resolution_summary: conv.resolution_summary || undefined,
+    closed_at: conv.closed_at || undefined,
   }));
 
   // Fetch messages for selected conversation
@@ -451,6 +454,16 @@ const Mensagens = () => {
                       {messages.map((message) => (
                         <MessageBubble key={message.id} message={message} onReply={() => handleReply(message)} />
                       ))}
+                      
+                      {/* Show resolution summary as yellow system message when ticket is closed */}
+                      {activeConversation?.resolution_summary && activeConversation?.ticket_status === 'closed' && (
+                        <SystemMessage
+                          message={`Ticket encerrado: ${activeConversation.resolution_summary}`}
+                          type="closed"
+                          timestamp={activeConversation.closed_at}
+                        />
+                      )}
+                      
                       <div ref={messagesEndRef} />
                     </div>
                   </div>
