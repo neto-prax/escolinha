@@ -65,8 +65,7 @@ const contactTypeLabels: Record<string, string> = {
   lead: 'Lead',
   guardian: 'Responsável',
   student: 'Aluno',
-  employee: 'Funcionário',
-  supplier: 'Fornecedor',
+  staff: 'Funcionário',
   other: 'Outro',
 };
 
@@ -393,8 +392,7 @@ const Contatos = () => {
                 <SelectItem value="lead">Lead</SelectItem>
                 <SelectItem value="guardian">Responsável</SelectItem>
                 <SelectItem value="student">Aluno</SelectItem>
-                <SelectItem value="employee">Funcionário</SelectItem>
-                <SelectItem value="supplier">Fornecedor</SelectItem>
+                <SelectItem value="staff">Funcionário</SelectItem>
                 <SelectItem value="other">Outro</SelectItem>
               </SelectContent>
             </Select>
@@ -519,8 +517,7 @@ const Contatos = () => {
                     <SelectItem value="lead">Lead</SelectItem>
                     <SelectItem value="guardian">Responsável</SelectItem>
                     <SelectItem value="student">Aluno</SelectItem>
-                    <SelectItem value="employee">Funcionário</SelectItem>
-                    <SelectItem value="supplier">Fornecedor</SelectItem>
+                    <SelectItem value="staff">Funcionário</SelectItem>
                     <SelectItem value="other">Outro</SelectItem>
                   </SelectContent>
                 </Select>
