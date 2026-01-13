@@ -416,7 +416,7 @@ const Mensagens = () => {
         </Card>
 
         {/* Chat area */}
-        <Card className="lg:col-span-2 flex flex-col">
+        <Card className="lg:col-span-2 flex flex-col overflow-hidden">
           {activeConversation ? (
             <>
               <ChatHeader
@@ -428,32 +428,36 @@ const Mensagens = () => {
                 onChangeStatus={handleChangeStatus}
               />
 
-              {/* Messages */}
-              <CardContent className="flex-1 overflow-auto p-4">
-                {loadingMessages ? (
-                  <div className="flex items-center justify-center h-full">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              {/* Messages - scrollable area */}
+              <div className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full">
+                  <div className="p-4 space-y-4">
+                    {loadingMessages ? (
+                      <div className="flex items-center justify-center h-40">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : messages.length > 0 ? (
+                      messages.map((message) => (
+                        <MessageBubble key={message.id} message={message} onReply={() => handleReply(message)} />
+                      ))
+                    ) : (
+                      <div className="flex items-center justify-center h-40 text-muted-foreground">
+                        <p>Nenhuma mensagem ainda</p>
+                      </div>
+                    )}
                   </div>
-                ) : messages.length > 0 ? (
-                  <div className="space-y-4">
-                    {messages.map((message) => (
-                      <MessageBubble key={message.id} message={message} onReply={() => handleReply(message)} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    <p>Nenhuma mensagem ainda</p>
-                  </div>
-                )}
-              </CardContent>
+                </ScrollArea>
+              </div>
 
-              {/* Input area */}
-              <MessageInput
-                onSend={handleSendMessage}
-                replyTo={replyingTo}
-                onCancelReply={() => setReplyingTo(null)}
-                disabled={sendMessage.isPending}
-              />
+              {/* Input area - fixed at bottom */}
+              <div className="border-t bg-background flex-shrink-0">
+                <MessageInput
+                  onSend={handleSendMessage}
+                  replyTo={replyingTo}
+                  onCancelReply={() => setReplyingTo(null)}
+                  disabled={sendMessage.isPending}
+                />
+              </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center">

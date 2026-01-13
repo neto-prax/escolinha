@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { Check, CheckCheck, Clock, Play, Pause, Download, Reply } from "lucide-react";
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { MediaPreviewModal } from "./MediaPreviewModal";
 
 export interface Message {
   id: string;
@@ -37,6 +38,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 export function MessageBubble({ message, onReply }: MessageBubbleProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [mediaPreviewOpen, setMediaPreviewOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const isOutgoing = message.direction === 'outgoing';
@@ -70,9 +72,9 @@ export function MessageBubble({ message, onReply }: MessageBubbleProps) {
             <img
               src={message.media_url}
               alt="Imagem"
-              className={cn("max-w-[280px] rounded-lg cursor-pointer", !imageLoaded && "hidden")}
+              className={cn("max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity", !imageLoaded && "hidden")}
               onLoad={() => setImageLoaded(true)}
-              onClick={() => window.open(message.media_url, '_blank')}
+              onClick={() => setMediaPreviewOpen(true)}
             />
             {message.media_caption && (
               <p className="mt-1 text-sm">{message.media_caption}</p>
@@ -82,12 +84,22 @@ export function MessageBubble({ message, onReply }: MessageBubbleProps) {
 
       case 'video':
         return (
-          <div>
-            <video
-              src={message.media_url}
-              controls
-              className="max-w-[280px] rounded-lg"
-            />
+          <div className="relative">
+            <div 
+              className="relative max-w-[280px] rounded-lg overflow-hidden cursor-pointer group"
+              onClick={() => setMediaPreviewOpen(true)}
+            >
+              <video
+                src={message.media_url}
+                className="max-w-full rounded-lg"
+                preload="metadata"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+                <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+                  <Play className="h-6 w-6 text-primary fill-primary" />
+                </div>
+              </div>
+            </div>
             {message.media_caption && (
               <p className="mt-1 text-sm">{message.media_caption}</p>
             )}
@@ -192,6 +204,17 @@ export function MessageBubble({ message, onReply }: MessageBubbleProps) {
           {isOutgoing && statusIcons[message.status]}
         </div>
       </div>
+
+      {/* Media Preview Modal */}
+      {message.media_url && (message.message_type === 'image' || message.message_type === 'video') && (
+        <MediaPreviewModal
+          open={mediaPreviewOpen}
+          onOpenChange={setMediaPreviewOpen}
+          mediaUrl={message.media_url}
+          mediaType={message.message_type}
+          caption={message.media_caption}
+        />
+      )}
 
       {onReply && (
         <Button
