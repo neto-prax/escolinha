@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,7 +31,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2 } from 'lucide-react';
+import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppRole } from '@/types/auth';
@@ -70,6 +71,7 @@ const Usuarios = () => {
   const [isRolesOpen, setIsRolesOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
 
   const [editForm, setEditForm] = useState({ full_name: '', phone: '' });
@@ -81,6 +83,8 @@ const Usuarios = () => {
     phone: '',
     roles: [] as AppRole[],
   });
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const handleDetailsOpen = (userToView: UserWithRoles) => {
     setSelectedUser(userToView);
@@ -100,6 +104,44 @@ const Usuarios = () => {
     setSelectedUser(userToEdit);
     setRolesForm([...userToEdit.roles]);
     setIsRolesOpen(true);
+  };
+
+  const handlePasswordOpen = (userToEdit: UserWithRoles) => {
+    setSelectedUser(userToEdit);
+    setPasswordForm({ newPassword: '', confirmPassword: '' });
+    setIsPasswordOpen(true);
+  };
+
+  const handlePasswordSave = async () => {
+    if (!selectedUser) return;
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('As senhas não coincidem');
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      toast.error('A senha deve ter no mínimo 6 caracteres');
+      return;
+    }
+    
+    setIsChangingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('update-user-password', {
+        body: {
+          userId: selectedUser.id,
+          newPassword: passwordForm.newPassword,
+        },
+      });
+      
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      toast.success('Senha alterada com sucesso!');
+      setIsPasswordOpen(false);
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao alterar senha');
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const handleEditSave = async () => {
@@ -282,6 +324,10 @@ const Usuarios = () => {
                           <DropdownMenuItem onClick={() => handleRolesOpen(u)}>
                             <Shield className="h-4 w-4 mr-2" />
                             Permissões
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handlePasswordOpen(u)}>
+                            <KeyRound className="h-4 w-4 mr-2" />
+                            Alterar Senha
                           </DropdownMenuItem>
                           {u.id !== user?.id && (
                             <DropdownMenuItem onClick={() => handleToggleActive(u)}>
@@ -477,6 +523,53 @@ const Usuarios = () => {
         open={isDetailsOpen}
         onOpenChange={setIsDetailsOpen}
       />
+
+      {/* Change Password Dialog */}
+      <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar Senha</DialogTitle>
+            <DialogDescription>
+              Defina uma nova senha para {selectedUser?.full_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new_password">Nova Senha</Label>
+              <Input
+                id="new_password"
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm_password">Confirmar Senha</Label>
+              <Input
+                id="confirm_password"
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                placeholder="Repita a nova senha"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsPasswordOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handlePasswordSave} 
+              disabled={isChangingPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
+            >
+              {isChangingPassword ? 'Alterando...' : 'Alterar Senha'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
