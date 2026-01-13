@@ -6,6 +6,111 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function sendWelcomeMessage(
+  supabase: any,
+  instanceName: string,
+  phone: string,
+  schoolId: string,
+  conversationId: string
+) {
+  try {
+    // Get school settings
+    const { data: school, error: schoolError } = await supabase
+      .from('schools')
+      .select('settings')
+      .eq('id', schoolId)
+      .single();
+
+    if (schoolError || !school?.settings?.automation) {
+      console.log('No automation settings found for school');
+      return;
+    }
+
+    const automation = school.settings.automation;
+    
+    if (!automation.sector_selection_enabled) {
+      console.log('Sector selection automation is disabled');
+      return;
+    }
+
+    const enabledSectorIds = automation.enabled_sectors || [];
+    if (enabledSectorIds.length === 0) {
+      console.log('No sectors enabled for automation');
+      return;
+    }
+
+    // Get enabled sectors
+    const { data: sectors, error: sectorsError } = await supabase
+      .from('sectors')
+      .select('id, name')
+      .in('id', enabledSectorIds)
+      .eq('is_active', true)
+      .order('name');
+
+    if (sectorsError || !sectors || sectors.length === 0) {
+      console.log('No active sectors found for automation');
+      return;
+    }
+
+    // Build sectors list
+    const sectorsList = sectors.map((s: any, i: number) => `${i + 1}. ${s.name}`).join('\n');
+    
+    // Replace placeholder in message
+    let welcomeMessage = automation.sector_selection_message || 
+      'Olá! 👋 Bem-vindo(a)!\n\nPor favor escolha o setor:\n\n{SECTORS_LIST}\n\nDigite o número correspondente.';
+    
+    welcomeMessage = welcomeMessage.replace('{SECTORS_LIST}', sectorsList);
+
+    console.log('Sending welcome message:', { phone, message: welcomeMessage });
+
+    // Get Evolution API credentials
+    const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
+    const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
+
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      console.error('Evolution API credentials not configured');
+      return;
+    }
+
+    // Send message via Evolution API
+    const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({
+        number: phone,
+        text: welcomeMessage,
+      }),
+    });
+
+    const result = await response.json();
+    console.log('Welcome message sent:', result);
+
+    // Save outgoing message to database
+    const { error: msgError } = await supabase
+      .from('whatsapp_messages')
+      .insert({
+        conversation_id: conversationId,
+        direction: 'outgoing',
+        body: welcomeMessage,
+        message_type: 'text',
+        status: 'sent',
+        external_id: result.key?.id || null,
+      });
+
+    if (msgError) {
+      console.error('Error saving welcome message:', msgError);
+    } else {
+      console.log('Welcome message saved to database');
+    }
+
+  } catch (error) {
+    console.error('Error sending welcome message:', error);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -126,7 +231,10 @@ serve(async (req) => {
         throw convError;
       }
 
+      let isNewConversation = false;
+
       if (!conversation) {
+        isNewConversation = true;
         // Create new conversation
         const { data: newConv, error: createError } = await supabase
           .from('whatsapp_conversations')
@@ -190,6 +298,12 @@ serve(async (req) => {
       }
 
       console.log('Message saved:', insertedMessage.id);
+
+      // Send welcome message if this is a new conversation
+      if (isNewConversation) {
+        console.log('New conversation - checking automation settings...');
+        await sendWelcomeMessage(supabase, instance, phone, schoolId, conversation.id);
+      }
 
       return new Response(JSON.stringify({ 
         status: 'success', 
