@@ -11,10 +11,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Loader2, Bot, MessageSquare } from 'lucide-react';
 
+interface SectorGreeting {
+  [sectorId: string]: string;
+}
+
 interface AutomationConfig {
   sector_selection_enabled: boolean;
   sector_selection_message: string;
   enabled_sectors: string[];
+  sector_greetings: SectorGreeting;
+  signature_enabled: boolean;
 }
 
 const DEFAULT_MESSAGE = `Olá! 👋 Bem-vindo(a) à nossa escola!
@@ -33,6 +39,8 @@ export function AutomationSettings() {
     sector_selection_enabled: false,
     sector_selection_message: DEFAULT_MESSAGE,
     enabled_sectors: [],
+    sector_greetings: {},
+    signature_enabled: true,
   });
 
   // Fetch sectors
@@ -69,6 +77,8 @@ export function AutomationSettings() {
         sector_selection_enabled: automation?.sector_selection_enabled ?? false,
         sector_selection_message: automation?.sector_selection_message ?? DEFAULT_MESSAGE,
         enabled_sectors: automation?.enabled_sectors ?? [],
+        sector_greetings: automation?.sector_greetings ?? {},
+        signature_enabled: automation?.signature_enabled ?? true,
       } as AutomationConfig;
     },
     enabled: !!school?.id,
@@ -102,6 +112,8 @@ export function AutomationSettings() {
           sector_selection_enabled: config.sector_selection_enabled,
           sector_selection_message: config.sector_selection_message,
           enabled_sectors: config.enabled_sectors,
+          sector_greetings: config.sector_greetings,
+          signature_enabled: config.signature_enabled,
         },
       };
 
@@ -137,6 +149,16 @@ export function AutomationSettings() {
     setConfig({
       ...config,
       ...updates,
+    });
+  };
+
+  const updateSectorGreeting = (sectorId: string, greeting: string) => {
+    setConfig({
+      ...config,
+      sector_greetings: {
+        ...config.sector_greetings,
+        [sectorId]: greeting,
+      },
     });
   };
 
@@ -194,25 +216,41 @@ export function AutomationSettings() {
               <div className="space-y-3">
                 <Label>Setores disponíveis para seleção</Label>
                 <p className="text-sm text-muted-foreground">
-                  Selecione quais setores aparecerão como opção para o contato
+                  Selecione quais setores aparecerão como opção para o contato e configure a saudação de cada um
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-3">
                   {sectors.map((sector) => (
                     <div
                       key={sector.id}
-                      className="flex items-center space-x-2 rounded-md border p-3"
+                      className="rounded-md border p-3 space-y-3"
                     >
-                      <Checkbox
-                        id={`sector-${sector.id}`}
-                        checked={config.enabled_sectors.includes(sector.id)}
-                        onCheckedChange={() => toggleSector(sector.id)}
-                      />
-                      <Label
-                        htmlFor={`sector-${sector.id}`}
-                        className="flex-1 cursor-pointer font-normal"
-                      >
-                        {sector.name}
-                      </Label>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`sector-${sector.id}`}
+                          checked={config.enabled_sectors.includes(sector.id)}
+                          onCheckedChange={() => toggleSector(sector.id)}
+                        />
+                        <Label
+                          htmlFor={`sector-${sector.id}`}
+                          className="flex-1 cursor-pointer font-medium"
+                        >
+                          {sector.name}
+                        </Label>
+                      </div>
+                      {config.enabled_sectors.includes(sector.id) && (
+                        <div className="pl-6 space-y-2">
+                          <Label htmlFor={`greeting-${sector.id}`} className="text-sm text-muted-foreground">
+                            Mensagem de saudação ao entrar neste setor
+                          </Label>
+                          <Textarea
+                            id={`greeting-${sector.id}`}
+                            rows={2}
+                            value={config.sector_greetings[sector.id] || ''}
+                            onChange={(e) => updateSectorGreeting(sector.id, e.target.value)}
+                            placeholder={`Ex: Olá! Você está falando com o setor de ${sector.name}. Como posso ajudar?`}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -243,6 +281,25 @@ export function AutomationSettings() {
               </div>
             </>
           )}
+
+          <div className="pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="signature">Assinatura nas mensagens</Label>
+                <p className="text-sm text-muted-foreground">
+                  Adicionar nome do atendente em negrito antes de cada mensagem enviada
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Formato: <span className="font-mono">*Nome do Atendente:*</span> seguido da mensagem
+                </p>
+              </div>
+              <Switch
+                id="signature"
+                checked={config.signature_enabled}
+                onCheckedChange={(checked) => updateConfig({ signature_enabled: checked })}
+              />
+            </div>
+          </div>
 
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={isSaving}>
