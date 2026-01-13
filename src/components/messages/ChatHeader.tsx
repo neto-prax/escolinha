@@ -30,6 +30,7 @@ interface ChatHeaderProps {
   onCloseTicket: () => void;
   onChangePriority: (priority: 'low' | 'normal' | 'high' | 'urgent') => void;
   onChangeStatus: (status: 'open' | 'pending' | 'resolved' | 'closed') => void;
+  onAcceptTicket: () => void;
 }
 
 const contactTypeConfig = {
@@ -61,6 +62,7 @@ export function ChatHeader({
   onCloseTicket,
   onChangePriority,
   onChangeStatus,
+  onAcceptTicket,
 }: ChatHeaderProps) {
   const typeConfig = contactTypeConfig[conversation.contact_type];
   const priority = priorityConfig[conversation.priority];
@@ -127,20 +129,21 @@ export function ChatHeader({
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Action buttons based on ticket status */}
-        {conversation.ticket_status === 'open' && (
+        {/* Show Accept button if ticket has no assigned_to (pending) */}
+        {!conversation.assigned_to && conversation.ticket_status !== 'closed' && conversation.ticket_status !== 'resolved' && (
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-yellow-600 border-yellow-300 hover:bg-yellow-50"
-            onClick={() => onChangeStatus('pending')}
+            className="h-8 text-blue-600 border-blue-300 hover:bg-blue-50"
+            onClick={onAcceptTicket}
           >
             <Play className="h-3.5 w-3.5 mr-1.5" />
             Aceitar
           </Button>
         )}
 
-        {conversation.ticket_status === 'pending' && (
+        {/* Show Resolve/Close buttons if ticket is accepted (has assigned_to) */}
+        {conversation.assigned_to && conversation.ticket_status !== 'closed' && conversation.ticket_status !== 'resolved' && (
           <>
             <Button
               variant="outline"
