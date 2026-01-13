@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare, History } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,10 +73,13 @@ const contactTypeLabels: Record<string, string> = {
 const Contatos = () => {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedContactHistory, setSelectedContactHistory] = useState<ContactRecord | null>(null);
   const [editingContact, setEditingContact] = useState<ContactRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -286,6 +290,67 @@ const Contatos = () => {
     bulkImportMutation.mutate(importData);
   };
 
+  // Send message - navigate to messages with this contact
+  const handleSendMessage = async (contact: ContactRecord) => {
+    // Check if conversation already exists for this contact
+    const { data: existingConversation } = await supabase
+      .from('whatsapp_conversations')
+      .select('id')
+      .eq('contact_id', contact.id)
+      .eq('school_id', profile!.school_id!)
+      .maybeSingle();
+
+    if (existingConversation) {
+      // Navigate to existing conversation
+      navigate(`/app/mensagens?conversation=${existingConversation.id}`);
+    } else {
+      // Create new conversation
+      const { data: newConversation, error } = await supabase
+        .from('whatsapp_conversations')
+        .insert({
+          school_id: profile!.school_id!,
+          phone: contact.phone,
+          contact_id: contact.id,
+          contact_name: contact.full_name,
+          status: 'active',
+          ticket_status: 'open',
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        toast.error('Erro ao iniciar conversa');
+        console.error('Error creating conversation:', error);
+        return;
+      }
+
+      navigate(`/app/mensagens?conversation=${newConversation.id}`);
+    }
+  };
+
+  // View history
+  const handleViewHistory = (contact: ContactRecord) => {
+    setSelectedContactHistory(contact);
+    setIsHistoryOpen(true);
+  };
+
+  // Fetch conversation history for selected contact
+  const { data: contactConversations = [] } = useQuery({
+    queryKey: ['contact-conversations', selectedContactHistory?.id],
+    queryFn: async () => {
+      if (!selectedContactHistory) return [];
+      const { data, error } = await supabase
+        .from('whatsapp_conversations')
+        .select('*, whatsapp_messages(id, body, created_at, direction)')
+        .eq('contact_id', selectedContactHistory.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedContactHistory,
+  });
+
   const filteredContacts = contacts.filter(contact => {
     const matchesSearch = 
       contact.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -452,11 +517,14 @@ const Contatos = () => {
                           <DropdownMenuItem onClick={() => handleOpenEdit(contact)}>
                             Editar contato
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleSendMessage(contact)}>
                             <MessageSquare className="mr-2 h-4 w-4" />
                             Enviar mensagem
                           </DropdownMenuItem>
-                          <DropdownMenuItem>Ver histórico</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewHistory(contact)}>
+                            <History className="mr-2 h-4 w-4" />
+                            Ver histórico
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -657,6 +725,66 @@ const Contatos = () => {
                 {bulkImportMutation.isPending ? 'Importando...' : `Importar ${importData.length} registros`}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Histórico de Conversas
+            </DialogTitle>
+            <DialogDescription>
+              {selectedContactHistory?.full_name} - {selectedContactHistory?.phone}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-4">
+            {contactConversations.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhuma conversa encontrada para este contato
+              </div>
+            ) : (
+              contactConversations.map((conversation: any) => (
+                <Card key={conversation.id} className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => {
+                  setIsHistoryOpen(false);
+                  navigate(`/app/mensagens?conversation=${conversation.id}`);
+                }}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <Badge variant={conversation.ticket_status === 'open' ? 'default' : conversation.ticket_status === 'pending' ? 'secondary' : 'outline'}>
+                          {conversation.ticket_status === 'open' ? 'Aberto' : conversation.ticket_status === 'pending' ? 'Pendente' : 'Resolvido'}
+                        </Badge>
+                        {conversation.sector_id && (
+                          <Badge variant="outline" className="ml-2">Setor vinculado</Badge>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(conversation.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {conversation.whatsapp_messages?.length || 0} mensagens
+                    </div>
+                    {conversation.resolution_summary && (
+                      <p className="text-sm mt-2 text-muted-foreground line-clamp-2">
+                        <span className="font-medium">Resumo:</span> {conversation.resolution_summary}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+
+          <div className="flex justify-end pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsHistoryOpen(false)}>
+              Fechar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
