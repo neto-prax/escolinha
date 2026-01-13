@@ -38,7 +38,7 @@ const Mensagens = () => {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [selectedSector, setSelectedSector] = useState<string>('all');
   const [selectedContactType, setSelectedContactType] = useState<string>('all');
-  const [ticketFilter, setTicketFilter] = useState<string>('all');
+  const [ticketFilter, setTicketFilter] = useState<string>('pending');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modal states
@@ -151,10 +151,15 @@ const Mensagens = () => {
 
   const filteredConversations = conversationsList.filter((c) => {
     const matchesType = selectedContactType === 'all' || c.contact_type === selectedContactType;
-    // "Em atendimento" (all) shows only tickets with assigned_to (accepted)
-    const matchesTicket = ticketFilter === 'all' 
-      ? !!c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved'
-      : c.ticket_status === ticketFilter;
+    // open = accepted (has assigned_to), pending = not accepted (no assigned_to)
+    let matchesTicket = true;
+    if (ticketFilter === 'open') {
+      matchesTicket = !!c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved';
+    } else if (ticketFilter === 'pending') {
+      matchesTicket = !c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved';
+    } else if (ticketFilter === 'resolved') {
+      matchesTicket = c.ticket_status === 'resolved' || c.ticket_status === 'closed';
+    }
     const matchesSearch =
       searchQuery === '' ||
       c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -325,10 +330,10 @@ const Mensagens = () => {
   };
 
   const ticketCounts = {
-    // "Em atendimento" = tickets with assigned_to and not closed/resolved
-    all: conversationsList.filter((c) => !!c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved').length,
-    open: conversationsList.filter((c) => c.ticket_status === 'open').length,
-    pending: conversationsList.filter((c) => c.ticket_status === 'pending').length,
+    // open = accepted (has assigned_to and not closed/resolved)
+    open: conversationsList.filter((c) => !!c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved').length,
+    // pending = not accepted yet (no assigned_to and not closed/resolved)
+    pending: conversationsList.filter((c) => !c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved').length,
     resolved: conversationsList.filter((c) => c.ticket_status === 'resolved' || c.ticket_status === 'closed').length,
   };
 
@@ -389,10 +394,7 @@ const Mensagens = () => {
 
             {/* Ticket status tabs */}
             <Tabs value={ticketFilter} onValueChange={setTicketFilter}>
-              <TabsList className="w-full grid grid-cols-4">
-                <TabsTrigger value="all" className="text-xs">
-                  Em atendimento ({ticketCounts.all})
-                </TabsTrigger>
+              <TabsList className="w-full grid grid-cols-3">
                 <TabsTrigger value="open" className="text-xs">
                   Abertos ({ticketCounts.open})
                 </TabsTrigger>
