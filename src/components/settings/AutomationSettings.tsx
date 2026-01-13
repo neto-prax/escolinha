@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,6 +29,11 @@ export function AutomationSettings() {
   const { school } = useAuth();
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
+  const [config, setConfig] = useState<AutomationConfig>({
+    sector_selection_enabled: false,
+    sector_selection_message: DEFAULT_MESSAGE,
+    enabled_sectors: [],
+  });
 
   // Fetch sectors
   const { data: sectors = [], isLoading: loadingSectors } = useQuery({
@@ -69,20 +74,12 @@ export function AutomationSettings() {
     enabled: !!school?.id,
   });
 
-  const [config, setConfig] = useState<AutomationConfig | null>(null);
-
   // Initialize config when data loads
-  useState(() => {
-    if (automationConfig && !config) {
+  useEffect(() => {
+    if (automationConfig) {
       setConfig(automationConfig);
     }
-  });
-
-  const currentConfig = config || automationConfig || {
-    sector_selection_enabled: false,
-    sector_selection_message: DEFAULT_MESSAGE,
-    enabled_sectors: [],
-  };
+  }, [automationConfig]);
 
   const handleSave = async () => {
     if (!school?.id) return;
@@ -102,9 +99,9 @@ export function AutomationSettings() {
       const newSettings = {
         ...currentSettings,
         automation: {
-          sector_selection_enabled: currentConfig.sector_selection_enabled,
-          sector_selection_message: currentConfig.sector_selection_message,
-          enabled_sectors: currentConfig.enabled_sectors,
+          sector_selection_enabled: config.sector_selection_enabled,
+          sector_selection_message: config.sector_selection_message,
+          enabled_sectors: config.enabled_sectors,
         },
       };
 
@@ -117,8 +114,8 @@ export function AutomationSettings() {
 
       queryClient.invalidateQueries({ queryKey: ['automation-config'] });
       toast.success('Configurações de automação salvas!');
-    } catch (error) {
-      console.error('Error saving automation config:', error);
+    } catch (err) {
+      console.error('Error saving automation config:', err);
       toast.error('Erro ao salvar configurações');
     } finally {
       setIsSaving(false);
@@ -126,19 +123,19 @@ export function AutomationSettings() {
   };
 
   const toggleSector = (sectorId: string) => {
-    const newEnabledSectors = currentConfig.enabled_sectors.includes(sectorId)
-      ? currentConfig.enabled_sectors.filter(id => id !== sectorId)
-      : [...currentConfig.enabled_sectors, sectorId];
+    const newEnabledSectors = config.enabled_sectors.includes(sectorId)
+      ? config.enabled_sectors.filter(id => id !== sectorId)
+      : [...config.enabled_sectors, sectorId];
     
     setConfig({
-      ...currentConfig,
+      ...config,
       enabled_sectors: newEnabledSectors,
     });
   };
 
   const updateConfig = (updates: Partial<AutomationConfig>) => {
     setConfig({
-      ...currentConfig,
+      ...config,
       ...updates,
     });
   };
@@ -152,7 +149,7 @@ export function AutomationSettings() {
   }
 
   // Generate preview of sectors list
-  const sectorsPreview = currentConfig.enabled_sectors
+  const sectorsPreview = config.enabled_sectors
     .map((sectorId, index) => {
       const sector = sectors.find(s => s.id === sectorId);
       return sector ? `${index + 1}. ${sector.name}` : null;
@@ -160,7 +157,7 @@ export function AutomationSettings() {
     .filter(Boolean)
     .join('\n');
 
-  const previewMessage = currentConfig.sector_selection_message.replace(
+  const previewMessage = config.sector_selection_message.replace(
     '{SECTORS_LIST}',
     sectorsPreview || '(Nenhum setor selecionado)'
   );
@@ -187,12 +184,12 @@ export function AutomationSettings() {
             </div>
             <Switch
               id="sector-selection"
-              checked={currentConfig.sector_selection_enabled}
+              checked={config.sector_selection_enabled}
               onCheckedChange={(checked) => updateConfig({ sector_selection_enabled: checked })}
             />
           </div>
 
-          {currentConfig.sector_selection_enabled && (
+          {config.sector_selection_enabled && (
             <>
               <div className="space-y-3">
                 <Label>Setores disponíveis para seleção</Label>
@@ -207,7 +204,7 @@ export function AutomationSettings() {
                     >
                       <Checkbox
                         id={`sector-${sector.id}`}
-                        checked={currentConfig.enabled_sectors.includes(sector.id)}
+                        checked={config.enabled_sectors.includes(sector.id)}
                         onCheckedChange={() => toggleSector(sector.id)}
                       />
                       <Label
@@ -229,7 +226,7 @@ export function AutomationSettings() {
                 <Textarea
                   id="message"
                   rows={6}
-                  value={currentConfig.sector_selection_message}
+                  value={config.sector_selection_message}
                   onChange={(e) => updateConfig({ sector_selection_message: e.target.value })}
                   placeholder={DEFAULT_MESSAGE}
                 />
