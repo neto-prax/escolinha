@@ -18,6 +18,7 @@ export interface Conversation {
   sector_name?: string;
   resolution_summary?: string;
   closed_at?: string;
+  assigned_to?: string | null;
 }
 
 interface ConversationCardProps {

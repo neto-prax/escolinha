@@ -126,6 +126,7 @@ const Mensagens = () => {
     })) || [],
     resolution_summary: conv.resolution_summary || undefined,
     closed_at: conv.closed_at || undefined,
+    assigned_to: conv.assigned_to,
   }));
 
   // Fetch messages for selected conversation
@@ -150,7 +151,10 @@ const Mensagens = () => {
 
   const filteredConversations = conversationsList.filter((c) => {
     const matchesType = selectedContactType === 'all' || c.contact_type === selectedContactType;
-    const matchesTicket = ticketFilter === 'all' || c.ticket_status === ticketFilter;
+    // "Em atendimento" (all) shows only tickets with assigned_to (accepted)
+    const matchesTicket = ticketFilter === 'all' 
+      ? !!c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved'
+      : c.ticket_status === ticketFilter;
     const matchesSearch =
       searchQuery === '' ||
       c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -321,7 +325,8 @@ const Mensagens = () => {
   };
 
   const ticketCounts = {
-    all: conversationsList.length,
+    // "Em atendimento" = tickets with assigned_to and not closed/resolved
+    all: conversationsList.filter((c) => !!c.assigned_to && c.ticket_status !== 'closed' && c.ticket_status !== 'resolved').length,
     open: conversationsList.filter((c) => c.ticket_status === 'open').length,
     pending: conversationsList.filter((c) => c.ticket_status === 'pending').length,
     resolved: conversationsList.filter((c) => c.ticket_status === 'resolved' || c.ticket_status === 'closed').length,
