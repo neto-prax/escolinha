@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Plus, User, MessageSquare, Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +46,7 @@ const Mensagens = () => {
   const [changeTypeModalOpen, setChangeTypeModalOpen] = useState(false);
   const [newConversationModalOpen, setNewConversationModalOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch sectors
   const { data: sectors = [] } = useQuery({
@@ -162,6 +163,13 @@ const Mensagens = () => {
       setSelectedConversation(filteredConversations[0].id);
     }
   }, [filteredConversations, selectedConversation]);
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   const handleCloseTicket = async (data: { summary: string; category: string; resolved: boolean }) => {
     if (!selectedConversation) return;
@@ -428,25 +436,27 @@ const Mensagens = () => {
                 onChangeStatus={handleChangeStatus}
               />
 
-              {/* Messages - scrollable area */}
-              <div className="flex-1 overflow-hidden">
-                <ScrollArea className="h-full">
-                  <div className="p-4 space-y-4">
-                    {loadingMessages ? (
-                      <div className="flex items-center justify-center h-40">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                      </div>
-                    ) : messages.length > 0 ? (
-                      messages.map((message) => (
+              {/* Messages - scrollable area with flex-col-reverse for bottom-up scroll */}
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+                <div className="flex-1" />
+                <div className="p-4 space-y-4">
+                  {loadingMessages ? (
+                    <div className="flex items-center justify-center h-40">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : messages.length > 0 ? (
+                    <>
+                      {messages.map((message) => (
                         <MessageBubble key={message.id} message={message} onReply={() => handleReply(message)} />
-                      ))
-                    ) : (
-                      <div className="flex items-center justify-center h-40 text-muted-foreground">
-                        <p>Nenhuma mensagem ainda</p>
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center h-40 text-muted-foreground">
+                      <p>Nenhuma mensagem ainda</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Input area - fixed at bottom */}
