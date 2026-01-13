@@ -386,7 +386,7 @@ const Mensagens = () => {
             <Tabs value={ticketFilter} onValueChange={setTicketFilter}>
               <TabsList className="w-full grid grid-cols-4">
                 <TabsTrigger value="all" className="text-xs">
-                  Todos ({ticketCounts.all})
+                  Em atendimento ({ticketCounts.all})
                 </TabsTrigger>
                 <TabsTrigger value="open" className="text-xs">
                   Abertos ({ticketCounts.open})
