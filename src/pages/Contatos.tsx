@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -75,6 +75,7 @@ const Contatos = () => {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -108,6 +109,7 @@ const Contatos = () => {
     },
     enabled: !!profile?.school_id,
   });
+
 
   // Create contact mutation
   const createContactMutation = useMutation({
@@ -234,6 +236,19 @@ const Contatos = () => {
       createContactMutation.mutate(formData);
     }
   };
+
+  // Open contact from URL param
+  useEffect(() => {
+    const contactId = searchParams.get('contactId');
+    if (contactId && contacts.length > 0) {
+      const contact = contacts.find(c => c.id === contactId);
+      if (contact) {
+        handleOpenEdit(contact);
+        // Clear the search param after opening
+        setSearchParams({});
+      }
+    }
+  }, [contacts, searchParams]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
