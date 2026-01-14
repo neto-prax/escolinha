@@ -1,10 +1,15 @@
 import { supabase } from '@/integrations/supabase/client';
 
 /**
- * Normalizes phone number for comparison (removes non-digits)
+ * Normalizes phone number for comparison (removes non-digits and ensures 55 prefix)
  */
 function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, '');
+  const digitsOnly = phone.replace(/\D/g, '');
+  // Add 55 prefix if not present (Brazilian country code)
+  if (digitsOnly.length >= 10 && digitsOnly.length <= 11 && !digitsOnly.startsWith('55')) {
+    return '55' + digitsOnly;
+  }
+  return digitsOnly;
 }
 
 /**
