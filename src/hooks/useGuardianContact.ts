@@ -1,8 +1,17 @@
 import { supabase } from '@/integrations/supabase/client';
 
 /**
+ * Normalizes phone number for comparison (removes non-digits)
+ */
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
+/**
  * Creates or updates a contact for a guardian, linking students.
  * This ensures guardians have a contact record for messaging.
+ * If a contact with the same phone already exists, it updates that contact
+ * to be linked to the guardian instead of creating a new one.
  */
 export async function ensureGuardianContact(
   guardianId: string,
@@ -19,23 +28,25 @@ export async function ensureGuardianContact(
     return null;
   }
 
+  const normalizedPhone = normalizePhone(guardianData.phone);
+
   try {
-    // Check if contact already exists for this guardian
-    const { data: existingContact, error: findError } = await supabase
+    // First, check if contact already exists for this guardian by guardian_id
+    const { data: guardianContact, error: guardianFindError } = await supabase
       .from('contacts')
       .select('id, linked_student_ids')
       .eq('guardian_id', guardianId)
       .eq('school_id', schoolId)
       .maybeSingle();
 
-    if (findError) {
-      console.error('Error finding existing contact:', findError);
-      throw findError;
+    if (guardianFindError) {
+      console.error('Error finding existing guardian contact:', guardianFindError);
+      throw guardianFindError;
     }
 
-    if (existingContact) {
+    if (guardianContact) {
       // Update existing contact with new student links
-      const currentStudentIds = existingContact.linked_student_ids || [];
+      const currentStudentIds = guardianContact.linked_student_ids || [];
       const mergedStudentIds = [...new Set([...currentStudentIds, ...studentIds])];
 
       const { error: updateError } = await supabase
@@ -47,13 +58,73 @@ export async function ensureGuardianContact(
           linked_student_ids: mergedStudentIds,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', existingContact.id);
+        .eq('id', guardianContact.id);
 
       if (updateError) throw updateError;
-      return existingContact.id;
+      return guardianContact.id;
     }
 
-    // Create new contact
+    // Check if there's an existing contact with the same phone number
+    // that can be converted to a guardian contact
+    const { data: existingContacts, error: phoneFindError } = await supabase
+      .from('contacts')
+      .select('id, linked_student_ids, guardian_id')
+      .eq('school_id', schoolId)
+      .is('guardian_id', null); // Only get contacts not already linked to a guardian
+
+    if (phoneFindError) {
+      console.error('Error finding contacts by phone:', phoneFindError);
+      throw phoneFindError;
+    }
+
+    // Find a contact with matching phone
+    const matchingContact = existingContacts?.find(contact => {
+      // We need to fetch the phone for comparison
+      return true; // Will filter below
+    });
+
+    // Get contacts with their phones
+    const { data: contactsWithPhone, error: phoneError } = await supabase
+      .from('contacts')
+      .select('id, phone, linked_student_ids, guardian_id')
+      .eq('school_id', schoolId)
+      .is('guardian_id', null);
+
+    if (phoneError) {
+      console.error('Error fetching contacts with phone:', phoneError);
+      throw phoneError;
+    }
+
+    // Find contact with matching normalized phone
+    const existingPhoneContact = contactsWithPhone?.find(contact => {
+      if (!contact.phone) return false;
+      return normalizePhone(contact.phone) === normalizedPhone;
+    });
+
+    if (existingPhoneContact) {
+      // Update existing contact to be linked to this guardian
+      const currentStudentIds = existingPhoneContact.linked_student_ids || [];
+      const mergedStudentIds = [...new Set([...currentStudentIds, ...studentIds])];
+
+      const { error: updateError } = await supabase
+        .from('contacts')
+        .update({
+          guardian_id: guardianId,
+          full_name: guardianData.full_name,
+          email: guardianData.email,
+          contact_type: 'guardian',
+          linked_student_ids: mergedStudentIds,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingPhoneContact.id);
+
+      if (updateError) throw updateError;
+      
+      console.log(`Contact ${existingPhoneContact.id} converted to guardian contact for guardian ${guardianId}`);
+      return existingPhoneContact.id;
+    }
+
+    // No existing contact found, create new one
     const { data: newContact, error: createError } = await supabase
       .from('contacts')
       .insert({
