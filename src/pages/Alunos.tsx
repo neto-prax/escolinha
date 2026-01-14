@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Filter, MoreHorizontal, GraduationCap, UserPlus } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, GraduationCap, UserPlus, ClipboardCheck } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { StudentForm } from '@/components/forms/StudentForm';
+import { EnrollmentForm } from '@/components/forms/EnrollmentForm';
 import { toast } from 'sonner';
 
 // Mock data
@@ -36,6 +37,8 @@ const initialStudents = [
 const Alunos = () => {
   const [students, setStudents] = useState(initialStudents);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isEnrollmentFormOpen, setIsEnrollmentFormOpen] = useState(false);
+  const [enrollingStudent, setEnrollingStudent] = useState<typeof initialStudents[0] | null>(null);
   const [editingStudent, setEditingStudent] = useState<typeof initialStudents[0] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -65,6 +68,16 @@ const Alunos = () => {
     ));
     setEditingStudent(null);
     toast.success('Aluno atualizado com sucesso!');
+  };
+
+  const handleEnrollStudent = async (data: any) => {
+    if (!enrollingStudent) return;
+    setStudents(students.map(s => 
+      s.id === enrollingStudent.id ? { ...s, class: data.class_id || 'Turma selecionada' } : s
+    ));
+    setEnrollingStudent(null);
+    setIsEnrollmentFormOpen(false);
+    toast.success('Matrícula realizada com sucesso!');
   };
 
   const activeStudents = students.filter(s => s.status === 'active').length;
@@ -187,13 +200,20 @@ const Alunos = () => {
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end">
                         <DropdownMenuItem>Ver ficha completa</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => {
                           setEditingStudent(student);
                           setIsFormOpen(true);
                         }}>
                           Editar cadastro
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setEnrollingStudent(student);
+                          setIsEnrollmentFormOpen(true);
+                        }}>
+                          <ClipboardCheck className="mr-2 h-4 w-4" />
+                          Matricular
                         </DropdownMenuItem>
                         <DropdownMenuItem>Ver responsáveis</DropdownMenuItem>
                         <DropdownMenuItem>Histórico financeiro</DropdownMenuItem>
@@ -224,6 +244,16 @@ const Alunos = () => {
           guardian_phone: editingStudent.phone,
         } : undefined}
         mode={editingStudent ? 'edit' : 'create'}
+      />
+
+      {/* Enrollment Form Dialog */}
+      <EnrollmentForm
+        open={isEnrollmentFormOpen}
+        onOpenChange={(open) => {
+          setIsEnrollmentFormOpen(open);
+          if (!open) setEnrollingStudent(null);
+        }}
+        onSubmit={handleEnrollStudent}
       />
     </div>
   );
