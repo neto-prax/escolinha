@@ -93,13 +93,13 @@ export const StudentForm = ({
   const form = useForm<StudentFormData>({
     resolver: zodResolver(studentSchema),
     defaultValues: {
-      full_name: initialData?.full_name || '',
-      birth_date: initialData?.birth_date || '',
-      gender: initialData?.gender || '',
-      enrollment_number: initialData?.enrollment_number || '',
-      address: initialData?.address || '',
-      notes: initialData?.notes || '',
-      guardians: initialData?.guardians || [
+      full_name: '',
+      birth_date: '',
+      gender: '',
+      enrollment_number: '',
+      address: '',
+      notes: '',
+      guardians: [
         {
           name: '',
           relationship: '',
@@ -112,6 +112,51 @@ export const StudentForm = ({
       ],
     },
   });
+
+  // Reset form when initialData changes (for edit mode)
+  useEffect(() => {
+    if (open && initialData) {
+      form.reset({
+        full_name: initialData.full_name || '',
+        birth_date: initialData.birth_date || '',
+        gender: initialData.gender || '',
+        enrollment_number: initialData.enrollment_number || '',
+        address: initialData.address || '',
+        notes: initialData.notes || '',
+        guardians: initialData.guardians || [
+          {
+            name: '',
+            relationship: '',
+            phone: '',
+            email: '',
+            cpf: '',
+            address: '',
+            is_primary: true,
+          },
+        ],
+      });
+    } else if (open && !initialData) {
+      form.reset({
+        full_name: '',
+        birth_date: '',
+        gender: '',
+        enrollment_number: '',
+        address: '',
+        notes: '',
+        guardians: [
+          {
+            name: '',
+            relationship: '',
+            phone: '',
+            email: '',
+            cpf: '',
+            address: '',
+            is_primary: true,
+          },
+        ],
+      });
+    }
+  }, [open, initialData, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,

@@ -52,11 +52,20 @@ interface GuardianInfo {
   id: string;
   full_name: string;
   phone: string | null;
+  email?: string | null;
+  cpf?: string | null;
+  relationship?: string | null;
+  address?: string | null;
 }
 
 interface Student {
   id: string;
   full_name: string;
+  birth_date?: string;
+  gender?: string;
+  address?: string;
+  notes?: string;
+  enrollment_number?: string;
   is_active: boolean;
   guardians: GuardianInfo[];
   class_name?: string;
@@ -89,12 +98,21 @@ const Alunos = () => {
         .select(`
           id,
           full_name,
+          birth_date,
+          gender,
+          address,
+          notes,
+          enrollment_number,
           is_active,
           student_guardians (
             guardian:guardians (
               id,
               full_name,
-              phone
+              phone,
+              email,
+              cpf,
+              relationship,
+              address
             )
           ),
           student_classes (
@@ -116,11 +134,20 @@ const Alunos = () => {
       return data.map((student: any) => ({
         id: student.id,
         full_name: student.full_name,
+        birth_date: student.birth_date,
+        gender: student.gender,
+        address: student.address,
+        notes: student.notes,
+        enrollment_number: student.enrollment_number,
         is_active: student.is_active ?? true,
         guardians: (student.student_guardians || []).map((sg: any) => ({
           id: sg.guardian?.id,
           full_name: sg.guardian?.full_name || '-',
           phone: sg.guardian?.phone || null,
+          email: sg.guardian?.email || null,
+          cpf: sg.guardian?.cpf || null,
+          relationship: sg.guardian?.relationship || null,
+          address: sg.guardian?.address || null,
         })).filter((g: GuardianInfo) => g.id),
         class_name: student.student_classes?.[0]?.class?.name || 'Sem turma',
       }));
@@ -268,9 +295,10 @@ const Alunos = () => {
   };
 
   const handleEditStudent = async (data: any) => {
-    if (!editingStudent) return;
+    if (!editingStudent || !profile?.school_id) return;
     
     try {
+      // Update student basic info
       const { error } = await supabase
         .from('students')
         .update({
@@ -278,12 +306,94 @@ const Alunos = () => {
           birth_date: data.birth_date,
           gender: data.gender,
           address: data.address,
+          notes: data.notes,
+          enrollment_number: data.enrollment_number,
         })
         .eq('id', editingStudent.id);
 
       if (error) throw error;
 
+      // Handle guardians update
+      const newGuardians = data.guardians || [];
+      const existingGuardianIds = editingStudent.guardians.map(g => g.id);
+      
+      for (let i = 0; i < newGuardians.length; i++) {
+        const guardianData = newGuardians[i];
+        let guardianId = guardianData.id;
+
+        if (guardianId && existingGuardianIds.includes(guardianId)) {
+          // Update existing guardian
+          await supabase
+            .from('guardians')
+            .update({
+              full_name: guardianData.name,
+              phone: guardianData.phone,
+              email: guardianData.email || null,
+              cpf: guardianData.cpf || null,
+              relationship: guardianData.relationship,
+              address: guardianData.address || null,
+            })
+            .eq('id', guardianId);
+        } else if (!guardianId && guardianData.name) {
+          // Create new guardian
+          const { data: newGuardian, error: guardianError } = await supabase
+            .from('guardians')
+            .insert({
+              full_name: guardianData.name,
+              email: guardianData.email || null,
+              phone: guardianData.phone,
+              cpf: guardianData.cpf || null,
+              relationship: guardianData.relationship,
+              address: guardianData.address || null,
+              school_id: profile.school_id,
+              is_primary: i === 0,
+            })
+            .select()
+            .single();
+
+          if (!guardianError && newGuardian) {
+            guardianId = newGuardian.id;
+            
+            // Link student to new guardian
+            await supabase
+              .from('student_guardians')
+              .insert({
+                student_id: editingStudent.id,
+                guardian_id: guardianId,
+              });
+          }
+        } else if (guardianId) {
+          // Link existing guardian from search
+          const { error: linkError } = await supabase
+            .from('student_guardians')
+            .insert({
+              student_id: editingStudent.id,
+              guardian_id: guardianId,
+            });
+          
+          if (linkError && !linkError.message?.includes('duplicate')) {
+            console.error('Error linking guardian:', linkError);
+          }
+        }
+
+        // Ensure contact exists for guardian
+        if (guardianId && guardianData.phone) {
+          await ensureGuardianContact(
+            guardianId,
+            {
+              full_name: guardianData.name,
+              phone: guardianData.phone,
+              email: guardianData.email || null,
+            },
+            profile.school_id,
+            [editingStudent.id]
+          );
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['guardians'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
       setEditingStudent(null);
       toast.success('Aluno atualizado com sucesso!');
     } catch (error) {
@@ -708,6 +818,31 @@ const Alunos = () => {
         onSubmit={editingStudent ? handleEditStudent : handleCreateStudent}
         initialData={editingStudent ? {
           full_name: editingStudent.full_name,
+          birth_date: editingStudent.birth_date || '',
+          gender: editingStudent.gender || '',
+          address: editingStudent.address || '',
+          notes: editingStudent.notes || '',
+          enrollment_number: editingStudent.enrollment_number || '',
+          guardians: editingStudent.guardians.length > 0 
+            ? editingStudent.guardians.map((g, i) => ({
+                id: g.id,
+                name: g.full_name,
+                phone: g.phone || '',
+                email: g.email || '',
+                cpf: g.cpf || '',
+                relationship: g.relationship || '',
+                address: g.address || '',
+                is_primary: i === 0,
+              }))
+            : [{
+                name: '',
+                relationship: '',
+                phone: '',
+                email: '',
+                cpf: '',
+                address: '',
+                is_primary: true,
+              }],
         } : undefined}
         mode={editingStudent ? 'edit' : 'create'}
       />
