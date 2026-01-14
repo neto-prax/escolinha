@@ -23,6 +23,7 @@ import {
 import { StudentForm } from '@/components/forms/StudentForm';
 import { EnrollmentForm } from '@/components/forms/EnrollmentForm';
 import { toast } from 'sonner';
+import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 
 // Mock data
 const initialStudents = [
@@ -41,6 +42,7 @@ const Alunos = () => {
   const [enrollingStudent, setEnrollingStudent] = useState<typeof initialStudents[0] | null>(null);
   const [editingStudent, setEditingStudent] = useState<typeof initialStudents[0] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -161,6 +163,13 @@ const Alunos = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <MultiSelectTableHeader
+                    selectedIds={selectedIds}
+                    onSelectionChange={setSelectedIds}
+                    allIds={filteredStudents.map(s => s.id)}
+                  />
+                </TableHead>
                 <TableHead>Aluno</TableHead>
                 <TableHead>Turma</TableHead>
                 <TableHead>Responsável</TableHead>
@@ -171,7 +180,14 @@ const Alunos = () => {
             </TableHeader>
             <TableBody>
               {filteredStudents.map((student) => (
-                <TableRow key={student.id} className="table-row-interactive">
+                <TableRow key={student.id} className={`table-row-interactive ${selectedIds.includes(student.id) ? 'bg-muted/50' : ''}`}>
+                  <TableCell>
+                    <MultiSelectTableCell
+                      id={student.id}
+                      selectedIds={selectedIds}
+                      onSelectionChange={setSelectedIds}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
@@ -260,6 +276,16 @@ const Alunos = () => {
           guardian: enrollingStudent.guardian,
           guardian_phone: enrollingStudent.phone,
         } : undefined}
+      />
+
+      {/* Multi-select Action Bar */}
+      <MultiSelectActionBar
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        onSendMessage={() => {
+          toast.info(`Enviar mensagem para ${selectedIds.length} aluno(s)`);
+        }}
+        itemLabel="alunos"
       />
     </div>
   );

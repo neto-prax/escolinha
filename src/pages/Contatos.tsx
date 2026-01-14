@@ -16,6 +16,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare, History } from 'lucide-react';
+import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,6 +84,7 @@ const Contatos = () => {
   const [editingContact, setEditingContact] = useState<ContactRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formData, setFormData] = useState<ContactFormData>({
     full_name: '',
     email: '',
@@ -474,6 +476,13 @@ const Contatos = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <MultiSelectTableHeader
+                      selectedIds={selectedIds}
+                      onSelectionChange={setSelectedIds}
+                      allIds={filteredContacts.map(c => c.id)}
+                    />
+                  </TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead>Email</TableHead>
@@ -483,7 +492,14 @@ const Contatos = () => {
               </TableHeader>
               <TableBody>
                 {filteredContacts.map((contact) => (
-                  <TableRow key={contact.id} className="table-row-interactive">
+                  <TableRow key={contact.id} className={`table-row-interactive ${selectedIds.includes(contact.id) ? 'bg-muted/50' : ''}`}>
+                    <TableCell>
+                      <MultiSelectTableCell
+                        id={contact.id}
+                        selectedIds={selectedIds}
+                        onSelectionChange={setSelectedIds}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
@@ -788,6 +804,15 @@ const Contatos = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Multi-select Action Bar */}
+      <MultiSelectActionBar
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        onSendMessage={() => {
+          toast.info(`Enviar mensagem para ${selectedIds.length} contato(s)`);
+        }}
+        itemLabel="contatos"
+      />
     </div>
   );
 };
