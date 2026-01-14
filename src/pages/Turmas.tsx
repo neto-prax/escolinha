@@ -54,7 +54,8 @@ const Turmas = () => {
     if (!school?.id) return;
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      // First, fetch classes with student count
+      const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select(`
           id,
@@ -64,23 +65,35 @@ const Turmas = () => {
           max_students,
           year,
           is_active,
-          student_classes(count),
-          teacher_classes(
-            profiles:teacher_id(full_name)
-          )
+          student_classes(count)
         `)
         .eq('school_id', school.id)
         .order('name');
 
-      if (error) throw error;
+      if (classesError) throw classesError;
 
-      const formattedClasses: ClassData[] = (data || []).map(cls => ({
+      // Fetch teacher assignments separately
+      const { data: teacherData } = await supabase
+        .from('teacher_classes')
+        .select('class_id, teacher_id');
+
+      // Get profile names for teachers
+      const teacherIds = [...new Set((teacherData || []).map(tc => tc.teacher_id))];
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', teacherIds.length > 0 ? teacherIds : ['00000000-0000-0000-0000-000000000000']);
+
+      const profilesMap = new Map((profilesData || []).map(p => [p.id, p.full_name]));
+      const teacherByClass = new Map((teacherData || []).map(tc => [tc.class_id, profilesMap.get(tc.teacher_id) || 'A definir']));
+
+      const formattedClasses: ClassData[] = (classesData || []).map(cls => ({
         id: cls.id,
         name: cls.name,
         grade: cls.grade || '',
         shift: cls.shift || '',
         students: (cls.student_classes as any)?.[0]?.count || 0,
-        teacher: (cls.teacher_classes as any)?.[0]?.profiles?.full_name || 'A definir',
+        teacher: teacherByClass.get(cls.id) || 'A definir',
         status: cls.is_active ? 'active' : 'inactive',
         max_students: cls.max_students || 30,
         year: cls.year,
