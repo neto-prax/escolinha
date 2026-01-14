@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect } from 'react';
+import { ensureConversationContact } from './useContactSync';
 
 export interface WhatsAppConversation {
   id: string;
@@ -94,7 +95,26 @@ export function useWhatsAppConversations(sectorId?: string) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as WhatsAppConversation[];
+      
+      // Sync contacts for conversations without contact_id
+      const conversations = data as WhatsAppConversation[];
+      
+      // Background sync for conversations without contacts
+      for (const conv of conversations) {
+        if (!conv.contact_id && profile?.school_id) {
+          ensureConversationContact(
+            {
+              id: conv.id,
+              phone: conv.phone,
+              contact_name: conv.contact_name,
+              contact_id: conv.contact_id,
+            },
+            profile.school_id
+          ).catch(console.error);
+        }
+      }
+      
+      return conversations;
     },
     enabled: !!profile?.school_id,
     refetchInterval: 10000, // Fallback polling every 10s
