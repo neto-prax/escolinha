@@ -38,6 +38,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 export function MessageBubble({ message, onReply }: MessageBubbleProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const [mediaPreviewOpen, setMediaPreviewOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -66,15 +67,37 @@ export function MessageBubble({ message, onReply }: MessageBubbleProps) {
       case 'image':
         return (
           <div className="relative">
-            {!imageLoaded && (
-              <div className="w-48 h-48 bg-muted animate-pulse rounded-lg" />
+            {!imageLoaded && !imageError && (
+              <div className="w-48 h-48 bg-muted animate-pulse rounded-lg flex items-center justify-center">
+                <Clock className="h-6 w-6 text-muted-foreground animate-spin" />
+              </div>
+            )}
+            {imageError && (
+              <div 
+                className="w-48 h-48 bg-muted rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-muted/80"
+                onClick={() => message.media_url && window.open(message.media_url, '_blank')}
+              >
+                <Download className="h-8 w-8 text-muted-foreground mb-2" />
+                <span className="text-xs text-muted-foreground">Clique para abrir</span>
+              </div>
             )}
             <img
               src={message.media_url}
               alt="Imagem"
-              className={cn("max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity", !imageLoaded && "hidden")}
-              onLoad={() => setImageLoaded(true)}
+              className={cn(
+                "max-w-[280px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity", 
+                (!imageLoaded || imageError) && "hidden"
+              )}
+              onLoad={() => {
+                setImageLoaded(true);
+                setImageError(false);
+              }}
+              onError={() => {
+                setImageError(true);
+                setImageLoaded(false);
+              }}
               onClick={() => setMediaPreviewOpen(true)}
+              crossOrigin="anonymous"
             />
             {message.media_caption && (
               <p className="mt-1 text-sm">{message.media_caption}</p>

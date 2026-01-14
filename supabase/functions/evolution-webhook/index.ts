@@ -161,25 +161,128 @@ serve(async (req) => {
         messageType = 'image';
         mediaCaption = message.message.imageMessage.caption || '';
         body = mediaCaption || '[Imagem]';
+        // Get media URL from base64 or URL if available
+        if (message.message.imageMessage.url) {
+          mediaUrl = message.message.imageMessage.url;
+        } else if (message.message.base64) {
+          // If base64 is provided, we'll need to upload it to storage
+          mediaUrl = `data:image/jpeg;base64,${message.message.base64}`;
+        }
+        // Check for mediaUrl in root data (some Evolution versions send it this way)
+        if (data.mediaUrl) {
+          mediaUrl = data.mediaUrl;
+        }
       } else if (message.message?.videoMessage) {
         messageType = 'video';
         mediaCaption = message.message.videoMessage.caption || '';
         body = mediaCaption || '[Vídeo]';
+        if (message.message.videoMessage.url) {
+          mediaUrl = message.message.videoMessage.url;
+        }
+        if (data.mediaUrl) {
+          mediaUrl = data.mediaUrl;
+        }
       } else if (message.message?.audioMessage) {
         messageType = 'audio';
         body = '[Áudio]';
+        if (message.message.audioMessage.url) {
+          mediaUrl = message.message.audioMessage.url;
+        }
+        if (data.mediaUrl) {
+          mediaUrl = data.mediaUrl;
+        }
       } else if (message.message?.documentMessage) {
         messageType = 'document';
         mediaFilename = message.message.documentMessage.fileName || 'documento';
         body = `[Documento: ${mediaFilename}]`;
+        if (message.message.documentMessage.url) {
+          mediaUrl = message.message.documentMessage.url;
+        }
+        if (data.mediaUrl) {
+          mediaUrl = data.mediaUrl;
+        }
       } else if (message.message?.stickerMessage) {
         messageType = 'sticker';
         body = '[Figurinha]';
+        if (message.message.stickerMessage.url) {
+          mediaUrl = message.message.stickerMessage.url;
+        }
+        if (data.mediaUrl) {
+          mediaUrl = data.mediaUrl;
+        }
       } else {
         body = '[Mensagem não suportada]';
       }
 
-      console.log('Processing message:', { phone, pushName, body, messageType });
+      console.log('Processing message:', { phone, pushName, body, messageType, mediaUrl: mediaUrl ? 'present' : 'missing' });
+
+      // If it's a media message without URL, try to fetch it from Evolution API
+      if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType) && !mediaUrl && messageId) {
+        try {
+          const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
+          const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
+          
+          if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+            console.log('Fetching media from Evolution API...');
+            const mediaResponse = await fetch(`${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instance}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': EVOLUTION_API_KEY,
+              },
+              body: JSON.stringify({
+                message: {
+                  key: message.key,
+                  message: message.message
+                }
+              }),
+            });
+            
+            if (mediaResponse.ok) {
+              const mediaData = await mediaResponse.json();
+              if (mediaData.base64) {
+                // Determine mime type
+                let mimeType = 'application/octet-stream';
+                if (messageType === 'image') mimeType = mediaData.mimetype || 'image/jpeg';
+                else if (messageType === 'video') mimeType = mediaData.mimetype || 'video/mp4';
+                else if (messageType === 'audio') mimeType = mediaData.mimetype || 'audio/ogg';
+                else if (messageType === 'document') mimeType = mediaData.mimetype || 'application/pdf';
+                else if (messageType === 'sticker') mimeType = mediaData.mimetype || 'image/webp';
+                
+                // Upload to Supabase Storage
+                const fileName = `${messageId}.${mimeType.split('/')[1] || 'bin'}`;
+                const filePath = `${phone}/${fileName}`;
+                
+                // Decode base64 and upload
+                const binaryData = Uint8Array.from(atob(mediaData.base64), c => c.charCodeAt(0));
+                
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                  .from('message-media')
+                  .upload(filePath, binaryData, {
+                    contentType: mimeType,
+                    upsert: true
+                  });
+                
+                if (uploadError) {
+                  console.error('Error uploading media:', uploadError);
+                } else {
+                  // Get public URL
+                  const { data: publicUrl } = supabase.storage
+                    .from('message-media')
+                    .getPublicUrl(filePath);
+                  
+                  mediaUrl = publicUrl.publicUrl;
+                  console.log('Media uploaded successfully:', mediaUrl);
+                }
+              }
+            } else {
+              console.log('Failed to fetch media from Evolution:', mediaResponse.status);
+            }
+          }
+        } catch (mediaError) {
+          console.error('Error fetching media:', mediaError);
+        }
+      }
 
       // Find the instance in database to get school_id
       const { data: instanceData, error: instanceError } = await supabase
