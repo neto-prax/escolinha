@@ -12,6 +12,7 @@ export interface LinkedStudent {
 
 export interface Conversation {
   id: string;
+  contact_id?: string | null;
   contact_name: string;
   phone: string;
   avatar_url?: string;

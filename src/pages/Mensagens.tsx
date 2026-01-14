@@ -14,6 +14,7 @@ import {
 import { Search, Plus, User, MessageSquare, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { ConversationCard, Conversation, LinkedStudent } from '@/components/messages/ConversationCard';
@@ -36,6 +37,7 @@ import { getStudentsBillingStatus } from '@/hooks/useGuardianContact';
 
 const Mensagens = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [selectedSector, setSelectedSector] = useState<string>('all');
   const [selectedContactType, setSelectedContactType] = useState<string>('all');
@@ -148,6 +150,7 @@ const Mensagens = () => {
 
     return {
       id: conv.id,
+      contact_id: conv.contact_id,
       contact_name: conv.contact?.full_name || conv.contact_name || conv.phone,
       phone: conv.phone,
       last_message: '',
@@ -342,6 +345,12 @@ const Mensagens = () => {
     setReplyingTo(message);
   };
 
+  const handleViewContact = () => {
+    if (activeConversation?.contact_id) {
+      navigate(`/app/contatos?contactId=${activeConversation.contact_id}`);
+    }
+  };
+
   const handleCreateNewConversation = async (data: {
     name: string;
     phone: string;
@@ -533,6 +542,7 @@ const Mensagens = () => {
                   onChangePriority={handleChangePriority}
                   onChangeStatus={handleChangeStatus}
                   onAcceptTicket={handleAcceptTicket}
+                  onViewContact={handleViewContact}
                 />
               </div>
 

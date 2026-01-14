@@ -19,6 +19,7 @@ import {
   CheckCircle,
   Play,
   RotateCcw,
+  Contact,
 } from "lucide-react";
 import { Conversation } from "./ConversationCard";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ interface ChatHeaderProps {
   onChangePriority: (priority: 'low' | 'normal' | 'high' | 'urgent') => void;
   onChangeStatus: (status: 'open' | 'pending' | 'resolved' | 'closed') => void;
   onAcceptTicket: () => void;
+  onViewContact?: () => void;
 }
 
 const contactTypeConfig = {
@@ -63,6 +65,7 @@ export function ChatHeader({
   onChangePriority,
   onChangeStatus,
   onAcceptTicket,
+  onViewContact,
 }: ChatHeaderProps) {
   const typeConfig = contactTypeConfig[conversation.contact_type];
   const priority = priorityConfig[conversation.priority];
@@ -223,6 +226,12 @@ export function ChatHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
+            {conversation.contact_id && onViewContact && (
+              <DropdownMenuItem onClick={onViewContact}>
+                <Contact className="h-4 w-4 mr-2" />
+                Ver contato
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={onLinkStudent}>
               <UserPlus className="h-4 w-4 mr-2" />
               Vincular aluno
