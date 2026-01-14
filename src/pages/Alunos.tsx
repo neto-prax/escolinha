@@ -36,6 +36,7 @@ import { toast } from 'sonner';
 import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import { useAuth } from '@/contexts/AuthContext';
 import * as XLSX from 'xlsx';
+import { ensureGuardianContact } from '@/hooks/useGuardianContact';
 
 interface StudentImportData {
   full_name: string;
@@ -215,6 +216,20 @@ const Alunos = () => {
           });
 
         if (linkError) throw linkError;
+
+        // Create contact for guardian with student linked
+        if (guardian && data.guardian_phone) {
+          await ensureGuardianContact(
+            guardian.id,
+            {
+              full_name: data.guardian_name,
+              phone: data.guardian_phone,
+              email: data.guardian_email || null,
+            },
+            profile.school_id,
+            [newStudent.id]
+          );
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: ['students'] });
@@ -423,11 +438,26 @@ const Alunos = () => {
                 student_id: newStudent.id,
                 guardian_id: guardian.id,
               });
+
+            // Create contact for guardian with student linked
+            if (studentData.guardian_phone) {
+              await ensureGuardianContact(
+                guardian.id,
+                {
+                  full_name: studentData.guardian_name,
+                  phone: studentData.guardian_phone,
+                  email: studentData.guardian_email || null,
+                },
+                profile.school_id,
+                [newStudent.id]
+              );
+            }
           }
         }
       }
 
       queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
       queryClient.invalidateQueries({ queryKey: ['guardians'] });
       toast.success(`${importData.length} aluno(s) importado(s) com sucesso!`);
       setIsImportDialogOpen(false);

@@ -106,16 +106,27 @@ export function ChatHeader({
             {conversation.linked_students && conversation.linked_students.length > 0 && (
               <>
                 <span className="text-muted-foreground">•</span>
-                <div className="flex gap-1">
-                  {conversation.linked_students.slice(0, 2).map(student => (
-                    <Badge
-                      key={student.id}
-                      variant="outline"
-                      className="text-[10px] px-1.5 py-0 cursor-pointer hover:bg-accent"
-                    >
-                      {student.name.split(' ')[0]}
-                    </Badge>
-                  ))}
+                <div className="flex gap-1 flex-wrap">
+                  {conversation.linked_students.slice(0, 2).map(student => {
+                    const billingColor = student.billing_status === 'inadimplente' 
+                      ? 'border-red-400 text-red-600 bg-red-50' 
+                      : student.billing_status === 'adimplente'
+                        ? 'border-green-400 text-green-600 bg-green-50'
+                        : '';
+                    return (
+                      <Badge
+                        key={student.id}
+                        variant="outline"
+                        className={cn("text-[10px] px-1.5 py-0 cursor-pointer hover:bg-accent", billingColor)}
+                        title={`${student.name}${student.class_name ? ` - ${student.class_name}` : ''} (${student.billing_status === 'inadimplente' ? 'Inadimplente' : student.billing_status === 'adimplente' ? 'Adimplente' : 'Status desconhecido'})`}
+                      >
+                        {student.name.split(' ')[0]}
+                        {student.class_name && (
+                          <span className="ml-1 text-muted-foreground">({student.class_name})</span>
+                        )}
+                      </Badge>
+                    );
+                  })}
                   {conversation.linked_students.length > 2 && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                       +{conversation.linked_students.length - 2}
