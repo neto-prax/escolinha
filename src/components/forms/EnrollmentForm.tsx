@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -30,51 +30,107 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, User, Users, GraduationCap, FileText, Check, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Loader2, User, Users, GraduationCap, FileText, Check, ChevronRight, ChevronLeft, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 
 const enrollmentSchema = z.object({
-  // Step 1: Student data
+  // Step 1: Student data (read-only when pre-filled)
   student_name: z.string().min(3, 'Nome completo é obrigatório'),
-  student_birth_date: z.string().min(1, 'Data de nascimento é obrigatória'),
+  student_birth_date: z.string().optional(),
   student_gender: z.string().optional(),
   student_address: z.string().optional(),
   student_notes: z.string().optional(),
-  // Step 2: Guardian data
+  // Step 1: Guardian data (read-only when pre-filled)
   guardian_name: z.string().min(3, 'Nome do responsável é obrigatório'),
-  guardian_relationship: z.string().min(1, 'Parentesco é obrigatório'),
+  guardian_relationship: z.string().optional(),
   guardian_phone: z.string().min(10, 'Telefone é obrigatório'),
-  guardian_email: z.string().email('Email inválido').optional().or(z.literal('')),
+  guardian_email: z.string().optional(),
   guardian_cpf: z.string().optional(),
-  // Step 3: Class selection
+  // Step 2: Class selection
   class_id: z.string().min(1, 'Selecione uma turma'),
   enrollment_date: z.string().min(1, 'Data de matrícula é obrigatória'),
+  // Step 3: Payment plan
+  payment_plan: z.string().min(1, 'Selecione um plano de pagamento'),
+  payment_day: z.string().optional(),
   // Step 4: Documents
   documents_notes: z.string().optional(),
 });
 
 type EnrollmentFormData = z.infer<typeof enrollmentSchema>;
 
-interface EnrollmentFormProps {
+interface StudentData {
+  id?: string;
+  name: string;
+  birth_date?: string;
+  gender?: string;
+  address?: string;
+  notes?: string;
+  guardian: string;
+  guardian_phone: string;
+  guardian_email?: string;
+  guardian_cpf?: string;
+  guardian_relationship?: string;
+}
+
+export interface EnrollmentFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: EnrollmentFormData) => Promise<void>;
-  classes?: Array<{ id: string; name: string; grade: string; shift: string; available_spots: number }>;
+  classes?: Array<{ id: string; name: string; grade: string; shift: string; available_spots: number; monthly_fee?: number }>;
+  studentData?: StudentData;
 }
 
 const steps = [
-  { id: 1, title: 'Dados do Aluno', icon: User },
-  { id: 2, title: 'Responsável', icon: Users },
-  { id: 3, title: 'Turma', icon: GraduationCap },
+  { id: 1, title: 'Dados', icon: User },
+  { id: 2, title: 'Turma', icon: GraduationCap },
+  { id: 3, title: 'Pagamento', icon: CreditCard },
   { id: 4, title: 'Documentos', icon: FileText },
 ];
 
 // Mock classes for demo
 const mockClasses = [
-  { id: '1', name: '1º Ano A', grade: '1º Ano', shift: 'Manhã', available_spots: 5 },
-  { id: '2', name: '1º Ano B', grade: '1º Ano', shift: 'Tarde', available_spots: 3 },
-  { id: '3', name: '2º Ano A', grade: '2º Ano', shift: 'Manhã', available_spots: 8 },
-  { id: '4', name: '3º Ano A', grade: '3º Ano', shift: 'Manhã', available_spots: 2 },
+  { id: '1', name: '1º Ano A', grade: '1º Ano', shift: 'Manhã', available_spots: 5, monthly_fee: 850 },
+  { id: '2', name: '1º Ano B', grade: '1º Ano', shift: 'Tarde', available_spots: 3, monthly_fee: 850 },
+  { id: '3', name: '2º Ano A', grade: '2º Ano', shift: 'Manhã', available_spots: 8, monthly_fee: 900 },
+  { id: '4', name: '3º Ano A', grade: '3º Ano', shift: 'Manhã', available_spots: 2, monthly_fee: 950 },
+];
+
+// Payment plans based on class
+const getPaymentPlans = (monthlyFee: number = 850) => [
+  { 
+    id: 'annual', 
+    name: 'Anual à Vista', 
+    description: '12 meses com 10% de desconto',
+    value: monthlyFee * 12 * 0.9,
+    installments: 1,
+    discount: '10%'
+  },
+  { 
+    id: 'semestral', 
+    name: 'Semestral', 
+    description: '2x com 5% de desconto',
+    value: monthlyFee * 6 * 0.95,
+    installments: 2,
+    discount: '5%'
+  },
+  { 
+    id: 'monthly', 
+    name: 'Mensal', 
+    description: '12 parcelas mensais',
+    value: monthlyFee,
+    installments: 12,
+    discount: null
+  },
+  { 
+    id: 'monthly_10', 
+    name: 'Mensal (10x)', 
+    description: '10 parcelas mensais',
+    value: (monthlyFee * 12) / 10,
+    installments: 10,
+    discount: null
+  },
 ];
 
 export const EnrollmentForm = ({
@@ -82,9 +138,10 @@ export const EnrollmentForm = ({
   onOpenChange,
   onSubmit,
   classes = mockClasses,
+  studentData,
 }: EnrollmentFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(studentData ? 2 : 1); // Skip to step 2 if student data is pre-filled
 
   const form = useForm<EnrollmentFormData>({
     resolver: zodResolver(enrollmentSchema),
@@ -101,9 +158,40 @@ export const EnrollmentForm = ({
       guardian_cpf: '',
       class_id: '',
       enrollment_date: new Date().toISOString().split('T')[0],
+      payment_plan: '',
+      payment_day: '10',
       documents_notes: '',
     },
   });
+
+  // Pre-fill form when studentData changes
+  useEffect(() => {
+    if (studentData && open) {
+      form.setValue('student_name', studentData.name, { shouldDirty: true });
+      form.setValue('student_birth_date', studentData.birth_date || '', { shouldDirty: true });
+      form.setValue('student_gender', studentData.gender || '', { shouldDirty: true });
+      form.setValue('student_address', studentData.address || '', { shouldDirty: true });
+      form.setValue('student_notes', studentData.notes || '', { shouldDirty: true });
+      form.setValue('guardian_name', studentData.guardian, { shouldDirty: true });
+      form.setValue('guardian_phone', studentData.guardian_phone, { shouldDirty: true });
+      form.setValue('guardian_email', studentData.guardian_email || '', { shouldDirty: true });
+      form.setValue('guardian_cpf', studentData.guardian_cpf || '', { shouldDirty: true });
+      form.setValue('guardian_relationship', studentData.guardian_relationship || '', { shouldDirty: true });
+      setCurrentStep(2); // Go directly to class selection
+    }
+  }, [studentData, open, form]);
+
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!open) {
+      form.reset();
+      setCurrentStep(studentData ? 2 : 1);
+    }
+  }, [open, form, studentData]);
+
+  const selectedClassId = form.watch('class_id');
+  const selectedClass = classes.find(c => c.id === selectedClassId);
+  const paymentPlans = getPaymentPlans(selectedClass?.monthly_fee);
 
   const handleSubmit = async (data: EnrollmentFormData) => {
     setIsLoading(true);
@@ -129,6 +217,11 @@ export const EnrollmentForm = ({
 
   const prevStep = () => {
     if (currentStep > 1) {
+      // If we have studentData and we're at step 2, go back should close the modal
+      if (studentData && currentStep === 2) {
+        onOpenChange(false);
+        return;
+      }
       setCurrentStep(currentStep - 1);
     }
   };
@@ -136,11 +229,11 @@ export const EnrollmentForm = ({
   const getFieldsForStep = (step: number): (keyof EnrollmentFormData)[] => {
     switch (step) {
       case 1:
-        return ['student_name', 'student_birth_date'];
+        return ['student_name', 'guardian_name', 'guardian_phone'];
       case 2:
-        return ['guardian_name', 'guardian_relationship', 'guardian_phone'];
-      case 3:
         return ['class_id', 'enrollment_date'];
+      case 3:
+        return ['payment_plan'];
       case 4:
         return [];
       default:
@@ -148,13 +241,22 @@ export const EnrollmentForm = ({
     }
   };
 
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nova Matrícula</DialogTitle>
+          <DialogTitle>
+            {studentData ? `Matrícula - ${studentData.name}` : 'Nova Matrícula'}
+          </DialogTitle>
           <DialogDescription>
-            Preencha todas as etapas para realizar a matrícula do aluno
+            {studentData 
+              ? 'Selecione a turma e o plano de pagamento para finalizar a matrícula'
+              : 'Preencha todas as etapas para realizar a matrícula do aluno'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -192,17 +294,17 @@ export const EnrollmentForm = ({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-            {/* Step 1: Student Data */}
-            {currentStep === 1 && (
+            {/* Step 1: Student & Guardian Data (only if no studentData) */}
+            {currentStep === 1 && !studentData && (
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Dados do Aluno</h3>
+                <h3 className="text-lg font-medium">Dados do Aluno e Responsável</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
                     name="student_name"
                     render={({ field }) => (
                       <FormItem className="md:col-span-2">
-                        <FormLabel>Nome Completo *</FormLabel>
+                        <FormLabel>Nome do Aluno *</FormLabel>
                         <FormControl>
                           <Input placeholder="Nome completo do aluno" {...field} />
                         </FormControl>
@@ -216,7 +318,7 @@ export const EnrollmentForm = ({
                     name="student_birth_date"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Data de Nascimento *</FormLabel>
+                        <FormLabel>Data de Nascimento</FormLabel>
                         <FormControl>
                           <Input type="date" {...field} />
                         </FormControl>
@@ -250,42 +352,6 @@ export const EnrollmentForm = ({
 
                   <FormField
                     control={form.control}
-                    name="student_address"
-                    render={({ field }) => (
-                      <FormItem className="md:col-span-2">
-                        <FormLabel>Endereço</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Endereço completo" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="student_notes"
-                    render={({ field }) => (
-                      <FormItem className="md:col-span-2">
-                        <FormLabel>Observações</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Alergias, necessidades especiais, etc." {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Guardian Data */}
-            {currentStep === 2 && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Dados do Responsável</h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
                     name="guardian_name"
                     render={({ field }) => (
                       <FormItem className="md:col-span-2">
@@ -293,31 +359,6 @@ export const EnrollmentForm = ({
                         <FormControl>
                           <Input placeholder="Nome completo" {...field} />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="guardian_relationship"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Parentesco *</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="mae">Mãe</SelectItem>
-                            <SelectItem value="pai">Pai</SelectItem>
-                            <SelectItem value="avo">Avô/Avó</SelectItem>
-                            <SelectItem value="tio">Tio/Tia</SelectItem>
-                            <SelectItem value="outro">Outro</SelectItem>
-                          </SelectContent>
-                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -339,24 +380,10 @@ export const EnrollmentForm = ({
 
                   <FormField
                     control={form.control}
-                    name="guardian_email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="email@exemplo.com" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
                     name="guardian_cpf"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>CPF</FormLabel>
+                        <FormLabel>CPF do Responsável</FormLabel>
                         <FormControl>
                           <Input placeholder="000.000.000-00" {...field} />
                         </FormControl>
@@ -368,9 +395,30 @@ export const EnrollmentForm = ({
               </div>
             )}
 
-            {/* Step 3: Class Selection */}
-            {currentStep === 3 && (
+            {/* Step 2: Class Selection */}
+            {currentStep === 2 && (
               <div className="space-y-4">
+                {studentData && (
+                  <Card className="bg-muted/50 mb-4">
+                    <CardContent className="pt-4">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Aluno:</span>
+                          <p className="font-medium">{form.watch('student_name')}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Responsável:</span>
+                          <p className="font-medium">{form.watch('guardian_name')}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Telefone:</span>
+                          <p className="font-medium">{form.watch('guardian_phone')}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
                 <h3 className="text-lg font-medium">Seleção de Turma</h3>
                 
                 <FormField
@@ -410,13 +458,111 @@ export const EnrollmentForm = ({
                                   {cls.available_spots} vagas
                                 </Badge>
                               </div>
-                              <CardDescription>
-                                {cls.grade} • {cls.shift}
+                              <CardDescription className="flex justify-between">
+                                <span>{cls.grade} • {cls.shift}</span>
+                                {cls.monthly_fee && (
+                                  <span className="font-medium text-foreground">
+                                    {formatCurrency(cls.monthly_fee)}/mês
+                                  </span>
+                                )}
                               </CardDescription>
                             </CardHeader>
                           </Card>
                         ))}
                       </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Step 3: Payment Plan Selection */}
+            {currentStep === 3 && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Plano de Pagamento</h3>
+                
+                {selectedClass && (
+                  <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                    <span className="text-muted-foreground">Turma selecionada: </span>
+                    <span className="font-medium">{selectedClass.name}</span>
+                    <span className="text-muted-foreground"> - Mensalidade: </span>
+                    <span className="font-medium">{formatCurrency(selectedClass.monthly_fee || 850)}</span>
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="payment_plan"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Selecione o Plano *</FormLabel>
+                      <div className="grid gap-3">
+                        {paymentPlans.map((plan) => (
+                          <Card
+                            key={plan.id}
+                            className={cn(
+                              'cursor-pointer transition-all hover:border-primary',
+                              field.value === plan.id && 'border-primary ring-1 ring-primary'
+                            )}
+                            onClick={() => field.onChange(plan.id)}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <RadioGroupItem
+                                    value={plan.id}
+                                    checked={field.value === plan.id}
+                                    className="pointer-events-none"
+                                  />
+                                  <div>
+                                    <p className="font-medium">{plan.name}</p>
+                                    <p className="text-sm text-muted-foreground">{plan.description}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-lg">
+                                    {plan.installments > 1 
+                                      ? `${plan.installments}x ${formatCurrency(plan.value)}`
+                                      : formatCurrency(plan.value)
+                                    }
+                                  </p>
+                                  {plan.discount && (
+                                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                      {plan.discount} OFF
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="payment_day"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dia de Vencimento</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o dia" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="5">Dia 5</SelectItem>
+                          <SelectItem value="10">Dia 10</SelectItem>
+                          <SelectItem value="15">Dia 15</SelectItem>
+                          <SelectItem value="20">Dia 20</SelectItem>
+                          <SelectItem value="25">Dia 25</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -479,7 +625,9 @@ export const EnrollmentForm = ({
                     <p><strong>Aluno:</strong> {form.watch('student_name')}</p>
                     <p><strong>Responsável:</strong> {form.watch('guardian_name')}</p>
                     <p><strong>Telefone:</strong> {form.watch('guardian_phone')}</p>
-                    <p><strong>Turma:</strong> {classes.find(c => c.id === form.watch('class_id'))?.name || '-'}</p>
+                    <p><strong>Turma:</strong> {selectedClass?.name || '-'}</p>
+                    <p><strong>Plano:</strong> {paymentPlans.find(p => p.id === form.watch('payment_plan'))?.name || '-'}</p>
+                    <p><strong>Vencimento:</strong> Dia {form.watch('payment_day')}</p>
                   </CardContent>
                 </Card>
               </div>
@@ -490,11 +638,11 @@ export const EnrollmentForm = ({
               <Button
                 type="button"
                 variant="outline"
-                onClick={currentStep === 1 ? () => onOpenChange(false) : prevStep}
+                onClick={currentStep === 1 || (studentData && currentStep === 2) ? () => onOpenChange(false) : prevStep}
                 disabled={isLoading}
               >
                 <ChevronLeft className="mr-2 h-4 w-4" />
-                {currentStep === 1 ? 'Cancelar' : 'Anterior'}
+                {currentStep === 1 || (studentData && currentStep === 2) ? 'Cancelar' : 'Anterior'}
               </Button>
 
               {currentStep < 4 ? (

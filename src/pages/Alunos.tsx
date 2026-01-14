@@ -254,6 +254,12 @@ const Alunos = () => {
           if (!open) setEnrollingStudent(null);
         }}
         onSubmit={handleEnrollStudent}
+        studentData={enrollingStudent ? {
+          id: enrollingStudent.id,
+          name: enrollingStudent.name,
+          guardian: enrollingStudent.guardian,
+          guardian_phone: enrollingStudent.phone,
+        } : undefined}
       />
     </div>
   );
