@@ -46,21 +46,23 @@ interface ClassFormProps {
   mode?: 'create' | 'edit';
 }
 
-const grades = [
-  'Berçário',
-  'Maternal I',
-  'Maternal II',
-  'Jardim I',
-  'Jardim II',
-  '1º Ano',
-  '2º Ano',
-  '3º Ano',
-  '4º Ano',
-  '5º Ano',
-  '6º Ano',
-  '7º Ano',
-  '8º Ano',
-  '9º Ano',
+const gradeGroups = [
+  {
+    label: 'Educação Infantil',
+    grades: ['Grupo 2', 'Grupo 3', 'Grupo 4', 'Grupo 5'],
+  },
+  {
+    label: 'Fundamental 1',
+    grades: ['1º Ano', '2º Ano', '3º Ano', '4º Ano', '5º Ano'],
+  },
+  {
+    label: 'Fundamental 2',
+    grades: ['6º Ano', '7º Ano', '8º Ano', '9º Ano'],
+  },
+  {
+    label: 'Ensino Médio',
+    grades: ['1º Ano EM', '2º Ano EM', '3º Ano EM'],
+  },
 ];
 
 const shifts = [
@@ -149,10 +151,17 @@ export const ClassForm = ({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {grades.map((grade) => (
-                        <SelectItem key={grade} value={grade}>
-                          {grade}
-                        </SelectItem>
+                      {gradeGroups.map((group) => (
+                        <div key={group.label}>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                            {group.label}
+                          </div>
+                          {group.grades.map((grade) => (
+                            <SelectItem key={grade} value={grade}>
+                              {grade}
+                            </SelectItem>
+                          ))}
+                        </div>
                       ))}
                     </SelectContent>
                   </Select>
