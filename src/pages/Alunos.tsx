@@ -650,8 +650,8 @@ const Alunos = () => {
         studentData={enrollingStudent ? {
           id: enrollingStudent.id,
           name: enrollingStudent.full_name,
-          guardian: enrollingStudent.guardian_name || '',
-          guardian_phone: enrollingStudent.phone || '',
+          guardian: enrollingStudent.guardian_name === '-' ? '' : (enrollingStudent.guardian_name || ''),
+          guardian_phone: enrollingStudent.phone === '-' ? '' : (enrollingStudent.phone || ''),
         } : undefined}
       />
 
