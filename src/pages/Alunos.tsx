@@ -119,6 +119,47 @@ const Alunos = () => {
     enabled: !!profile?.school_id,
   });
 
+  // Fetch classes from Supabase for enrollment
+  const { data: classes = [] } = useQuery({
+    queryKey: ['classes', profile?.school_id],
+    queryFn: async () => {
+      if (!profile?.school_id) return [];
+      
+      const { data, error } = await supabase
+        .from('classes')
+        .select(`
+          id,
+          name,
+          grade,
+          shift,
+          max_students,
+          student_classes(count)
+        `)
+        .eq('school_id', profile.school_id)
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching classes:', error);
+        return [];
+      }
+
+      return data.map((cls: any) => {
+        const currentStudents = cls.student_classes?.[0]?.count || 0;
+        const maxStudents = cls.max_students || 30;
+        return {
+          id: cls.id,
+          name: cls.name,
+          grade: cls.grade || '',
+          shift: cls.shift || '',
+          available_spots: maxStudents - currentStudents,
+          monthly_fee: 850, // Default fee, can be customized later
+        };
+      });
+    },
+    enabled: !!profile?.school_id,
+  });
+
   const filteredStudents = students.filter((student: Student) =>
     student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (student.class_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
@@ -605,6 +646,7 @@ const Alunos = () => {
           if (!open) setEnrollingStudent(null);
         }}
         onSubmit={handleEnrollStudent}
+        classes={classes}
         studentData={enrollingStudent ? {
           id: enrollingStudent.id,
           name: enrollingStudent.full_name,
