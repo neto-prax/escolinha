@@ -131,7 +131,7 @@ export const AppSidebar = () => {
           {!isCollapsed && (
             <div className="flex flex-col overflow-hidden">
               <span className="font-semibold text-sidebar-foreground truncate">
-                Interagir ERP
+                Escolinha
               </span>
               {school && (
                 <span className="text-xs text-sidebar-muted truncate">
@@ -185,7 +185,7 @@ export const AppSidebar = () => {
       <SidebarFooter className="border-t border-sidebar-border p-4">
         {!isCollapsed && (
           <div className="text-xs text-sidebar-muted text-center">
-            © 2025 Interagir ERP
+            © 2025 Escolinha
           </div>
         )}
       </SidebarFooter>
