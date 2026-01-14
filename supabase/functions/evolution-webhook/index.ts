@@ -214,16 +214,16 @@ serve(async (req) => {
         body = '[Mensagem não suportada]';
       }
 
-      console.log('Processing message:', { phone, pushName, body, messageType, mediaUrl: mediaUrl ? 'present' : 'missing' });
+      console.log('Processing message:', { phone, pushName, body, messageType, hasMediaUrl: !!mediaUrl });
 
-      // If it's a media message without URL, try to fetch it from Evolution API
-      if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType) && !mediaUrl && messageId) {
+      // For media messages, ALWAYS download and upload to storage (WhatsApp URLs expire quickly)
+      if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType) && messageId) {
         try {
           const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
           const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
           
           if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
-            console.log('Fetching media from Evolution API...');
+            console.log('Fetching media from Evolution API to upload to storage...');
             const mediaResponse = await fetch(`${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instance}`, {
               method: 'POST',
               headers: {
@@ -250,7 +250,8 @@ serve(async (req) => {
                 else if (messageType === 'sticker') mimeType = mediaData.mimetype || 'image/webp';
                 
                 // Upload to Supabase Storage
-                const fileName = `${messageId}.${mimeType.split('/')[1] || 'bin'}`;
+                const ext = mimeType.split('/')[1] || 'bin';
+                const fileName = `${messageId}.${ext}`;
                 const filePath = `${phone}/${fileName}`;
                 
                 // Decode base64 and upload
@@ -265,22 +266,27 @@ serve(async (req) => {
                 
                 if (uploadError) {
                   console.error('Error uploading media:', uploadError);
+                  // Keep the WhatsApp URL as fallback (may work temporarily)
                 } else {
-                  // Get public URL
+                  // Get public URL - this URL will never expire
                   const { data: publicUrl } = supabase.storage
                     .from('message-media')
                     .getPublicUrl(filePath);
                   
                   mediaUrl = publicUrl.publicUrl;
-                  console.log('Media uploaded successfully:', mediaUrl);
+                  console.log('Media uploaded successfully to storage:', mediaUrl);
                 }
+              } else {
+                console.log('No base64 data in Evolution response, keeping original URL');
               }
             } else {
               console.log('Failed to fetch media from Evolution:', mediaResponse.status);
+              // Keep the WhatsApp URL as fallback
             }
           }
         } catch (mediaError) {
-          console.error('Error fetching media:', mediaError);
+          console.error('Error fetching/uploading media:', mediaError);
+          // Keep the WhatsApp URL as fallback
         }
       }
 
