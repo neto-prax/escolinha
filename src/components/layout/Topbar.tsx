@@ -36,10 +36,10 @@ export const Topbar = () => {
       {/* Logo e nome da escola */}
       <div className="hidden lg:flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
-          I
+          E
         </div>
         <div className="flex flex-col">
-          <span className="font-semibold text-sm">Interagir ERP</span>
+          <span className="font-semibold text-sm">Escolinha</span>
           {school && (
             <span className="text-xs text-muted-foreground">{school.name}</span>
           )}
