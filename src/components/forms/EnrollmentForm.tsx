@@ -44,10 +44,10 @@ const enrollmentSchema = z.object({
   student_gender: z.string().optional(),
   student_address: z.string().optional(),
   student_notes: z.string().optional(),
-  // Step 1: Guardian data (read-only when pre-filled)
-  guardian_name: z.string().min(3, 'Nome do responsável é obrigatório'),
+  // Step 1: Guardian data (optional when student already exists)
+  guardian_name: z.string().optional(),
   guardian_relationship: z.string().optional(),
-  guardian_phone: z.string().min(10, 'Telefone é obrigatório'),
+  guardian_phone: z.string().optional(),
   guardian_email: z.string().optional(),
   guardian_cpf: z.string().optional(),
   // Step 2: Class selection
@@ -255,7 +255,7 @@ export const EnrollmentForm = ({
   const getFieldsForStep = (step: number): (keyof EnrollmentFormData)[] => {
     switch (step) {
       case 1:
-        return ['student_name', 'guardian_name', 'guardian_phone'];
+        return ['student_name'];
       case 2:
         return ['class_id', 'enrollment_date'];
       case 3:
