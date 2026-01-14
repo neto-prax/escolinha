@@ -25,6 +25,7 @@ import Usuarios from "./pages/Usuarios";
 import CRMMatriculas from "./pages/CRMMatriculas";
 import Responsaveis from "./pages/Responsaveis";
 import Contatos from "./pages/Contatos";
+import Comunicados from "./pages/Comunicados";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -59,6 +60,7 @@ const App = () => (
               <Route path="crm-matriculas" element={<CRMMatriculas />} />
               <Route path="responsaveis" element={<Responsaveis />} />
               <Route path="contatos" element={<Contatos />} />
+              <Route path="comunicados" element={<Comunicados />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
