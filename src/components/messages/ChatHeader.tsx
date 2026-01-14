@@ -91,7 +91,15 @@ export function ChatHeader({
 
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold">{conversation.contact_name}</h3>
+            <h3 
+              className={cn(
+                "font-semibold",
+                conversation.contact_id && onViewContact && "cursor-pointer hover:text-primary hover:underline"
+              )}
+              onClick={() => conversation.contact_id && onViewContact?.()}
+            >
+              {conversation.contact_name}
+            </h3>
             <Badge
               variant="secondary"
               className={cn("text-[10px] px-1.5 py-0 text-white", typeConfig.color)}
