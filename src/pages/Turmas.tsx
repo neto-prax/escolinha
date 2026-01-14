@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Filter, MoreHorizontal, Users } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, Users, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,22 +21,79 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ClassForm } from '@/components/forms/ClassForm';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
-// Mock data
-const initialClasses = [
-  { id: '1', name: '1º Ano A', grade: '1º Ano', shift: 'Manhã', students: 25, teacher: 'Maria Silva', status: 'active', max_students: 30, year: 2026 },
-  { id: '2', name: '1º Ano B', grade: '1º Ano', shift: 'Tarde', students: 23, teacher: 'Ana Costa', status: 'active', max_students: 30, year: 2026 },
-  { id: '3', name: '2º Ano A', grade: '2º Ano', shift: 'Manhã', students: 28, teacher: 'João Santos', status: 'active', max_students: 30, year: 2026 },
-  { id: '4', name: '3º Ano A', grade: '3º Ano', shift: 'Manhã', students: 26, teacher: 'Paula Lima', status: 'active', max_students: 30, year: 2026 },
-  { id: '5', name: '4º Ano A', grade: '4º Ano', shift: 'Manhã', students: 24, teacher: 'Carlos Souza', status: 'active', max_students: 30, year: 2026 },
-  { id: '6', name: '5º Ano A', grade: '5º Ano', shift: 'Manhã', students: 27, teacher: 'Fernanda Oliveira', status: 'active', max_students: 30, year: 2026 },
-];
+interface ClassData {
+  id: string;
+  name: string;
+  grade: string;
+  shift: string;
+  students: number;
+  teacher: string;
+  status: string;
+  max_students: number;
+  year: number;
+}
 
 const Turmas = () => {
-  const [classes, setClasses] = useState(initialClasses);
+  const { school } = useAuth();
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingClass, setEditingClass] = useState<typeof initialClasses[0] | null>(null);
+  const [editingClass, setEditingClass] = useState<ClassData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (school?.id) {
+      fetchClasses();
+    }
+  }, [school?.id]);
+
+  const fetchClasses = async () => {
+    if (!school?.id) return;
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('classes')
+        .select(`
+          id,
+          name,
+          grade,
+          shift,
+          max_students,
+          year,
+          is_active,
+          student_classes(count),
+          teacher_classes(
+            profiles:teacher_id(full_name)
+          )
+        `)
+        .eq('school_id', school.id)
+        .order('name');
+
+      if (error) throw error;
+
+      const formattedClasses: ClassData[] = (data || []).map(cls => ({
+        id: cls.id,
+        name: cls.name,
+        grade: cls.grade || '',
+        shift: cls.shift || '',
+        students: (cls.student_classes as any)?.[0]?.count || 0,
+        teacher: (cls.teacher_classes as any)?.[0]?.profiles?.full_name || 'A definir',
+        status: cls.is_active ? 'active' : 'inactive',
+        max_students: cls.max_students || 30,
+        year: cls.year,
+      }));
+
+      setClasses(formattedClasses);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+      toast.error('Erro ao carregar turmas');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredClasses = classes.filter(cls =>
     cls.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -45,28 +102,57 @@ const Turmas = () => {
   );
 
   const handleCreateClass = async (data: any) => {
-    const newClass = {
-      id: String(Date.now()),
-      ...data,
-      students: 0,
-      teacher: 'A definir',
-      status: 'active',
-    };
-    setClasses([...classes, newClass]);
-    toast.success('Turma criada com sucesso!');
+    if (!school?.id) return;
+    try {
+      const { error } = await supabase
+        .from('classes')
+        .insert({
+          school_id: school.id,
+          name: data.name,
+          grade: data.grade,
+          shift: data.shift,
+          year: data.year,
+          max_students: data.max_students || 30,
+          is_active: true,
+        });
+
+      if (error) throw error;
+      
+      toast.success('Turma criada com sucesso!');
+      fetchClasses();
+    } catch (error) {
+      console.error('Error creating class:', error);
+      toast.error('Erro ao criar turma');
+    }
   };
 
   const handleEditClass = async (data: any) => {
     if (!editingClass) return;
-    setClasses(classes.map(c => 
-      c.id === editingClass.id ? { ...c, ...data } : c
-    ));
-    setEditingClass(null);
-    toast.success('Turma atualizada com sucesso!');
+    try {
+      const { error } = await supabase
+        .from('classes')
+        .update({
+          name: data.name,
+          grade: data.grade,
+          shift: data.shift,
+          year: data.year,
+          max_students: data.max_students,
+        })
+        .eq('id', editingClass.id);
+
+      if (error) throw error;
+      
+      setEditingClass(null);
+      toast.success('Turma atualizada com sucesso!');
+      fetchClasses();
+    } catch (error) {
+      console.error('Error updating class:', error);
+      toast.error('Erro ao atualizar turma');
+    }
   };
 
   const totalStudents = classes.reduce((acc, cls) => acc + cls.students, 0);
-  const avgStudents = Math.round(totalStudents / classes.length);
+  const avgStudents = classes.length > 0 ? Math.round(totalStudents / classes.length) : 0;
 
   return (
     <div className="space-y-6">
@@ -133,62 +219,72 @@ const Turmas = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Turma</TableHead>
-                <TableHead>Série</TableHead>
-                <TableHead>Turno</TableHead>
-                <TableHead>Professor(a)</TableHead>
-                <TableHead className="text-center">Alunos</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-10"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredClasses.map((cls) => (
-                <TableRow key={cls.id} className="table-row-interactive">
-                  <TableCell className="font-medium">{cls.name}</TableCell>
-                  <TableCell>{cls.grade}</TableCell>
-                  <TableCell>{cls.shift}</TableCell>
-                  <TableCell>{cls.teacher}</TableCell>
-                  <TableCell className="text-center">
-                    <span className={cls.students >= (cls.max_students || 30) ? 'text-destructive font-medium' : ''}>
-                      {cls.students}/{cls.max_students || 30}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="badge-success">
-                      Ativa
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Ver detalhes</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => {
-                          setEditingClass(cls);
-                          setIsFormOpen(true);
-                        }}>
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>Ver alunos</DropdownMenuItem>
-                        <DropdownMenuItem>Atribuir professor</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                          Encerrar turma
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredClasses.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              {searchQuery ? 'Nenhuma turma encontrada' : 'Nenhuma turma cadastrada. Clique em "Nova Turma" para começar.'}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Turma</TableHead>
+                  <TableHead>Série</TableHead>
+                  <TableHead>Turno</TableHead>
+                  <TableHead>Professor(a)</TableHead>
+                  <TableHead className="text-center">Alunos</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredClasses.map((cls) => (
+                  <TableRow key={cls.id} className="table-row-interactive">
+                    <TableCell className="font-medium">{cls.name}</TableCell>
+                    <TableCell>{cls.grade}</TableCell>
+                    <TableCell>{cls.shift}</TableCell>
+                    <TableCell>{cls.teacher}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={cls.students >= (cls.max_students || 30) ? 'text-destructive font-medium' : ''}>
+                        {cls.students}/{cls.max_students || 30}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="badge-success">
+                        Ativa
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>Ver detalhes</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            setEditingClass(cls);
+                            setIsFormOpen(true);
+                          }}>
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>Ver alunos</DropdownMenuItem>
+                          <DropdownMenuItem>Atribuir professor</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive">
+                            Encerrar turma
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 

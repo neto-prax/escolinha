@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, UserPlus, FolderOpen, Mail, MoreHorizontal, Search, Plus, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { EnrollmentForm } from '@/components/forms/EnrollmentForm';
+import { BroadcastList } from '@/components/communications/BroadcastList';
 import { toast } from 'sonner';
 
 // Mock enrollments data
@@ -268,12 +269,7 @@ const Secretaria = () => {
         </TabsContent>
 
         <TabsContent value="communications" className="mt-6">
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Mail className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">Módulo de comunicados em desenvolvimento</p>
-            </CardContent>
-          </Card>
+          <BroadcastList />
         </TabsContent>
       </Tabs>
 
