@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -29,7 +29,10 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, User, Users, FileText } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Loader2, User, Users, FileText, Search, Check } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const studentSchema = z.object({
   full_name: z.string().min(3, 'Nome completo é obrigatório'),
@@ -57,6 +60,16 @@ interface StudentFormProps {
   mode?: 'create' | 'edit';
 }
 
+interface Guardian {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
+  cpf: string | null;
+  relationship: string | null;
+  address: string | null;
+}
+
 export const StudentForm = ({
   open,
   onOpenChange,
@@ -65,6 +78,11 @@ export const StudentForm = ({
   mode = 'create',
 }: StudentFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [showGuardianSearch, setShowGuardianSearch] = useState(false);
+  const [guardianSearchQuery, setGuardianSearchQuery] = useState('');
+  const [guardians, setGuardians] = useState<Guardian[]>([]);
+  const [searchingGuardians, setSearchingGuardians] = useState(false);
+  const { school } = useAuth();
 
   const form = useForm<StudentFormData>({
     resolver: zodResolver(studentSchema),
@@ -83,6 +101,47 @@ export const StudentForm = ({
       guardian_address: initialData?.guardian_address || '',
     },
   });
+
+  // Search guardians
+  useEffect(() => {
+    const searchGuardians = async () => {
+      if (!school?.id || guardianSearchQuery.length < 2) {
+        setGuardians([]);
+        return;
+      }
+
+      setSearchingGuardians(true);
+      try {
+        const { data, error } = await supabase
+          .from('guardians')
+          .select('id, full_name, phone, email, cpf, relationship, address')
+          .eq('school_id', school.id)
+          .or(`full_name.ilike.%${guardianSearchQuery}%,phone.ilike.%${guardianSearchQuery}%,cpf.ilike.%${guardianSearchQuery}%`)
+          .limit(10);
+
+        if (error) throw error;
+        setGuardians(data || []);
+      } catch (error) {
+        console.error('Erro ao buscar responsáveis:', error);
+      } finally {
+        setSearchingGuardians(false);
+      }
+    };
+
+    const debounce = setTimeout(searchGuardians, 300);
+    return () => clearTimeout(debounce);
+  }, [guardianSearchQuery, school?.id]);
+
+  const selectGuardian = (guardian: Guardian) => {
+    form.setValue('guardian_name', guardian.full_name);
+    form.setValue('guardian_phone', guardian.phone || '');
+    form.setValue('guardian_email', guardian.email || '');
+    form.setValue('guardian_cpf', guardian.cpf || '');
+    form.setValue('guardian_relationship', guardian.relationship || '');
+    form.setValue('guardian_address', guardian.address || '');
+    setShowGuardianSearch(false);
+    setGuardianSearchQuery('');
+  };
 
   const handleSubmit = async (data: StudentFormData) => {
     setIsLoading(true);
@@ -226,6 +285,68 @@ export const StudentForm = ({
               </TabsContent>
 
               <TabsContent value="guardian" className="space-y-4 mt-4">
+                {/* Search existing guardian button */}
+                <div className="flex flex-col gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowGuardianSearch(!showGuardianSearch)}
+                    className="w-full"
+                  >
+                    <Search className="mr-2 h-4 w-4" />
+                    Buscar Responsável Existente
+                  </Button>
+
+                  {showGuardianSearch && (
+                    <Card>
+                      <CardContent className="pt-4 space-y-3">
+                        <Input
+                          placeholder="Buscar por nome, telefone ou CPF..."
+                          value={guardianSearchQuery}
+                          onChange={(e) => setGuardianSearchQuery(e.target.value)}
+                          autoFocus
+                        />
+                        {searchingGuardians && (
+                          <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </div>
+                        )}
+                        {!searchingGuardians && guardians.length > 0 && (
+                          <ScrollArea className="h-[200px]">
+                            <div className="space-y-2">
+                              {guardians.map((guardian) => (
+                                <div
+                                  key={guardian.id}
+                                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
+                                  onClick={() => selectGuardian(guardian)}
+                                >
+                                  <div>
+                                    <p className="font-medium">{guardian.full_name}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {guardian.phone} {guardian.cpf && `• ${guardian.cpf}`}
+                                    </p>
+                                  </div>
+                                  <Check className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        )}
+                        {!searchingGuardians && guardianSearchQuery.length >= 2 && guardians.length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                            Nenhum responsável encontrado
+                          </p>
+                        )}
+                        {guardianSearchQuery.length < 2 && (
+                          <p className="text-sm text-muted-foreground text-center py-2">
+                            Digite pelo menos 2 caracteres para buscar
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}

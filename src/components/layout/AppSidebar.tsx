@@ -14,6 +14,7 @@ import {
   UserCog,
   ChevronDown,
   Contact,
+  Megaphone,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -77,6 +78,7 @@ const navigationGroups: NavGroup[] = [
     label: 'Comunicação',
     items: [
       { title: 'Mensagens', url: '/app/mensagens', icon: MessageSquare, module: 'mensagens' },
+      { title: 'Comunicados', url: '/app/comunicados', icon: Megaphone, module: 'mensagens' },
       { title: 'Contatos', url: '/app/contatos', icon: Contact, module: 'mensagens' },
       { title: 'Setores', url: '/app/setores', icon: Layers, module: 'setores' },
     ],
