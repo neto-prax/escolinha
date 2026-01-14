@@ -829,6 +829,13 @@ const Contatos = () => {
         onBulkDelete={async () => {
           const count = selectedIds.length;
           try {
+            // First, unlink conversations referencing these contacts
+            await supabase
+              .from('whatsapp_conversations')
+              .update({ contact_id: null })
+              .in('contact_id', selectedIds);
+            
+            // Then delete the contacts
             const { error } = await supabase
               .from('contacts')
               .delete()
@@ -837,6 +844,7 @@ const Contatos = () => {
             if (error) throw error;
             
             queryClient.invalidateQueries({ queryKey: ['contacts'] });
+            queryClient.invalidateQueries({ queryKey: ['whatsapp_conversations'] });
             setSelectedIds([]);
             toast.success(`${count} contato(s) removido(s) com sucesso!`);
           } catch (error) {
