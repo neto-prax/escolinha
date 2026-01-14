@@ -133,12 +133,12 @@ export const StudentForm = ({
   }, [guardianSearchQuery, school?.id]);
 
   const selectGuardian = (guardian: Guardian) => {
-    form.setValue('guardian_name', guardian.full_name);
-    form.setValue('guardian_phone', guardian.phone || '');
-    form.setValue('guardian_email', guardian.email || '');
-    form.setValue('guardian_cpf', guardian.cpf || '');
-    form.setValue('guardian_relationship', guardian.relationship || '');
-    form.setValue('guardian_address', guardian.address || '');
+    form.setValue('guardian_name', guardian.full_name, { shouldDirty: true });
+    form.setValue('guardian_phone', guardian.phone || '', { shouldDirty: true });
+    form.setValue('guardian_email', guardian.email || '', { shouldDirty: true });
+    form.setValue('guardian_cpf', guardian.cpf || '', { shouldDirty: true });
+    form.setValue('guardian_relationship', guardian.relationship || '', { shouldDirty: true });
+    form.setValue('guardian_address', guardian.address || '', { shouldDirty: true });
     setShowGuardianSearch(false);
     setGuardianSearchQuery('');
   };
