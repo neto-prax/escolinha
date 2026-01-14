@@ -133,11 +133,18 @@ export function ConversationCard({ conversation, isSelected, onClick }: Conversa
           </div>
         )}
 
-        {conversation.priority === 'urgent' && (
-          <Badge variant="destructive" className="text-[10px] px-1.5 py-0 mt-1">
-            Urgente
-          </Badge>
-        )}
+        <div className="flex flex-wrap items-center gap-1 mt-1">
+          {conversation.sector_name && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted">
+              {conversation.sector_name}
+            </Badge>
+          )}
+          {conversation.priority === 'urgent' && (
+            <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+              Urgente
+            </Badge>
+          )}
+        </div>
       </div>
     </div>
   );
