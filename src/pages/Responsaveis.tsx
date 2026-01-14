@@ -41,6 +41,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import * as XLSX from 'xlsx';
+import { ensureGuardianContact } from '@/hooks/useGuardianContact';
 
 interface Guardian {
   id: string;
@@ -101,7 +102,7 @@ const Responsaveis = () => {
   // Create guardian mutation
   const createGuardianMutation = useMutation({
     mutationFn: async (data: GuardianFormData) => {
-      const { error } = await supabase
+      const { data: guardian, error } = await supabase
         .from('guardians')
         .insert({
           school_id: profile!.school_id!,
@@ -111,12 +112,31 @@ const Responsaveis = () => {
           cpf: data.cpf || null,
           relationship: data.relationship || null,
           address: data.address || null,
-        });
+        })
+        .select()
+        .single();
       
       if (error) throw error;
+
+      // Create contact for this guardian
+      if (guardian && data.phone) {
+        await ensureGuardianContact(
+          guardian.id,
+          {
+            full_name: data.full_name,
+            phone: data.phone || null,
+            email: data.email || null,
+          },
+          profile!.school_id!,
+          []
+        );
+      }
+
+      return guardian;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guardians'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Responsável cadastrado com sucesso!');
       handleCloseForm();
     },
@@ -167,14 +187,34 @@ const Responsaveis = () => {
         address: data.address || null,
       }));
 
-      const { error } = await supabase
+      const { data: guardians, error } = await supabase
         .from('guardians')
-        .insert(records);
+        .insert(records)
+        .select();
       
       if (error) throw error;
+
+      // Create contacts for guardians with phone
+      if (guardians) {
+        for (const guardian of guardians) {
+          if (guardian.phone) {
+            await ensureGuardianContact(
+              guardian.id,
+              {
+                full_name: guardian.full_name,
+                phone: guardian.phone,
+                email: guardian.email,
+              },
+              profile!.school_id!,
+              []
+            );
+          }
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guardians'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success(`${importData.length} responsáveis importados com sucesso!`);
       setIsImportOpen(false);
       setImportData([]);

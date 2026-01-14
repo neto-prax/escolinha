@@ -3,6 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { MessageCircle, Clock, CheckCircle, XCircle } from "lucide-react";
 
+export interface LinkedStudent {
+  id: string;
+  name: string;
+  class_name?: string;
+  billing_status?: 'adimplente' | 'inadimplente' | 'desconhecido';
+}
+
 export interface Conversation {
   id: string;
   contact_name: string;
@@ -14,7 +21,7 @@ export interface Conversation {
   unread_count: number;
   ticket_status: 'open' | 'pending' | 'resolved' | 'closed';
   priority: 'low' | 'normal' | 'high' | 'urgent';
-  linked_students?: { id: string; name: string }[];
+  linked_students?: LinkedStudent[];
   sector_name?: string;
   resolution_summary?: string;
   closed_at?: string;

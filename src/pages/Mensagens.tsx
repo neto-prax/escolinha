@@ -16,7 +16,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { ConversationCard, Conversation } from '@/components/messages/ConversationCard';
+import { ConversationCard, Conversation, LinkedStudent } from '@/components/messages/ConversationCard';
 import { ChatHeader } from '@/components/messages/ChatHeader';
 import { MessageBubble, Message } from '@/components/messages/MessageBubble';
 import { MessageInput } from '@/components/messages/MessageInput';
@@ -32,6 +32,7 @@ import {
   useUpdateConversationStatus,
 } from '@/hooks/useWhatsAppConversations';
 import { toast } from 'sonner';
+import { getStudentsBillingStatus } from '@/hooks/useGuardianContact';
 
 const Mensagens = () => {
   const { profile } = useAuth();
@@ -64,13 +65,23 @@ const Mensagens = () => {
     enabled: !!profile?.school_id,
   });
 
-  // Fetch students for linking
+  // Fetch students for linking (with class info)
   const { data: students = [] } = useQuery({
-    queryKey: ['students', profile?.school_id],
+    queryKey: ['students-with-classes', profile?.school_id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('students')
-        .select('id, full_name, enrollment_number')
+        .select(`
+          id, 
+          full_name, 
+          enrollment_number,
+          student_classes (
+            class:classes (
+              id,
+              name
+            )
+          )
+        `)
         .eq('is_active', true)
         .order('full_name');
       if (error) throw error;
@@ -78,7 +89,7 @@ const Mensagens = () => {
         id: s.id,
         full_name: s.full_name,
         enrollment_number: s.enrollment_number || '',
-        class_name: '',
+        class_name: (s.student_classes as any)?.[0]?.class?.name || '',
       }));
     },
     enabled: !!profile?.school_id,
@@ -108,26 +119,50 @@ const Mensagens = () => {
     selectedSector !== 'all' ? selectedSector : undefined
   );
 
+  // Get all linked student IDs for billing status
+  const allLinkedStudentIds = rawConversations.flatMap(
+    conv => conv.contact?.linked_student_ids || []
+  );
+
+  // Fetch billing status for all linked students
+  const { data: billingStatusMap = {} } = useQuery({
+    queryKey: ['billing-status', allLinkedStudentIds.join(',')],
+    queryFn: async () => {
+      if (allLinkedStudentIds.length === 0) return {};
+      return getStudentsBillingStatus(allLinkedStudentIds);
+    },
+    enabled: allLinkedStudentIds.length > 0,
+  });
+
   // Transform conversations to match component interface
-  const conversationsList: Conversation[] = rawConversations.map(conv => ({
-    id: conv.id,
-    contact_name: conv.contact?.full_name || conv.contact_name || conv.phone,
-    phone: conv.phone,
-    last_message: '',
-    last_message_at: conv.last_message_at || undefined,
-    unread_count: conv.unread_count || 0,
-    sector_name: conv.sector?.name,
-    contact_type: (conv.contact?.contact_type as 'lead' | 'guardian' | 'student' | 'staff' | 'other') || 'other',
-    ticket_status: (conv.ticket_status as 'open' | 'pending' | 'resolved' | 'closed') || 'open',
-    priority: (conv.priority as 'low' | 'normal' | 'high' | 'urgent') || 'normal',
-    linked_students: conv.contact?.linked_student_ids?.map(id => ({
-      id,
-      name: students.find(s => s.id === id)?.full_name || 'Aluno',
-    })) || [],
-    resolution_summary: conv.resolution_summary || undefined,
-    closed_at: conv.closed_at || undefined,
-    assigned_to: conv.assigned_to,
-  }));
+  const conversationsList: Conversation[] = rawConversations.map(conv => {
+    const linkedStudents: LinkedStudent[] = (conv.contact?.linked_student_ids || []).map(id => {
+      const student = students.find(s => s.id === id);
+      return {
+        id,
+        name: student?.full_name || 'Aluno',
+        class_name: student?.class_name || undefined,
+        billing_status: billingStatusMap[id] || 'desconhecido',
+      };
+    });
+
+    return {
+      id: conv.id,
+      contact_name: conv.contact?.full_name || conv.contact_name || conv.phone,
+      phone: conv.phone,
+      last_message: '',
+      last_message_at: conv.last_message_at || undefined,
+      unread_count: conv.unread_count || 0,
+      sector_name: conv.sector?.name,
+      contact_type: (conv.contact?.contact_type as 'lead' | 'guardian' | 'student' | 'staff' | 'other') || 'other',
+      ticket_status: (conv.ticket_status as 'open' | 'pending' | 'resolved' | 'closed') || 'open',
+      priority: (conv.priority as 'low' | 'normal' | 'high' | 'urgent') || 'normal',
+      linked_students: linkedStudents,
+      resolution_summary: conv.resolution_summary || undefined,
+      closed_at: conv.closed_at || undefined,
+      assigned_to: conv.assigned_to,
+    };
+  });
 
   // Fetch messages for selected conversation
   const { data: rawMessages = [], isLoading: loadingMessages } = useWhatsAppMessages(selectedConversation);
@@ -241,15 +276,51 @@ const Mensagens = () => {
 
   const handleLinkStudents = async (studentIds: string[]) => {
     if (!activeConversation) return;
-    // TODO: Update contact's linked_student_ids
+    
+    try {
+      // Find the contact_id from the conversation
+      const conversation = rawConversations.find(c => c.id === selectedConversation);
+      if (!conversation?.contact_id) {
+        toast.error('Contato não encontrado');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('contacts')
+        .update({ linked_student_ids: studentIds })
+        .eq('id', conversation.contact_id);
+
+      if (error) throw error;
+      toast.success('Alunos vinculados');
+    } catch (error) {
+      console.error('Error linking students:', error);
+      toast.error('Erro ao vincular alunos');
+    }
     setLinkStudentModalOpen(false);
-    toast.success('Alunos vinculados');
   };
 
   const handleChangeContactType = async (newType: 'lead' | 'guardian' | 'student' | 'staff' | 'other') => {
-    // TODO: Update contact type
+    if (!activeConversation) return;
+    
+    try {
+      const conversation = rawConversations.find(c => c.id === selectedConversation);
+      if (!conversation?.contact_id) {
+        toast.error('Contato não encontrado');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('contacts')
+        .update({ contact_type: newType })
+        .eq('id', conversation.contact_id);
+
+      if (error) throw error;
+      toast.success('Tipo alterado');
+    } catch (error) {
+      console.error('Error changing contact type:', error);
+      toast.error('Erro ao alterar tipo');
+    }
     setChangeTypeModalOpen(false);
-    toast.success('Tipo alterado');
   };
 
   const handleSendMessage = async (content: string, type: 'text' | 'image' | 'video' | 'audio' | 'document', file?: File) => {
