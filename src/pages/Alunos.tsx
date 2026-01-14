@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -285,11 +286,23 @@ const Alunos = () => {
         onSendMessage={() => {
           toast.info(`Enviar mensagem para ${selectedIds.length} aluno(s)`);
         }}
-        onBulkDelete={() => {
+        onBulkDelete={async () => {
           const count = selectedIds.length;
-          setStudents(students.filter(s => !selectedIds.includes(s.id)));
-          setSelectedIds([]);
-          toast.success(`${count} aluno(s) removido(s) com sucesso!`);
+          try {
+            const { error } = await supabase
+              .from('students')
+              .delete()
+              .in('id', selectedIds);
+            
+            if (error) throw error;
+            
+            setStudents(students.filter(s => !selectedIds.includes(s.id)));
+            setSelectedIds([]);
+            toast.success(`${count} aluno(s) removido(s) com sucesso!`);
+          } catch (error) {
+            console.error('Error deleting students:', error);
+            toast.error('Erro ao excluir alunos');
+          }
         }}
         itemLabel="alunos"
       />
