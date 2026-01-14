@@ -3,7 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WhatsAppInstancesManager } from '@/components/settings/WhatsAppInstancesManager';
 import { SectorUsersManager } from '@/components/settings/SectorUsersManager';
 import { AutomationSettings } from '@/components/settings/AutomationSettings';
-import { Phone, Building2, Bell, Shield, Bot } from 'lucide-react';
+import { FinancialSettings } from '@/components/settings/FinancialSettings';
+import { Phone, Building2, Bell, Shield, Bot, CreditCard } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const Configuracoes = () => {
@@ -15,10 +16,14 @@ const Configuracoes = () => {
       />
 
       <Tabs defaultValue="whatsapp" className="space-y-6">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="whatsapp" className="gap-2">
             <Phone className="h-4 w-4" />
             WhatsApp
+          </TabsTrigger>
+          <TabsTrigger value="financial" className="gap-2">
+            <CreditCard className="h-4 w-4" />
+            Financeiro
           </TabsTrigger>
           <TabsTrigger value="automation" className="gap-2">
             <Bot className="h-4 w-4" />
@@ -40,6 +45,10 @@ const Configuracoes = () => {
 
         <TabsContent value="whatsapp" className="space-y-6">
           <WhatsAppInstancesManager />
+        </TabsContent>
+
+        <TabsContent value="financial" className="space-y-6">
+          <FinancialSettings />
         </TabsContent>
 
         <TabsContent value="automation" className="space-y-6">

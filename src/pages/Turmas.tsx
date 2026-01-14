@@ -126,6 +126,7 @@ const Turmas = () => {
           shift: data.shift,
           year: data.year,
           max_students: data.max_students || 30,
+          monthly_fee: data.monthly_fee || null,
           is_active: true,
         });
 
@@ -150,6 +151,7 @@ const Turmas = () => {
           shift: data.shift,
           year: data.year,
           max_students: data.max_students,
+          monthly_fee: data.monthly_fee || null,
         })
         .eq('id', editingClass.id);
 

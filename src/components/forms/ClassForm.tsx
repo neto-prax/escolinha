@@ -34,6 +34,7 @@ const classSchema = z.object({
   shift: z.string().min(1, 'Turno é obrigatório'),
   year: z.number().min(2020, 'Ano inválido'),
   max_students: z.number().min(1, 'Capacidade mínima de 1 aluno').optional(),
+  monthly_fee: z.number().min(0, 'Valor inválido').optional(),
 });
 
 type ClassFormData = z.infer<typeof classSchema>;
@@ -89,6 +90,7 @@ export const ClassForm = ({
       shift: initialData?.shift || '',
       year: initialData?.year || currentYear,
       max_students: initialData?.max_students || 25,
+      monthly_fee: initialData?.monthly_fee || 0,
     },
   });
 
@@ -261,6 +263,27 @@ export const ClassForm = ({
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="monthly_fee"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mensalidade (R$)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0,00"
+                      {...field}
+                      onChange={(e) => field.onChange(Number(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button

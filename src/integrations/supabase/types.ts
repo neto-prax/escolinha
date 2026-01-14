@@ -308,6 +308,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           max_students: number | null
+          monthly_fee: number | null
           name: string
           school_id: string
           shift: string | null
@@ -320,6 +321,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           max_students?: number | null
+          monthly_fee?: number | null
           name: string
           school_id: string
           shift?: string | null
@@ -332,6 +334,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           max_students?: number | null
+          monthly_fee?: number | null
           name?: string
           school_id?: string
           shift?: string | null
@@ -565,6 +568,47 @@ export type Database = {
           },
         ]
       }
+      discount_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          discount_fixed: number | null
+          discount_percentage: number | null
+          id: string
+          is_active: boolean | null
+          name: string
+          school_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          discount_fixed?: number | null
+          discount_percentage?: number | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          school_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          discount_fixed?: number | null
+          discount_percentage?: number | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          school_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_types_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_details: {
         Row: {
           bank_account: string | null
@@ -764,39 +808,57 @@ export type Database = {
         Row: {
           class_id: string
           created_at: string
+          discount_fixed: number | null
+          discount_percentage: number | null
+          discount_type_id: string | null
           documents: Json | null
           enrollment_date: string | null
           id: string
+          monthly_value: number | null
           notes: string | null
+          payment_plan_id: string | null
           school_id: string
           status: string | null
           student_id: string
+          total_value: number | null
           updated_at: string
           year: number
         }
         Insert: {
           class_id: string
           created_at?: string
+          discount_fixed?: number | null
+          discount_percentage?: number | null
+          discount_type_id?: string | null
           documents?: Json | null
           enrollment_date?: string | null
           id?: string
+          monthly_value?: number | null
           notes?: string | null
+          payment_plan_id?: string | null
           school_id: string
           status?: string | null
           student_id: string
+          total_value?: number | null
           updated_at?: string
           year: number
         }
         Update: {
           class_id?: string
           created_at?: string
+          discount_fixed?: number | null
+          discount_percentage?: number | null
+          discount_type_id?: string | null
           documents?: Json | null
           enrollment_date?: string | null
           id?: string
+          monthly_value?: number | null
           notes?: string | null
+          payment_plan_id?: string | null
           school_id?: string
           status?: string | null
           student_id?: string
+          total_value?: number | null
           updated_at?: string
           year?: number
         }
@@ -806,6 +868,20 @@ export type Database = {
             columns: ["class_id"]
             isOneToOne: false
             referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_discount_type_id_fkey"
+            columns: ["discount_type_id"]
+            isOneToOne: false
+            referencedRelation: "discount_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_payment_plan_id_fkey"
+            columns: ["payment_plan_id"]
+            isOneToOne: false
+            referencedRelation: "payment_plans"
             referencedColumns: ["id"]
           },
           {
@@ -1184,6 +1260,53 @@ export type Database = {
           },
           {
             foreignKeyName: "lesson_plans_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_plans: {
+        Row: {
+          created_at: string
+          description: string | null
+          discount_percentage: number | null
+          id: string
+          installments: number
+          is_active: boolean | null
+          name: string
+          school_id: string
+          sort_order: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          discount_percentage?: number | null
+          id?: string
+          installments?: number
+          is_active?: boolean | null
+          name: string
+          school_id: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          discount_percentage?: number | null
+          id?: string
+          installments?: number
+          is_active?: boolean | null
+          name?: string
+          school_id?: string
+          sort_order?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_plans_school_id_fkey"
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"

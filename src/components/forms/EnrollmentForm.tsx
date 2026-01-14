@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,7 +33,7 @@ import {
 } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, User, Users, GraduationCap, FileText, Check, ChevronRight, ChevronLeft, CreditCard } from 'lucide-react';
+import { Loader2, User, Users, GraduationCap, FileText, Check, ChevronRight, ChevronLeft, CreditCard, Percent } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 
@@ -53,6 +56,9 @@ const enrollmentSchema = z.object({
   // Step 3: Payment plan
   payment_plan: z.string().min(1, 'Selecione um plano de pagamento'),
   payment_day: z.string().optional(),
+  discount_type_id: z.string().optional(),
+  custom_discount_percentage: z.number().optional(),
+  custom_discount_fixed: z.number().optional(),
   // Step 4: Documents
   documents_notes: z.string().optional(),
 });
@@ -88,47 +94,28 @@ const steps = [
   { id: 4, title: 'Documentos', icon: FileText },
 ];
 
-// Mock classes for demo
-const mockClasses = [
-  { id: '1', name: '1º Ano A', grade: '1º Ano', shift: 'Manhã', available_spots: 5, monthly_fee: 850 },
-  { id: '2', name: '1º Ano B', grade: '1º Ano', shift: 'Tarde', available_spots: 3, monthly_fee: 850 },
-  { id: '3', name: '2º Ano A', grade: '2º Ano', shift: 'Manhã', available_spots: 8, monthly_fee: 900 },
-  { id: '4', name: '3º Ano A', grade: '3º Ano', shift: 'Manhã', available_spots: 2, monthly_fee: 950 },
-];
-
-// Payment plans based on class
-const getPaymentPlans = (monthlyFee: number = 850) => [
+// Fallback payment plans when none configured
+const getFallbackPlans = (monthlyFee: number = 850) => [
   { 
     id: 'annual', 
     name: 'Anual à Vista', 
     description: '12 meses com 10% de desconto',
-    value: monthlyFee * 12 * 0.9,
     installments: 1,
-    discount: '10%'
+    discount_percentage: 10
   },
   { 
     id: 'semestral', 
     name: 'Semestral', 
     description: '2x com 5% de desconto',
-    value: monthlyFee * 6 * 0.95,
     installments: 2,
-    discount: '5%'
+    discount_percentage: 5
   },
   { 
     id: 'monthly', 
     name: 'Mensal', 
     description: '12 parcelas mensais',
-    value: monthlyFee,
     installments: 12,
-    discount: null
-  },
-  { 
-    id: 'monthly_10', 
-    name: 'Mensal (10x)', 
-    description: '10 parcelas mensais',
-    value: (monthlyFee * 12) / 10,
-    installments: 10,
-    discount: null
+    discount_percentage: 0
   },
 ];
 
@@ -136,11 +123,50 @@ export const EnrollmentForm = ({
   open,
   onOpenChange,
   onSubmit,
-  classes = mockClasses,
+  classes = [],
   studentData,
 }: EnrollmentFormProps) => {
+  const { school } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [currentStep, setCurrentStep] = useState(studentData ? 2 : 1); // Skip to step 2 if student data is pre-filled
+  const [currentStep, setCurrentStep] = useState(studentData ? 2 : 1);
+  const [showCustomDiscount, setShowCustomDiscount] = useState(false);
+
+  // Fetch payment plans from database
+  const { data: dbPaymentPlans = [] } = useQuery({
+    queryKey: ['payment-plans', school?.id],
+    queryFn: async () => {
+      if (!school?.id) return [];
+      const { data, error } = await supabase
+        .from('payment_plans')
+        .select('*')
+        .eq('school_id', school.id)
+        .eq('is_active', true)
+        .order('sort_order');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!school?.id && open,
+  });
+
+  // Fetch discount types from database
+  const { data: discountTypes = [] } = useQuery({
+    queryKey: ['discount-types', school?.id],
+    queryFn: async () => {
+      if (!school?.id) return [];
+      const { data, error } = await supabase
+        .from('discount_types')
+        .select('*')
+        .eq('school_id', school.id)
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!school?.id && open,
+  });
+
+  // Use database plans or fallback
+  const paymentPlans = dbPaymentPlans.length > 0 ? dbPaymentPlans : getFallbackPlans();
 
   const form = useForm<EnrollmentFormData>({
     resolver: zodResolver(enrollmentSchema),
@@ -190,7 +216,8 @@ export const EnrollmentForm = ({
 
   const selectedClassId = form.watch('class_id');
   const selectedClass = classes.find(c => c.id === selectedClassId);
-  const paymentPlans = getPaymentPlans(selectedClass?.monthly_fee);
+  const selectedDiscountTypeId = form.watch('discount_type_id');
+  const selectedDiscountType = discountTypes.find(d => d.id === selectedDiscountTypeId);
 
   const handleSubmit = async (data: EnrollmentFormData) => {
     setIsLoading(true);
@@ -526,14 +553,11 @@ export const EnrollmentForm = ({
                                 </div>
                                 <div className="text-right">
                                   <p className="font-bold text-lg">
-                                    {plan.installments > 1 
-                                      ? `${plan.installments}x ${formatCurrency(plan.value)}`
-                                      : formatCurrency(plan.value)
-                                    }
+                                    {plan.installments}x
                                   </p>
-                                  {plan.discount && (
+                                  {plan.discount_percentage > 0 && (
                                     <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                      {plan.discount} OFF
+                                      {plan.discount_percentage}% OFF
                                     </Badge>
                                   )}
                                 </div>
