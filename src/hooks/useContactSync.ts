@@ -39,6 +39,7 @@ export async function ensureConversationContact(
       .select('id, guardian_id, contact_type')
       .eq('school_id', schoolId)
       .eq('phone', conversation.phone)
+      .limit(1)
       .maybeSingle();
 
     if (findError) {
