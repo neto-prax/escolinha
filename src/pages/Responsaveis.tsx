@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Plus, Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Users } from 'lucide-react';
+import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,6 +72,7 @@ const Responsaveis = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<Guardian | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formData, setFormData] = useState<GuardianFormData>({
     full_name: '',
     email: '',
@@ -373,6 +375,13 @@ const Responsaveis = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <MultiSelectTableHeader
+                      selectedIds={selectedIds}
+                      onSelectionChange={setSelectedIds}
+                      allIds={filteredGuardians.map(g => g.id)}
+                    />
+                  </TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Telefone</TableHead>
@@ -383,7 +392,14 @@ const Responsaveis = () => {
               </TableHeader>
               <TableBody>
                 {filteredGuardians.map((guardian) => (
-                  <TableRow key={guardian.id} className="table-row-interactive">
+                  <TableRow key={guardian.id} className={`table-row-interactive ${selectedIds.includes(guardian.id) ? 'bg-muted/50' : ''}`}>
+                    <TableCell>
+                      <MultiSelectTableCell
+                        id={guardian.id}
+                        selectedIds={selectedIds}
+                        onSelectionChange={setSelectedIds}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
@@ -632,6 +648,15 @@ const Responsaveis = () => {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Multi-select Action Bar */}
+      <MultiSelectActionBar
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        onSendMessage={() => {
+          toast.info(`Enviar mensagem para ${selectedIds.length} responsável(is)`);
+        }}
+        itemLabel="responsáveis"
+      />
     </div>
   );
 };
