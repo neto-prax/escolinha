@@ -135,7 +135,7 @@ export function ConversationCard({ conversation, isSelected, onClick }: Conversa
 
         <div className="flex flex-wrap items-center gap-1 mt-1">
           {conversation.sector_name && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted">
+            <Badge className="text-[10px] px-1.5 py-0 bg-indigo-500 text-white">
               {conversation.sector_name}
             </Badge>
           )}
