@@ -655,6 +655,24 @@ const Responsaveis = () => {
         onSendMessage={() => {
           toast.info(`Enviar mensagem para ${selectedIds.length} responsável(is)`);
         }}
+        onBulkDelete={async () => {
+          const count = selectedIds.length;
+          try {
+            const { error } = await supabase
+              .from('guardians')
+              .delete()
+              .in('id', selectedIds);
+            
+            if (error) throw error;
+            
+            queryClient.invalidateQueries({ queryKey: ['guardians'] });
+            setSelectedIds([]);
+            toast.success(`${count} responsável(is) removido(s) com sucesso!`);
+          } catch (error) {
+            console.error('Error deleting guardians:', error);
+            toast.error('Erro ao excluir responsáveis');
+          }
+        }}
         itemLabel="responsáveis"
       />
     </div>
