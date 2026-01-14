@@ -48,12 +48,17 @@ interface StudentImportData {
   guardian_email?: string;
 }
 
+interface GuardianInfo {
+  id: string;
+  full_name: string;
+  phone: string | null;
+}
+
 interface Student {
   id: string;
   full_name: string;
   is_active: boolean;
-  phone?: string;
-  guardian_name?: string;
+  guardians: GuardianInfo[];
   class_name?: string;
 }
 
@@ -112,8 +117,11 @@ const Alunos = () => {
         id: student.id,
         full_name: student.full_name,
         is_active: student.is_active ?? true,
-        guardian_name: student.student_guardians?.[0]?.guardian?.full_name || '-',
-        phone: student.student_guardians?.[0]?.guardian?.phone || '-',
+        guardians: (student.student_guardians || []).map((sg: any) => ({
+          id: sg.guardian?.id,
+          full_name: sg.guardian?.full_name || '-',
+          phone: sg.guardian?.phone || null,
+        })).filter((g: GuardianInfo) => g.id),
         class_name: student.student_classes?.[0]?.class?.name || 'Sem turma',
       }));
     },
@@ -164,7 +172,7 @@ const Alunos = () => {
   const filteredStudents = students.filter((student: Student) =>
     student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (student.class_name?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-    (student.guardian_name?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+    student.guardians.some(g => g.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleCreateStudent = async (data: any) => {
@@ -189,50 +197,69 @@ const Alunos = () => {
 
       if (studentError) throw studentError;
 
-      // Create guardian if data provided
-      if (data.guardian_name) {
-        const { data: guardian, error: guardianError } = await supabase
-          .from('guardians')
-          .insert({
-            full_name: data.guardian_name,
-            email: data.guardian_email,
-            phone: data.guardian_phone,
-            cpf: data.guardian_cpf,
-            relationship: data.guardian_relationship,
-            address: data.guardian_address,
-            school_id: profile.school_id,
-          })
-          .select()
-          .single();
+      // Create or link guardians
+      const guardians = data.guardians || [];
+      for (let i = 0; i < guardians.length; i++) {
+        const guardianData = guardians[i];
+        let guardianId = guardianData.id;
 
-        if (guardianError) throw guardianError;
+        // If guardian already exists (has id), just link
+        if (!guardianId && guardianData.name) {
+          // Create new guardian
+          const { data: newGuardian, error: guardianError } = await supabase
+            .from('guardians')
+            .insert({
+              full_name: guardianData.name,
+              email: guardianData.email || null,
+              phone: guardianData.phone,
+              cpf: guardianData.cpf || null,
+              relationship: guardianData.relationship,
+              address: guardianData.address || null,
+              school_id: profile.school_id,
+              is_primary: i === 0,
+            })
+            .select()
+            .single();
 
-        // Link student to guardian
-        const { error: linkError } = await supabase
-          .from('student_guardians')
-          .insert({
-            student_id: newStudent.id,
-            guardian_id: guardian.id,
-          });
+          if (guardianError) throw guardianError;
+          guardianId = newGuardian.id;
+        }
 
-        if (linkError) throw linkError;
+        if (guardianId) {
+          // Link student to guardian
+          const { error: linkError } = await supabase
+            .from('student_guardians')
+            .insert({
+              student_id: newStudent.id,
+              guardian_id: guardianId,
+            });
 
-        // Create contact for guardian with student linked
-        if (guardian && data.guardian_phone) {
-          await ensureGuardianContact(
-            guardian.id,
-            {
-              full_name: data.guardian_name,
-              phone: data.guardian_phone,
-              email: data.guardian_email || null,
-            },
-            profile.school_id,
-            [newStudent.id]
-          );
+          if (linkError) {
+            // Ignore duplicate link errors
+            if (!linkError.message?.includes('duplicate')) {
+              throw linkError;
+            }
+          }
+
+          // Create/update contact for guardian with student linked
+          if (guardianData.phone) {
+            await ensureGuardianContact(
+              guardianId,
+              {
+                full_name: guardianData.name,
+                phone: guardianData.phone,
+                email: guardianData.email || null,
+              },
+              profile.school_id,
+              [newStudent.id]
+            );
+          }
         }
       }
 
       queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['guardians'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Aluno cadastrado com sucesso!');
     } catch (error) {
       console.error('Error creating student:', error);
@@ -610,8 +637,25 @@ const Alunos = () => {
                     </div>
                   </TableCell>
                   <TableCell>{student.class_name}</TableCell>
-                  <TableCell>{student.guardian_name}</TableCell>
-                  <TableCell>{student.phone}</TableCell>
+                  <TableCell>
+                    {student.guardians.length > 0 ? (
+                      <div className="space-y-1">
+                        {student.guardians.slice(0, 2).map((g, i) => (
+                          <div key={g.id} className="text-sm">
+                            {g.full_name}
+                            {student.guardians.length > 2 && i === 1 && (
+                              <span className="text-muted-foreground"> +{student.guardians.length - 2}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : '-'}
+                  </TableCell>
+                  <TableCell>
+                    {student.guardians.length > 0 
+                      ? student.guardians[0]?.phone || '-' 
+                      : '-'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={student.is_active ? 'default' : 'secondary'}>
                       {student.is_active ? 'Ativo' : 'Inativo'}
@@ -680,8 +724,8 @@ const Alunos = () => {
         studentData={enrollingStudent ? {
           id: enrollingStudent.id,
           name: enrollingStudent.full_name,
-          guardian: enrollingStudent.guardian_name === '-' ? '' : (enrollingStudent.guardian_name || ''),
-          guardian_phone: enrollingStudent.phone === '-' ? '' : (enrollingStudent.phone || ''),
+          guardian: enrollingStudent.guardians[0]?.full_name || '',
+          guardian_phone: enrollingStudent.guardians[0]?.phone || '',
         } : undefined}
       />
 
