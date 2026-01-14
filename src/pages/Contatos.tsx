@@ -811,6 +811,24 @@ const Contatos = () => {
         onSendMessage={() => {
           toast.info(`Enviar mensagem para ${selectedIds.length} contato(s)`);
         }}
+        onBulkDelete={async () => {
+          const count = selectedIds.length;
+          try {
+            const { error } = await supabase
+              .from('contacts')
+              .delete()
+              .in('id', selectedIds);
+            
+            if (error) throw error;
+            
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
+            setSelectedIds([]);
+            toast.success(`${count} contato(s) removido(s) com sucesso!`);
+          } catch (error) {
+            console.error('Error deleting contacts:', error);
+            toast.error('Erro ao excluir contatos');
+          }
+        }}
         itemLabel="contatos"
       />
     </div>

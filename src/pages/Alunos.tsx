@@ -285,6 +285,12 @@ const Alunos = () => {
         onSendMessage={() => {
           toast.info(`Enviar mensagem para ${selectedIds.length} aluno(s)`);
         }}
+        onBulkDelete={() => {
+          const count = selectedIds.length;
+          setStudents(students.filter(s => !selectedIds.includes(s.id)));
+          setSelectedIds([]);
+          toast.success(`${count} aluno(s) removido(s) com sucesso!`);
+        }}
         itemLabel="alunos"
       />
     </div>
