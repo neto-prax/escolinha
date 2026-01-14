@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,18 +15,37 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, GraduationCap, UserPlus, ClipboardCheck, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Search, GraduationCap, UserPlus, ClipboardCheck, MoreHorizontal, Loader2, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StudentForm } from '@/components/forms/StudentForm';
 import { EnrollmentForm } from '@/components/forms/EnrollmentForm';
 import { toast } from 'sonner';
 import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import { useAuth } from '@/contexts/AuthContext';
+import * as XLSX from 'xlsx';
+
+interface StudentImportData {
+  full_name: string;
+  birth_date?: string;
+  gender?: string;
+  address?: string;
+  guardian_name?: string;
+  guardian_phone?: string;
+  guardian_email?: string;
+}
 
 interface Student {
   id: string;
@@ -46,6 +65,12 @@ const Alunos = () => {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // Import states
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importData, setImportData] = useState<StudentImportData[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch students from Supabase
   const { data: students = [], isLoading } = useQuery({
@@ -242,6 +267,138 @@ const Alunos = () => {
   const activeStudents = students.filter((s: Student) => s.is_active).length;
   const inactiveStudents = students.filter((s: Student) => !s.is_active).length;
 
+  // Handle file upload
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const mappedData: StudentImportData[] = jsonData.map((row: any) => ({
+          full_name: row['Nome'] || row['Nome Completo'] || row['full_name'] || '',
+          birth_date: row['Data de Nascimento'] || row['Nascimento'] || row['birth_date'] || '',
+          gender: row['Gênero'] || row['Sexo'] || row['gender'] || '',
+          address: row['Endereço'] || row['Endereco'] || row['address'] || '',
+          guardian_name: row['Responsável'] || row['Responsavel'] || row['Nome do Responsável'] || row['guardian_name'] || '',
+          guardian_phone: row['Telefone Responsável'] || row['Telefone'] || row['guardian_phone'] || '',
+          guardian_email: row['Email Responsável'] || row['Email'] || row['guardian_email'] || '',
+        })).filter((item: StudentImportData) => item.full_name);
+
+        if (mappedData.length === 0) {
+          toast.error('Nenhum dado válido encontrado na planilha');
+          return;
+        }
+
+        setImportData(mappedData);
+        setIsImportDialogOpen(true);
+      } catch (error) {
+        console.error('Error reading file:', error);
+        toast.error('Erro ao ler arquivo. Verifique se é um arquivo Excel válido.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Download template
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Nome': 'João da Silva',
+        'Data de Nascimento': '2015-03-15',
+        'Gênero': 'Masculino',
+        'Endereço': 'Rua das Flores, 123',
+        'Responsável': 'Maria da Silva',
+        'Telefone Responsável': '11999999999',
+        'Email Responsável': 'maria@email.com',
+      },
+    ];
+    
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Alunos');
+    XLSX.writeFile(workbook, 'modelo_importacao_alunos.xlsx');
+    toast.success('Modelo baixado com sucesso!');
+  };
+
+  // Confirm import
+  const handleConfirmImport = async () => {
+    if (!profile?.school_id) {
+      toast.error('Escola não identificada');
+      return;
+    }
+
+    setIsImporting(true);
+    
+    try {
+      for (const studentData of importData) {
+        // Create student
+        const { data: newStudent, error: studentError } = await supabase
+          .from('students')
+          .insert({
+            full_name: studentData.full_name,
+            birth_date: studentData.birth_date || null,
+            gender: studentData.gender || null,
+            address: studentData.address || null,
+            school_id: profile.school_id,
+          })
+          .select()
+          .single();
+
+        if (studentError) {
+          console.error('Error creating student:', studentError);
+          continue;
+        }
+
+        // Create guardian if name provided
+        if (studentData.guardian_name) {
+          const { data: guardian, error: guardianError } = await supabase
+            .from('guardians')
+            .insert({
+              full_name: studentData.guardian_name,
+              phone: studentData.guardian_phone || null,
+              email: studentData.guardian_email || null,
+              school_id: profile.school_id,
+            })
+            .select()
+            .single();
+
+          if (!guardianError && guardian) {
+            // Link student to guardian
+            await supabase
+              .from('student_guardians')
+              .insert({
+                student_id: newStudent.id,
+                guardian_id: guardian.id,
+              });
+          }
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['guardians'] });
+      toast.success(`${importData.length} aluno(s) importado(s) com sucesso!`);
+      setIsImportDialogOpen(false);
+      setImportData([]);
+    } catch (error) {
+      console.error('Error importing students:', error);
+      toast.error('Erro ao importar alunos');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -256,10 +413,27 @@ const Alunos = () => {
         title="Alunos"
         description="Gerencie os alunos da escola"
       >
-        <Button onClick={() => setIsFormOpen(true)}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Novo Aluno
-        </Button>
+        <div className="flex gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".xlsx,.xls"
+            className="hidden"
+          />
+          <Button variant="outline" onClick={handleDownloadTemplate}>
+            <Download className="mr-2 h-4 w-4" />
+            Modelo
+          </Button>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="mr-2 h-4 w-4" />
+            Importar Excel
+          </Button>
+          <Button onClick={() => setIsFormOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Novo Aluno
+          </Button>
+        </div>
       </PageHeader>
 
       {/* Stats */}
@@ -438,6 +612,75 @@ const Alunos = () => {
           guardian_phone: enrollingStudent.phone || '',
         } : undefined}
       />
+
+      {/* Import Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Importar Alunos
+            </DialogTitle>
+            <DialogDescription>
+              Revise os dados antes de confirmar a importação
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              {importData.length} aluno(s) encontrado(s) na planilha
+            </div>
+            
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Nascimento</TableHead>
+                    <TableHead>Responsável</TableHead>
+                    <TableHead>Telefone</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {importData.slice(0, 10).map((student, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{student.full_name}</TableCell>
+                      <TableCell>{student.birth_date || '-'}</TableCell>
+                      <TableCell>{student.guardian_name || '-'}</TableCell>
+                      <TableCell>{student.guardian_phone || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            
+            {importData.length > 10 && (
+              <p className="text-sm text-muted-foreground text-center">
+                ... e mais {importData.length - 10} aluno(s)
+              </p>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmImport} disabled={isImporting}>
+              {isImporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Importando...
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Confirmar Importação
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Multi-select Action Bar */}
       <MultiSelectActionBar
