@@ -32,7 +32,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, User, Users, GraduationCap, FileText, Check, ChevronRight, ChevronLeft, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 
 const enrollmentSchema = z.object({
@@ -510,11 +509,16 @@ export const EnrollmentForm = ({
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                  <RadioGroupItem
-                                    value={plan.id}
-                                    checked={field.value === plan.id}
-                                    className="pointer-events-none"
-                                  />
+                                  <div className={cn(
+                                    "h-4 w-4 rounded-full border-2 flex items-center justify-center",
+                                    field.value === plan.id 
+                                      ? "border-primary bg-primary" 
+                                      : "border-muted-foreground"
+                                  )}>
+                                    {field.value === plan.id && (
+                                      <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                                    )}
+                                  </div>
                                   <div>
                                     <p className="font-medium">{plan.name}</p>
                                     <p className="text-sm text-muted-foreground">{plan.description}</p>
