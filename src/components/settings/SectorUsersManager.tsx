@@ -103,14 +103,18 @@ export function SectorUsersManager() {
     enabled: !!profile?.school_id,
   });
 
-  // Fetch available users (profiles)
+  // Fetch available users (profiles) - only from the same school
   const { data: availableUsers = [] } = useQuery({
     queryKey: ['available-users', profile?.school_id],
     queryFn: async () => {
+      if (!profile?.school_id) return [];
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url')
-        .eq('is_active', true);
+        .eq('school_id', profile.school_id)
+        .eq('is_active', true)
+        .order('full_name');
 
       if (error) throw error;
       return data as Profile[];
