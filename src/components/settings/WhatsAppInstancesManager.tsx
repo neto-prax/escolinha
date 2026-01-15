@@ -132,6 +132,11 @@ export function WhatsAppInstancesManager() {
         },
       });
 
+      // Check for error in the response body (edge function returns 500 with error in body)
+      if (evolutionResult?.error) {
+        throw new Error(evolutionResult.error);
+      }
+      
       if (evolutionError) throw evolutionError;
 
       // 2. Configure webhook for receiving messages
@@ -177,7 +182,19 @@ export function WhatsAppInstancesManager() {
       queryClient.invalidateQueries({ queryKey: ['evolution-instances'] });
     } catch (error: any) {
       console.error('Create instance error:', error);
-      toast.error(error?.message || 'Erro ao criar instância');
+      
+      // Extract error message from Evolution API response
+      let errorMessage = 'Erro ao criar instância';
+      if (error?.message) {
+        // Check if the error message contains "already in use"
+        if (error.message.includes('already in use') || error.message.includes('já está em uso')) {
+          errorMessage = 'Este nome já está em uso. Por favor, escolha outro nome para a conexão.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsCreating(false);
     }
