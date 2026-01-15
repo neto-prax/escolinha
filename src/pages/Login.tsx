@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Loader2, Building2, User, Mail, Phone, MapPin } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Building2, User, Mail, Phone, MapPin, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -472,9 +472,15 @@ const Login = () => {
               </a>
               .
             </p>
-            <Link to="/" className="text-sm text-primary hover:underline">
-              ← Voltar para o site
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link to="/" className="text-sm text-primary hover:underline">
+                ← Voltar para o site
+              </Link>
+              <Link to="/super-admin" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1">
+                <Shield className="h-3 w-3" />
+                Super Admin
+              </Link>
+            </div>
           </CardFooter>
         </Card>
       </div>
