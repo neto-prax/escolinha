@@ -990,6 +990,7 @@ export type Database = {
           api_url: string | null
           connected_phone: string | null
           created_at: string
+          display_name: string | null
           id: string
           instance_name: string
           qr_code: string | null
@@ -1002,6 +1003,7 @@ export type Database = {
           api_url?: string | null
           connected_phone?: string | null
           created_at?: string
+          display_name?: string | null
           id?: string
           instance_name: string
           qr_code?: string | null
@@ -1014,6 +1016,7 @@ export type Database = {
           api_url?: string | null
           connected_phone?: string | null
           created_at?: string
+          display_name?: string | null
           id?: string
           instance_name?: string
           qr_code?: string | null

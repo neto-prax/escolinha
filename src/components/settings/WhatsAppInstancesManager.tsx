@@ -45,7 +45,7 @@ interface Sector {
 }
 
 export function WhatsAppInstancesManager() {
-  const { profile } = useAuth();
+  const { profile, school } = useAuth();
   const queryClient = useQueryClient();
   const { data: instances = [], isLoading } = useEvolutionInstances();
   const deleteInstanceDb = useDeleteEvolutionInstance();
@@ -124,11 +124,17 @@ export function WhatsAppInstancesManager() {
 
     setIsCreating(true);
     try {
-      // 1. Create instance in Evolution API
+      // Generate unique instance name using school slug
+      const displayName = instanceName.trim();
+      const uniqueInstanceName = school?.slug 
+        ? `${displayName}-${school.slug}` 
+        : displayName;
+      
+      // 1. Create instance in Evolution API with unique name
       const { data: evolutionResult, error: evolutionError } = await supabase.functions.invoke('evolution-api', {
         body: {
           action: 'create-instance',
-          data: { instanceName: instanceName.trim() },
+          data: { instanceName: uniqueInstanceName },
         },
       });
 
@@ -144,7 +150,7 @@ export function WhatsAppInstancesManager() {
         await supabase.functions.invoke('evolution-api', {
           body: {
             action: 'set-webhook',
-            data: { instanceName: instanceName.trim() },
+            data: { instanceName: uniqueInstanceName },
           },
         });
         console.log('Webhook configured successfully');
@@ -153,12 +159,13 @@ export function WhatsAppInstancesManager() {
         // Don't fail the entire process if webhook setup fails
       }
 
-      // 3. Save to database
+      // 3. Save to database with both display_name and instance_name
       const { data: dbInstance, error: dbError } = await supabase
         .from('evolution_instances')
         .insert({
           school_id: profile.school_id,
-          instance_name: instanceName.trim(),
+          instance_name: uniqueInstanceName,
+          display_name: displayName,
           status: 'disconnected',
         })
         .select()
@@ -446,7 +453,7 @@ export function WhatsAppInstancesManager() {
                   const linkedSectors = getInstanceSectors(instance.id);
                   return (
                     <TableRow key={instance.id}>
-                      <TableCell className="font-medium">{instance.instance_name}</TableCell>
+                      <TableCell className="font-medium">{instance.display_name || instance.instance_name}</TableCell>
                       <TableCell>
                         <Badge
                           variant={instance.status === 'connected' ? 'default' : 'secondary'}
