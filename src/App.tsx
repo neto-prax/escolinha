@@ -26,6 +26,7 @@ import CRMMatriculas from "./pages/CRMMatriculas";
 import Responsaveis from "./pages/Responsaveis";
 import Contatos from "./pages/Contatos";
 import Comunicados from "./pages/Comunicados";
+import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => (
             {/* Public routes */}
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/super-admin" element={<SuperAdmin />} />
             
             {/* Protected routes */}
             <Route path="/app" element={<AppLayout />}>

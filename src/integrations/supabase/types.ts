@@ -114,6 +114,13 @@ export type Database = {
             referencedRelation: "schools"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "audit_logs_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       billing: {
@@ -175,6 +182,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
           {
@@ -251,6 +265,13 @@ export type Database = {
             referencedRelation: "schools"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "broadcast_logs_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       chart_of_accounts: {
@@ -297,6 +318,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chart_of_accounts_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -347,6 +375,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classes_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -436,6 +471,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contacts_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "contacts_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -506,6 +548,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "contracts_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "contracts_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -566,6 +615,13 @@ export type Database = {
             referencedRelation: "schools"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "daily_entries_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       discount_types: {
@@ -605,6 +661,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "discount_types_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -667,6 +730,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_details_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -796,6 +866,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "enrollment_leads_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "enrollment_leads_sector_id_fkey"
             columns: ["sector_id"]
             isOneToOne: false
@@ -892,6 +969,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "enrollments_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "enrollments_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -943,6 +1027,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evolution_instances_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -997,6 +1088,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_ledger_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -1107,6 +1205,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardians_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -1265,6 +1370,13 @@ export type Database = {
             referencedRelation: "schools"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lesson_plans_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       payment_plans: {
@@ -1310,6 +1422,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_plans_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -1394,6 +1513,13 @@ export type Database = {
             referencedRelation: "schools"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "profiles_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
         ]
       }
       quick_replies: {
@@ -1446,6 +1572,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quick_replies_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
           {
@@ -1536,6 +1669,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sectors_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -1669,7 +1809,35 @@ export type Database = {
             referencedRelation: "schools"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "students_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      super_admins: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       teacher_classes: {
         Row: {
@@ -1731,6 +1899,13 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -1861,6 +2036,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "whatsapp_conversations_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "whatsapp_conversations_sector_id_fkey"
             columns: ["sector_id"]
             isOneToOne: false
@@ -1944,7 +2126,51 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      schools_with_counts: {
+        Row: {
+          address: string | null
+          created_at: string | null
+          email: string | null
+          id: string | null
+          logo_url: string | null
+          name: string | null
+          phone: string | null
+          settings: Json | null
+          slug: string | null
+          student_count: number | null
+          updated_at: string | null
+          user_count: number | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          phone?: string | null
+          settings?: Json | null
+          slug?: string | null
+          student_count?: never
+          updated_at?: string | null
+          user_count?: never
+        }
+        Update: {
+          address?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          phone?: string | null
+          settings?: Json | null
+          slug?: string | null
+          student_count?: never
+          updated_at?: string | null
+          user_count?: never
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_user_school_id: { Args: { _user_id: string }; Returns: string }
@@ -1964,6 +2190,7 @@ export type Database = {
         Args: { _school_id?: string; _user_id: string }
         Returns: boolean
       }
+      is_super_admin: { Args: { _user_id?: string }; Returns: boolean }
     }
     Enums: {
       app_role: "teacher" | "secretary" | "admin" | "director"
