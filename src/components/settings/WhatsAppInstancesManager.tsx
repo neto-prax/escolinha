@@ -124,11 +124,12 @@ export function WhatsAppInstancesManager() {
 
     setIsCreating(true);
     try {
-      // Generate unique instance name using school slug
+      // Generate unique instance name using school slug and timestamp to avoid conflicts
       const displayName = instanceName.trim();
+      const timestamp = Date.now().toString(36); // Short unique identifier
       const uniqueInstanceName = school?.slug 
-        ? `${displayName}-${school.slug}` 
-        : displayName;
+        ? `${displayName}-${school.slug}-${timestamp}` 
+        : `${displayName}-${timestamp}`;
       
       // 1. Create instance in Evolution API with unique name
       const { data: evolutionResult, error: evolutionError } = await supabase.functions.invoke('evolution-api', {
