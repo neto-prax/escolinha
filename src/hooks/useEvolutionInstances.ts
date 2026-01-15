@@ -22,9 +22,12 @@ export function useEvolutionInstances() {
   return useQuery({
     queryKey: ['evolution-instances', profile?.school_id],
     queryFn: async () => {
+      if (!profile?.school_id) return [];
+      
       const { data, error } = await supabase
         .from('evolution_instances')
         .select('*')
+        .eq('school_id', profile.school_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
