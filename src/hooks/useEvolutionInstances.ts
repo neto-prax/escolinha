@@ -6,6 +6,7 @@ export interface EvolutionInstance {
   id: string;
   school_id: string;
   instance_name: string;
+  display_name: string | null;
   api_url: string | null;
   api_key: string | null;
   status: string | null;
