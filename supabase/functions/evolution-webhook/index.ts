@@ -120,10 +120,10 @@ async function handleSectorSelection(
   phone: string
 ) {
   try {
-    // Check if the conversation already has an assigned sector and attendant
-    // If it already has an assigned_to, don't process sector selection
-    if (conversation.assigned_to) {
-      console.log('Conversation already has an attendant, skipping sector selection');
+    // Only process if conversation doesn't have a sector yet
+    // Once a sector is assigned, we don't change it based on numbers
+    if (conversation.sector_id) {
+      console.log('Conversation already has a sector, skipping sector selection');
       return;
     }
 
@@ -455,18 +455,8 @@ serve(async (req) => {
 
       const schoolId = instanceData.school_id;
 
-      // Find sectors linked to this instance
-      const { data: instanceSectors, error: sectorsError } = await supabase
-        .from('instance_sectors')
-        .select('sector_id')
-        .eq('instance_id', instanceData.id);
-
-      if (sectorsError) {
-        console.error('Error finding sectors:', sectorsError);
-      }
-
-      // Use first linked sector, or null if none
-      const sectorId = instanceSectors?.[0]?.sector_id || null;
+      // Note: We no longer assign a sector automatically
+      // The sector will be assigned when the user responds to the sector selection menu
 
       // Find or create conversation
       let { data: conversation, error: convError } = await supabase
@@ -488,16 +478,16 @@ serve(async (req) => {
 
       if (!conversation) {
         isNewConversation = true;
-        // Create new conversation
+        // Create new conversation WITHOUT a sector - user will select via menu
         const { data: newConv, error: createError } = await supabase
           .from('whatsapp_conversations')
           .insert({
             phone,
             contact_name: pushName,
             school_id: schoolId,
-            sector_id: sectorId,
+            sector_id: null, // No sector initially - will be assigned when user selects
             status: 'open',
-            ticket_status: 'open',
+            ticket_status: 'pending', // Pending until sector is selected
             unread_count: 1,
             last_message_at: new Date().toISOString(),
           })
