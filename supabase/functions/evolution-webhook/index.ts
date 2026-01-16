@@ -111,6 +111,150 @@ async function sendWelcomeMessage(
   }
 }
 
+async function handleSectorSelection(
+  supabase: any,
+  conversation: any,
+  messageBody: string,
+  schoolId: string,
+  instanceName: string,
+  phone: string
+) {
+  try {
+    // Check if the conversation already has an assigned sector and attendant
+    // If it already has an assigned_to, don't process sector selection
+    if (conversation.assigned_to) {
+      console.log('Conversation already has an attendant, skipping sector selection');
+      return;
+    }
+
+    // Only process if message is a single number (1-9)
+    const trimmedBody = messageBody.trim();
+    if (!/^[1-9]$/.test(trimmedBody)) {
+      console.log('Message is not a single digit, skipping sector selection');
+      return;
+    }
+
+    const selectedNumber = parseInt(trimmedBody, 10);
+
+    // Get school settings to check if automation is enabled
+    const { data: school, error: schoolError } = await supabase
+      .from('schools')
+      .select('settings')
+      .eq('id', schoolId)
+      .single();
+
+    if (schoolError || !school?.settings?.automation) {
+      console.log('No automation settings found for school');
+      return;
+    }
+
+    const automation = school.settings.automation;
+    
+    if (!automation.sector_selection_enabled) {
+      console.log('Sector selection automation is disabled');
+      return;
+    }
+
+    const enabledSectorIds = automation.enabled_sectors || [];
+    if (enabledSectorIds.length === 0) {
+      console.log('No sectors enabled for automation');
+      return;
+    }
+
+    // Get enabled sectors in the same order as the welcome message
+    const { data: sectors, error: sectorsError } = await supabase
+      .from('sectors')
+      .select('id, name')
+      .in('id', enabledSectorIds)
+      .eq('is_active', true)
+      .order('name');
+
+    if (sectorsError || !sectors || sectors.length === 0) {
+      console.log('No active sectors found');
+      return;
+    }
+
+    // Check if selected number is valid
+    if (selectedNumber < 1 || selectedNumber > sectors.length) {
+      console.log('Selected number out of range:', selectedNumber, 'max:', sectors.length);
+      return;
+    }
+
+    // Get the selected sector (1-indexed)
+    const selectedSector = sectors[selectedNumber - 1];
+    console.log('User selected sector:', selectedSector.name, 'id:', selectedSector.id);
+
+    // Update conversation with the selected sector
+    const { error: updateError } = await supabase
+      .from('whatsapp_conversations')
+      .update({
+        sector_id: selectedSector.id,
+        ticket_status: 'pending', // Mark as pending for an attendant to accept
+      })
+      .eq('id', conversation.id);
+
+    if (updateError) {
+      console.error('Error updating conversation sector:', updateError);
+      return;
+    }
+
+    console.log('Conversation sector updated successfully to:', selectedSector.name);
+
+    // Send confirmation message
+    const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
+    const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
+
+    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+      console.error('Evolution API credentials not configured');
+      return;
+    }
+
+    // Get sector-specific greeting if available
+    let confirmationMessage = `Você foi direcionado para o setor *${selectedSector.name}*. Em breve um atendente entrará em contato!`;
+    
+    // Check if sector has a custom greeting
+    const sectorGreeting = automation.sector_greetings?.[selectedSector.id];
+    if (sectorGreeting) {
+      confirmationMessage = sectorGreeting;
+    }
+
+    // Send confirmation via Evolution API
+    const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({
+        number: phone,
+        text: confirmationMessage,
+      }),
+    });
+
+    const result = await response.json();
+    console.log('Confirmation message sent:', result);
+
+    // Save outgoing confirmation message to database
+    const { error: msgError } = await supabase
+      .from('whatsapp_messages')
+      .insert({
+        conversation_id: conversation.id,
+        direction: 'outgoing',
+        body: confirmationMessage,
+        message_type: 'text',
+        status: 'sent',
+        external_id: result.key?.id || null,
+      });
+
+    if (msgError) {
+      console.error('Error saving confirmation message:', msgError);
+    }
+
+  } catch (error) {
+    console.error('Error handling sector selection:', error);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -412,6 +556,9 @@ serve(async (req) => {
       if (isNewConversation) {
         console.log('New conversation - checking automation settings...');
         await sendWelcomeMessage(supabase, instance, phone, schoolId, conversation.id);
+      } else {
+        // Check if user is responding to sector selection menu
+        await handleSectorSelection(supabase, conversation, body, schoolId, instance, phone);
       }
 
       return new Response(JSON.stringify({ 
