@@ -40,19 +40,23 @@ async function sendWelcomeMessage(
     }
 
     // Get enabled sectors
-    const { data: sectors, error: sectorsError } = await supabase
+    const { data: sectorsData, error: sectorsError } = await supabase
       .from('sectors')
       .select('id, name')
       .in('id', enabledSectorIds)
-      .eq('is_active', true)
-      .order('name');
+      .eq('is_active', true);
 
-    if (sectorsError || !sectors || sectors.length === 0) {
+    if (sectorsError || !sectorsData || sectorsData.length === 0) {
       console.log('No active sectors found for automation');
       return;
     }
 
-    // Build sectors list
+    // Sort sectors according to the order defined in enabled_sectors
+    const sectors = enabledSectorIds
+      .map((id: string) => sectorsData.find((s: any) => s.id === id))
+      .filter(Boolean);
+
+    // Build sectors list in the configured order
     const sectorsList = sectors.map((s: any, i: number) => `${i + 1}. ${s.name}`).join('\n');
     
     // Replace placeholder in message
@@ -161,18 +165,22 @@ async function handleSectorSelection(
       return;
     }
 
-    // Get enabled sectors in the same order as the welcome message
-    const { data: sectors, error: sectorsError } = await supabase
+    // Get enabled sectors
+    const { data: sectorsData, error: sectorsError } = await supabase
       .from('sectors')
       .select('id, name')
       .in('id', enabledSectorIds)
-      .eq('is_active', true)
-      .order('name');
+      .eq('is_active', true);
 
-    if (sectorsError || !sectors || sectors.length === 0) {
+    if (sectorsError || !sectorsData || sectorsData.length === 0) {
       console.log('No active sectors found');
       return;
     }
+
+    // Sort sectors according to the order defined in enabled_sectors (same as welcome message)
+    const sectors = enabledSectorIds
+      .map((id: string) => sectorsData.find((s: any) => s.id === id))
+      .filter(Boolean);
 
     // Check if selected number is valid
     if (selectedNumber < 1 || selectedNumber > sectors.length) {
@@ -180,7 +188,7 @@ async function handleSectorSelection(
       return;
     }
 
-    // Get the selected sector (1-indexed)
+    // Get the selected sector (1-indexed) - using the same order as the menu
     const selectedSector = sectors[selectedNumber - 1];
     console.log('User selected sector:', selectedSector.name, 'id:', selectedSector.id);
 

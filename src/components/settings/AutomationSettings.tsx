@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Loader2, Bot, MessageSquare } from 'lucide-react';
+import { Loader2, Bot, MessageSquare, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface SectorGreeting {
   [sectorId: string]: string;
@@ -18,7 +18,7 @@ interface SectorGreeting {
 interface AutomationConfig {
   sector_selection_enabled: boolean;
   sector_selection_message: string;
-  enabled_sectors: string[];
+  enabled_sectors: string[]; // This now also defines the ORDER
   sector_greetings: SectorGreeting;
   signature_enabled: boolean;
 }
@@ -145,6 +145,32 @@ export function AutomationSettings() {
     });
   };
 
+  const moveSectorUp = (sectorId: string) => {
+    const index = config.enabled_sectors.indexOf(sectorId);
+    if (index <= 0) return;
+    
+    const newOrder = [...config.enabled_sectors];
+    [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+    
+    setConfig({
+      ...config,
+      enabled_sectors: newOrder,
+    });
+  };
+
+  const moveSectorDown = (sectorId: string) => {
+    const index = config.enabled_sectors.indexOf(sectorId);
+    if (index < 0 || index >= config.enabled_sectors.length - 1) return;
+    
+    const newOrder = [...config.enabled_sectors];
+    [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+    
+    setConfig({
+      ...config,
+      enabled_sectors: newOrder,
+    });
+  };
+
   const updateConfig = (updates: Partial<AutomationConfig>) => {
     setConfig({
       ...config,
@@ -216,44 +242,102 @@ export function AutomationSettings() {
               <div className="space-y-3">
                 <Label>Setores disponíveis para seleção</Label>
                 <p className="text-sm text-muted-foreground">
-                  Selecione quais setores aparecerão como opção para o contato e configure a saudação de cada um
+                  Marque os setores que aparecerão no menu. Use as setas para definir a ordem de exibição.
                 </p>
-                <div className="space-y-3">
-                  {sectors.map((sector) => (
-                    <div
-                      key={sector.id}
-                      className="rounded-md border p-3 space-y-3"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`sector-${sector.id}`}
-                          checked={config.enabled_sectors.includes(sector.id)}
-                          onCheckedChange={() => toggleSector(sector.id)}
-                        />
-                        <Label
-                          htmlFor={`sector-${sector.id}`}
-                          className="flex-1 cursor-pointer font-medium"
-                        >
-                          {sector.name}
-                        </Label>
-                      </div>
-                      {config.enabled_sectors.includes(sector.id) && (
-                        <div className="pl-6 space-y-2">
-                          <Label htmlFor={`greeting-${sector.id}`} className="text-sm text-muted-foreground">
-                            Mensagem de saudação ao entrar neste setor
-                          </Label>
-                          <Textarea
-                            id={`greeting-${sector.id}`}
-                            rows={2}
-                            value={config.sector_greetings[sector.id] || ''}
-                            onChange={(e) => updateSectorGreeting(sector.id, e.target.value)}
-                            placeholder={`Ex: Olá! Você está falando com o setor de ${sector.name}. Como posso ajudar?`}
+                
+                {/* Unselected sectors */}
+                <div className="space-y-2">
+                  {sectors
+                    .filter(s => !config.enabled_sectors.includes(s.id))
+                    .map((sector) => (
+                      <div
+                        key={sector.id}
+                        className="rounded-md border p-3 bg-muted/30"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`sector-${sector.id}`}
+                            checked={false}
+                            onCheckedChange={() => toggleSector(sector.id)}
                           />
+                          <Label
+                            htmlFor={`sector-${sector.id}`}
+                            className="flex-1 cursor-pointer"
+                          >
+                            {sector.name}
+                          </Label>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    ))}
                 </div>
+
+                {/* Selected sectors with order controls */}
+                {config.enabled_sectors.length > 0 && (
+                  <div className="space-y-2 mt-4">
+                    <Label className="text-sm font-medium">Ordem de exibição no menu:</Label>
+                    {config.enabled_sectors.map((sectorId, index) => {
+                      const sector = sectors.find(s => s.id === sectorId);
+                      if (!sector) return null;
+                      
+                      return (
+                        <div
+                          key={sector.id}
+                          className="rounded-md border p-3 space-y-3 bg-primary/5 border-primary/20"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="flex flex-col gap-0.5">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={() => moveSectorUp(sector.id)}
+                                disabled={index === 0}
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={() => moveSectorDown(sector.id)}
+                                disabled={index === config.enabled_sectors.length - 1}
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <GripVertical className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-mono text-sm bg-primary/10 px-2 py-0.5 rounded">
+                              {index + 1}
+                            </span>
+                            <Checkbox
+                              id={`sector-${sector.id}`}
+                              checked={true}
+                              onCheckedChange={() => toggleSector(sector.id)}
+                            />
+                            <Label
+                              htmlFor={`sector-${sector.id}`}
+                              className="flex-1 cursor-pointer font-medium"
+                            >
+                              {sector.name}
+                            </Label>
+                          </div>
+                          <div className="pl-16 space-y-2">
+                            <Label htmlFor={`greeting-${sector.id}`} className="text-sm text-muted-foreground">
+                              Mensagem de saudação ao entrar neste setor
+                            </Label>
+                            <Textarea
+                              id={`greeting-${sector.id}`}
+                              rows={2}
+                              value={config.sector_greetings[sector.id] || ''}
+                              onChange={(e) => updateSectorGreeting(sector.id, e.target.value)}
+                              placeholder={`Ex: Olá! Você está falando com o setor de ${sector.name}. Como posso ajudar?`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3">
