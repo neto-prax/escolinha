@@ -14,7 +14,12 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, GraduationCap, X, UserPlus } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import { Search, GraduationCap, X, UserPlus, Plus, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -51,9 +56,12 @@ export function LinkStudentsModal({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentBirthDate, setNewStudentBirthDate] = useState('');
 
   // Fetch students
-  const { data: students = [] } = useQuery({
+  const { data: students = [], refetch: refetchStudents } = useQuery({
     queryKey: ['students-for-guardian', profile?.school_id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -104,8 +112,70 @@ export function LinkStudentsModal({
     if (open) {
       setSearchQuery('');
       setSelectedStudentIds([]);
+      setIsCreateOpen(false);
+      setNewStudentName('');
+      setNewStudentBirthDate('');
     }
   }, [open]);
+
+  // Create student mutation
+  const createStudentMutation = useMutation({
+    mutationFn: async () => {
+      if (!profile?.school_id || !contact?.guardian_id) throw new Error('Dados inválidos');
+      if (!newStudentName.trim()) throw new Error('Nome do aluno é obrigatório');
+
+      // 1. Create student
+      const { data: student, error: studentError } = await supabase
+        .from('students')
+        .insert({
+          school_id: profile.school_id,
+          full_name: newStudentName.trim(),
+          birth_date: newStudentBirthDate || null,
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (studentError) throw studentError;
+
+      // 2. Link to guardian
+      const { error: linkError } = await supabase
+        .from('student_guardians')
+        .insert({
+          student_id: student.id,
+          guardian_id: contact.guardian_id,
+        });
+
+      if (linkError) throw linkError;
+
+      // 3. Update contact linked_student_ids
+      const allLinkedIds = [...existingLinks, student.id];
+      await supabase
+        .from('contacts')
+        .update({
+          linked_student_ids: allLinkedIds,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', contact.id);
+
+      return student;
+    },
+    onSuccess: (student) => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['students-for-guardian'] });
+      queryClient.invalidateQueries({ queryKey: ['guardian-students'] });
+      queryClient.invalidateQueries({ queryKey: ['contacts'] });
+      toast.success(`Aluno "${student.full_name}" criado e vinculado com sucesso!`);
+      setNewStudentName('');
+      setNewStudentBirthDate('');
+      setIsCreateOpen(false);
+      refetchStudents();
+    },
+    onError: (error: any) => {
+      console.error('Error creating student:', error);
+      toast.error(error.message || 'Erro ao criar aluno');
+    },
+  });
 
   // Link students mutation
   const linkMutation = useMutation({
@@ -190,6 +260,12 @@ export function LinkStudentsModal({
     linkMutation.mutate();
   };
 
+  const handleCreateStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    createStudentMutation.mutate();
+  };
+
   if (!contact) return null;
 
   return (
@@ -205,8 +281,57 @@ export function LinkStudentsModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col">
           <div className="space-y-4 flex-1 overflow-auto pr-2">
+            {/* Create new student section */}
+            <Collapsible open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                >
+                  <span className="flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    Criar novo aluno
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isCreateOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-3">
+                <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="new-student-name">Nome do aluno *</Label>
+                      <Input
+                        id="new-student-name"
+                        value={newStudentName}
+                        onChange={(e) => setNewStudentName(e.target.value)}
+                        placeholder="Nome completo do aluno"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="new-student-birth">Data de nascimento</Label>
+                      <Input
+                        id="new-student-birth"
+                        type="date"
+                        value={newStudentBirthDate}
+                        onChange={(e) => setNewStudentBirthDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleCreateStudent}
+                    disabled={createStudentMutation.isPending || !newStudentName.trim()}
+                    className="w-full"
+                  >
+                    {createStudentMutation.isPending ? 'Criando...' : 'Criar e Vincular Aluno'}
+                  </Button>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
             {/* Already linked students */}
             {alreadyLinkedStudents.length > 0 && (
               <div className="space-y-2">
@@ -254,7 +379,7 @@ export function LinkStudentsModal({
 
             {/* Student Selection */}
             <div className="space-y-2">
-              <Label>Selecionar Alunos</Label>
+              <Label>Selecionar Alunos Existentes</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -264,7 +389,7 @@ export function LinkStudentsModal({
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <ScrollArea className="h-64 border rounded-lg">
+              <ScrollArea className="h-48 border rounded-lg">
                 {filteredStudents.length === 0 ? (
                   <div className="p-4 text-center text-sm text-muted-foreground">
                     Nenhum aluno encontrado
@@ -325,13 +450,13 @@ export function LinkStudentsModal({
               Cancelar
             </Button>
             <Button 
-              type="submit" 
+              onClick={handleSubmit}
               disabled={linkMutation.isPending || selectedStudentIds.length === 0}
             >
               {linkMutation.isPending ? 'Vinculando...' : `Vincular ${selectedStudentIds.length} Aluno(s)`}
             </Button>
           </DialogFooter>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );
