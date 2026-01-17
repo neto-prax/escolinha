@@ -15,8 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare, History, Users } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare, History, Users, GraduationCap } from 'lucide-react';
 import { ConvertToGuardianModal } from '@/components/contacts/ConvertToGuardianModal';
+import { LinkStudentsModal } from '@/components/contacts/LinkStudentsModal';
 import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import {
   DropdownMenu,
@@ -84,8 +85,10 @@ const Contatos = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isConvertOpen, setIsConvertOpen] = useState(false);
+  const [isLinkStudentsOpen, setIsLinkStudentsOpen] = useState(false);
   const [selectedContactHistory, setSelectedContactHistory] = useState<ContactRecord | null>(null);
   const [selectedContactConvert, setSelectedContactConvert] = useState<ContactRecord | null>(null);
+  const [selectedContactLink, setSelectedContactLink] = useState<ContactRecord | null>(null);
   const [editingContact, setEditingContact] = useState<ContactRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -361,6 +364,12 @@ const Contatos = () => {
     setIsConvertOpen(true);
   };
 
+  // Link students to existing guardian
+  const handleLinkStudents = (contact: ContactRecord) => {
+    setSelectedContactLink(contact);
+    setIsLinkStudentsOpen(true);
+  };
+
   // Fetch conversation history for selected contact
   const { data: contactConversations = [] } = useQuery({
     queryKey: ['contact-conversations', selectedContactHistory?.id],
@@ -570,6 +579,12 @@ const Contatos = () => {
                             <DropdownMenuItem onClick={() => handleConvertToGuardian(contact)}>
                               <Users className="mr-2 h-4 w-4" />
                               Converter em Responsável
+                            </DropdownMenuItem>
+                          )}
+                          {(contact.contact_type === 'guardian' || contact.guardian_id) && (
+                            <DropdownMenuItem onClick={() => handleLinkStudents(contact)}>
+                              <GraduationCap className="mr-2 h-4 w-4" />
+                              Vincular Alunos
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -877,6 +892,14 @@ const Contatos = () => {
         onOpenChange={setIsConvertOpen}
         contact={selectedContactConvert}
         onSuccess={() => setSelectedContactConvert(null)}
+      />
+
+      {/* Link Students Modal */}
+      <LinkStudentsModal
+        open={isLinkStudentsOpen}
+        onOpenChange={setIsLinkStudentsOpen}
+        contact={selectedContactLink}
+        onSuccess={() => setSelectedContactLink(null)}
       />
     </div>
   );
