@@ -15,7 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare, History } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare, History, Users } from 'lucide-react';
+import { ConvertToGuardianModal } from '@/components/contacts/ConvertToGuardianModal';
 import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ interface ContactRecord {
   notes: string | null;
   tags: string[] | null;
   created_at: string | null;
+  guardian_id: string | null;
 }
 
 interface ContactFormData {
@@ -81,7 +83,9 @@ const Contatos = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isConvertOpen, setIsConvertOpen] = useState(false);
   const [selectedContactHistory, setSelectedContactHistory] = useState<ContactRecord | null>(null);
+  const [selectedContactConvert, setSelectedContactConvert] = useState<ContactRecord | null>(null);
   const [editingContact, setEditingContact] = useState<ContactRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
@@ -101,7 +105,7 @@ const Contatos = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('contacts')
-        .select('*')
+        .select('id, full_name, email, phone, contact_type, notes, tags, created_at, guardian_id')
         .order('full_name');
       
       if (error) throw error;
@@ -351,6 +355,12 @@ const Contatos = () => {
     setIsHistoryOpen(true);
   };
 
+  // Convert to guardian
+  const handleConvertToGuardian = (contact: ContactRecord) => {
+    setSelectedContactConvert(contact);
+    setIsConvertOpen(true);
+  };
+
   // Fetch conversation history for selected contact
   const { data: contactConversations = [] } = useQuery({
     queryKey: ['contact-conversations', selectedContactHistory?.id],
@@ -556,6 +566,12 @@ const Contatos = () => {
                             <History className="mr-2 h-4 w-4" />
                             Ver histórico
                           </DropdownMenuItem>
+                          {contact.contact_type !== 'guardian' && !contact.guardian_id && (
+                            <DropdownMenuItem onClick={() => handleConvertToGuardian(contact)}>
+                              <Users className="mr-2 h-4 w-4" />
+                              Converter em Responsável
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -853,6 +869,14 @@ const Contatos = () => {
           }
         }}
         itemLabel="contatos"
+      />
+
+      {/* Convert to Guardian Modal */}
+      <ConvertToGuardianModal
+        open={isConvertOpen}
+        onOpenChange={setIsConvertOpen}
+        contact={selectedContactConvert}
+        onSuccess={() => setSelectedContactConvert(null)}
       />
     </div>
   );
