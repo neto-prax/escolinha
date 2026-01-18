@@ -1477,6 +1477,45 @@ export type Database = {
           },
         ]
       }
+      platform_plans: {
+        Row: {
+          created_at: string
+          description: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          max_students: number | null
+          min_students: number | null
+          name: string
+          price_per_student: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_students?: number | null
+          min_students?: number | null
+          name: string
+          price_per_student?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_students?: number | null
+          min_students?: number | null
+          name?: string
+          price_per_student?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1589,6 +1628,70 @@ export type Database = {
             columns: ["sector_id"]
             isOneToOne: false
             referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      school_subscriptions: {
+        Row: {
+          billing_day: number | null
+          created_at: string
+          custom_price_per_student: number | null
+          expires_at: string | null
+          id: string
+          notes: string | null
+          plan_id: string | null
+          school_id: string
+          started_at: string | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_day?: number | null
+          created_at?: string
+          custom_price_per_student?: number | null
+          expires_at?: string | null
+          id?: string
+          notes?: string | null
+          plan_id?: string | null
+          school_id: string
+          started_at?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_day?: number | null
+          created_at?: string
+          custom_price_per_student?: number | null
+          expires_at?: string | null
+          id?: string
+          notes?: string | null
+          plan_id?: string | null
+          school_id?: string
+          started_at?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "platform_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_subscriptions_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: true
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_subscriptions_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: true
+            referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
         ]
@@ -1817,6 +1920,82 @@ export type Database = {
             columns: ["school_id"]
             isOneToOne: false
             referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_invoices: {
+        Row: {
+          created_at: string
+          due_date: string
+          id: string
+          notes: string | null
+          paid_at: string | null
+          payment_method: string | null
+          payment_reference: string | null
+          price_per_student: number
+          reference_month: string
+          school_id: string
+          status: string | null
+          student_count: number
+          subscription_id: string | null
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          due_date: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          price_per_student: number
+          reference_month: string
+          school_id: string
+          status?: string | null
+          student_count?: number
+          subscription_id?: string | null
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          due_date?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          price_per_student?: number
+          reference_month?: string
+          school_id?: string
+          status?: string | null
+          student_count?: number
+          subscription_id?: string | null
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_invoices_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_invoices_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "school_subscriptions"
             referencedColumns: ["id"]
           },
         ]
