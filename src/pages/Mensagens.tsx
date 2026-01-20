@@ -226,6 +226,7 @@ const Mensagens = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
       setSelectedConversation(null);
+      setTicketFilter('resolved');
       toast.success('Todas as conversas foram encerradas');
     },
     onError: (error) => {
