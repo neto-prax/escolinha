@@ -11,9 +11,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Plus, User, MessageSquare, Loader2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Search, Plus, User, MessageSquare, Loader2, Trash2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -186,6 +197,42 @@ const Mensagens = () => {
   // Mutations
   const sendMessage = useSendMessage();
   const updateStatus = useUpdateConversationStatus();
+  const queryClient = useQueryClient();
+
+  // Delete all conversations mutation
+  const deleteAllConversations = useMutation({
+    mutationFn: async () => {
+      if (!profile?.school_id) throw new Error('Escola não encontrada');
+
+      // First delete all messages from conversations
+      const conversationIds = rawConversations.map(c => c.id);
+      if (conversationIds.length > 0) {
+        const { error: messagesError } = await supabase
+          .from('whatsapp_messages')
+          .delete()
+          .in('conversation_id', conversationIds);
+        
+        if (messagesError) throw messagesError;
+      }
+
+      // Then delete all conversations
+      const { error } = await supabase
+        .from('whatsapp_conversations')
+        .delete()
+        .eq('school_id', profile.school_id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
+      setSelectedConversation(null);
+      toast.success('Todas as conversas foram encerradas');
+    },
+    onError: (error) => {
+      console.error('Error deleting conversations:', error);
+      toast.error('Erro ao encerrar conversas');
+    },
+  });
 
   const filteredConversations = conversationsList.filter((c) => {
     const matchesType = selectedContactType === 'all' || c.contact_type === selectedContactType;
@@ -435,10 +482,44 @@ const Mensagens = () => {
   return (
     <div className="space-y-6">
       <PageHeader title="Mensagens" description="Central de mensagens WhatsApp por setor">
-        <Button onClick={() => setNewConversationModalOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Conversa
-        </Button>
+        <div className="flex gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={conversationsList.length === 0}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Encerrar Todas
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Encerrar todas as conversas?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação irá excluir permanentemente todas as {conversationsList.length} conversas e suas mensagens. Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteAllConversations.mutate()}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleteAllConversations.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Excluindo...
+                    </>
+                  ) : (
+                    'Sim, excluir tudo'
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button onClick={() => setNewConversationModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Conversa
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-3" style={{ height: 'calc(100vh - 180px)' }}>
