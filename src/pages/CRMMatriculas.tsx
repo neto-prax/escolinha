@@ -2,7 +2,6 @@ import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatCard } from "@/components/ui/stat-card";
 import {
   Select,
@@ -31,132 +30,14 @@ import {
   UserPlus,
   UserCheck,
   UserX,
-  Filter,
   Download,
   LayoutGrid,
   List,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
-
-// Mock data
-const mockSectors = [
-  { id: '1', name: 'Secretaria' },
-  { id: '2', name: 'Comercial' },
-];
-
-const mockLeads: Lead[] = [
-  {
-    id: '1',
-    guardian_name: 'Maria Fernanda Costa',
-    guardian_phone: '5511999999999',
-    guardian_email: 'maria@email.com',
-    student_name: 'Pedro Costa',
-    student_grade: '1º Ano',
-    status: 'new',
-    source: 'Site',
-    interest_level: 'high',
-    next_follow_up: new Date(Date.now() + 86400000).toISOString(),
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: '2',
-    guardian_name: 'João Silva',
-    guardian_phone: '5511988888888',
-    student_name: 'Ana Silva',
-    student_grade: '3º Ano',
-    status: 'contacted',
-    source: 'Indicação',
-    interest_level: 'medium',
-    next_follow_up: new Date(Date.now() + 172800000).toISOString(),
-    created_at: new Date(Date.now() - 172800000).toISOString(),
-  },
-  {
-    id: '3',
-    guardian_name: 'Carla Oliveira',
-    guardian_phone: '5511977777777',
-    guardian_email: 'carla@email.com',
-    student_name: 'Lucas Oliveira',
-    student_grade: 'Maternal II',
-    status: 'visit_scheduled',
-    source: 'Redes Sociais',
-    interest_level: 'high',
-    next_follow_up: new Date(Date.now() + 259200000).toISOString(),
-    created_at: new Date(Date.now() - 259200000).toISOString(),
-  },
-  {
-    id: '4',
-    guardian_name: 'Roberto Santos',
-    guardian_phone: '5511966666666',
-    student_name: 'Julia Santos',
-    student_grade: '5º Ano',
-    status: 'visited',
-    source: 'Google',
-    interest_level: 'high',
-    created_at: new Date(Date.now() - 345600000).toISOString(),
-  },
-  {
-    id: '5',
-    guardian_name: 'Ana Paula Lima',
-    guardian_phone: '5511955555555',
-    student_name: 'Gabriel Lima',
-    student_grade: '2º Ano',
-    status: 'proposal_sent',
-    source: 'Indicação',
-    interest_level: 'medium',
-    created_at: new Date(Date.now() - 432000000).toISOString(),
-  },
-  {
-    id: '6',
-    guardian_name: 'Fernando Alves',
-    guardian_phone: '5511944444444',
-    student_name: 'Marina Alves',
-    student_grade: 'Pré II',
-    status: 'negotiating',
-    source: 'Site',
-    interest_level: 'high',
-    created_at: new Date(Date.now() - 518400000).toISOString(),
-  },
-  {
-    id: '7',
-    guardian_name: 'Patricia Mendes',
-    guardian_phone: '5511933333333',
-    student_name: 'Thiago Mendes',
-    student_grade: '4º Ano',
-    status: 'enrolled',
-    source: 'Evento',
-    interest_level: 'high',
-    created_at: new Date(Date.now() - 604800000).toISOString(),
-  },
-  {
-    id: '8',
-    guardian_name: 'Ricardo Souza',
-    guardian_phone: '5511922222222',
-    student_name: 'Beatriz Souza',
-    student_grade: '1º Ano',
-    status: 'lost',
-    source: 'Google',
-    interest_level: 'low',
-    created_at: new Date(Date.now() - 691200000).toISOString(),
-  },
-];
-
-const mockActivities = [
-  {
-    id: '1',
-    activity_type: 'note',
-    description: 'Responsável interessado em matrícula para 2025. Agendada visita para próxima semana.',
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-    user_name: 'Ana Secretaria',
-  },
-  {
-    id: '2',
-    activity_type: 'call',
-    description: 'Primeiro contato por telefone. Responsável quer conhecer a estrutura.',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    user_name: 'Ana Secretaria',
-  },
-];
+import { useCRMLeads, CRMLead } from "@/hooks/useCRMLeads";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   new: { label: 'Novo', color: 'bg-blue-500' },
@@ -169,14 +50,43 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   lost: { label: 'Perdido', color: 'bg-gray-500' },
 };
 
+// Convert CRMLead to Lead format for components
+const convertToLead = (crmLead: CRMLead): Lead => ({
+  id: crmLead.id,
+  guardian_name: crmLead.guardian_name,
+  guardian_phone: crmLead.guardian_phone,
+  guardian_email: crmLead.guardian_email || undefined,
+  student_name: crmLead.student_name,
+  student_grade: crmLead.student_grade || undefined,
+  status: crmLead.status,
+  source: crmLead.source || undefined,
+  interest_level: crmLead.interest_level as 'high' | 'medium' | 'low' | undefined,
+  next_follow_up: crmLead.next_follow_up || undefined,
+  created_at: crmLead.created_at,
+});
+
 export default function CRMMatriculas() {
   const navigate = useNavigate();
-  const [leads, setLeads] = useState<Lead[]>(mockLeads);
+  const {
+    leads: crmLeads,
+    sectors,
+    isLoading,
+    createLead,
+    updateLead,
+    addActivity,
+    convertToEnrollment,
+    getActivitiesForLead,
+    isCreating,
+  } = useCRMLeads();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showNewLead, setShowNewLead] = useState(false);
+
+  // Convert CRM leads to Lead format
+  const leads = crmLeads.map(convertToLead);
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch =
@@ -197,51 +107,76 @@ export default function CRMMatriculas() {
   };
 
   const handleStatusChange = (leadId: string, newStatus: string) => {
-    setLeads(prev =>
-      prev.map(l =>
-        l.id === leadId ? { ...l, status: newStatus } : l
-      )
-    );
+    updateLead({ id: leadId, data: { status: newStatus } });
+    // Update local state for immediate feedback
+    if (selectedLead?.id === leadId) {
+      setSelectedLead({ ...selectedLead, status: newStatus });
+    }
   };
 
   const handleAddActivity = (type: string, description: string) => {
-    // Would save to database
-    console.log('Adding activity:', type, description);
+    if (selectedLead) {
+      addActivity({ leadId: selectedLead.id, type, description });
+    }
   };
 
   const handleUpdateLead = (data: Partial<Lead>) => {
     if (selectedLead) {
-      setLeads(prev =>
-        prev.map(l =>
-          l.id === selectedLead.id ? { ...l, ...data } : l
-        )
-      );
-      setSelectedLead(prev => prev ? { ...prev, ...data } : null);
+      updateLead({ 
+        id: selectedLead.id, 
+        data: {
+          next_follow_up: data.next_follow_up,
+          status: data.status,
+        } 
+      });
+      setSelectedLead({ ...selectedLead, ...data });
     }
   };
 
   const handleConvertToEnrollment = () => {
     if (selectedLead) {
-      handleStatusChange(selectedLead.id, 'enrolled');
+      convertToEnrollment(selectedLead.id);
       setSelectedLead(null);
-      // Would also create student, guardian, and enrollment records
     }
   };
 
   const handleNewLead = (data: any) => {
-    const newLead: Lead = {
-      id: Date.now().toString(),
-      ...data,
-      status: 'new',
-      created_at: new Date().toISOString(),
-    };
-    setLeads(prev => [newLead, ...prev]);
+    createLead({
+      guardian_name: data.guardian_name,
+      guardian_phone: data.guardian_phone,
+      guardian_email: data.guardian_email,
+      student_name: data.student_name,
+      student_grade: data.student_grade,
+      source: data.source,
+      interest_level: data.interest_level,
+      notes: data.notes,
+      sector_id: data.sector_id,
+    });
+    setShowNewLead(false);
   };
 
   const handleMessage = (lead: Lead) => {
-    // Navigate to messages with the lead
     navigate('/app/mensagens');
   };
+
+  // Get activities for selected lead
+  const selectedLeadActivities = selectedLead 
+    ? getActivitiesForLead(selectedLead.id).map(a => ({
+        id: a.id,
+        activity_type: a.activity_type,
+        description: a.description || '',
+        created_at: a.created_at,
+        user_name: a.user_name || 'Usuário',
+      }))
+    : [];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -249,7 +184,7 @@ export default function CRMMatriculas() {
         title="CRM de Matrículas"
         description="Gerencie leads e funil de matrículas"
       >
-        <Button onClick={() => setShowNewLead(true)}>
+        <Button onClick={() => setShowNewLead(true)} disabled={isCreating}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Lead
         </Button>
@@ -414,7 +349,7 @@ export default function CRMMatriculas() {
         open={!!selectedLead}
         onClose={() => setSelectedLead(null)}
         lead={selectedLead}
-        activities={mockActivities}
+        activities={selectedLeadActivities}
         onAddActivity={handleAddActivity}
         onUpdateLead={handleUpdateLead}
         onConvertToEnrollment={handleConvertToEnrollment}
@@ -425,7 +360,7 @@ export default function CRMMatriculas() {
         open={showNewLead}
         onClose={() => setShowNewLead(false)}
         onSubmit={handleNewLead}
-        sectors={mockSectors}
+        sectors={sectors}
       />
     </div>
   );

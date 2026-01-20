@@ -52,17 +52,19 @@ interface ContactRecord {
   email: string | null;
   phone: string;
   contact_type: string;
+  contact_types: string[];
   notes: string | null;
   tags: string[] | null;
   created_at: string | null;
   guardian_id: string | null;
+  lead_id: string | null;
 }
 
 interface ContactFormData {
   full_name: string;
   email: string;
   phone: string;
-  contact_type: string;
+  contact_types: string[];
   notes: string;
 }
 
@@ -97,7 +99,7 @@ const Contatos = () => {
     full_name: '',
     email: '',
     phone: '',
-    contact_type: 'other',
+    contact_types: ['other'],
     notes: '',
   });
   const [importData, setImportData] = useState<ContactFormData[]>([]);
@@ -108,11 +110,14 @@ const Contatos = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, full_name, email, phone, contact_type, notes, tags, created_at, guardian_id')
+        .select('id, full_name, email, phone, contact_type, contact_types, notes, tags, created_at, guardian_id, lead_id')
         .order('full_name');
       
       if (error) throw error;
-      return data as ContactRecord[];
+      return (data || []).map(c => ({
+        ...c,
+        contact_types: c.contact_types || [c.contact_type || 'other'],
+      })) as ContactRecord[];
     },
     enabled: !!profile?.school_id,
   });
@@ -128,7 +133,8 @@ const Contatos = () => {
           full_name: data.full_name,
           email: data.email || null,
           phone: data.phone,
-          contact_type: data.contact_type,
+          contact_type: data.contact_types[0] || 'other',
+          contact_types: data.contact_types,
           notes: data.notes || null,
         });
       
@@ -154,7 +160,8 @@ const Contatos = () => {
           full_name: data.full_name,
           email: data.email || null,
           phone: data.phone,
-          contact_type: data.contact_type,
+          contact_type: data.contact_types[0] || 'other',
+          contact_types: data.contact_types,
           notes: data.notes || null,
         })
         .eq('id', id);
@@ -180,7 +187,8 @@ const Contatos = () => {
         full_name: data.full_name,
         email: data.email || null,
         phone: data.phone,
-        contact_type: data.contact_type || 'other',
+        contact_type: data.contact_types[0] || 'other',
+        contact_types: data.contact_types || ['other'],
         notes: data.notes || null,
       }));
 
@@ -209,7 +217,7 @@ const Contatos = () => {
       full_name: '',
       email: '',
       phone: '',
-      contact_type: 'other',
+      contact_types: ['other'],
       notes: '',
     });
   };
@@ -220,7 +228,7 @@ const Contatos = () => {
       full_name: contact.full_name,
       email: contact.email || '',
       phone: contact.phone,
-      contact_type: contact.contact_type,
+      contact_types: contact.contact_types || [contact.contact_type || 'other'],
       notes: contact.notes || '',
     });
     setIsFormOpen(true);
@@ -270,13 +278,16 @@ const Contatos = () => {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as Record<string, string>[];
 
-        const parsedData: ContactFormData[] = jsonData.map(row => ({
-          full_name: row['Nome'] || row['nome'] || row['full_name'] || '',
-          email: row['Email'] || row['email'] || row['E-mail'] || '',
-          phone: row['Telefone'] || row['telefone'] || row['phone'] || row['Celular'] || '',
-          contact_type: row['Tipo'] || row['tipo'] || row['contact_type'] || 'other',
-          notes: row['Observações'] || row['observacoes'] || row['notes'] || '',
-        })).filter(row => row.full_name && row.phone);
+        const parsedData: ContactFormData[] = jsonData.map(row => {
+          const typeValue = row['Tipo'] || row['tipo'] || row['contact_type'] || 'other';
+          return {
+            full_name: row['Nome'] || row['nome'] || row['full_name'] || '',
+            email: row['Email'] || row['email'] || row['E-mail'] || '',
+            phone: row['Telefone'] || row['telefone'] || row['phone'] || row['Celular'] || '',
+            contact_types: [typeValue],
+            notes: row['Observações'] || row['observacoes'] || row['notes'] || '',
+          };
+        }).filter(row => row.full_name && row.phone);
 
         if (parsedData.length === 0) {
           toast.error('Nenhum registro válido encontrado no arquivo');
@@ -637,8 +648,8 @@ const Contatos = () => {
               <div className="space-y-2">
                 <Label htmlFor="contact_type">Tipo</Label>
                 <Select
-                  value={formData.contact_type}
-                  onValueChange={(value) => setFormData({ ...formData, contact_type: value })}
+                  value={formData.contact_types[0] || 'other'}
+                  onValueChange={(value) => setFormData({ ...formData, contact_types: [value] })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
@@ -754,7 +765,7 @@ const Contatos = () => {
                           <TableCell>{row.full_name}</TableCell>
                           <TableCell>{row.phone}</TableCell>
                           <TableCell>{row.email || '-'}</TableCell>
-                          <TableCell>{contactTypeLabels[row.contact_type] || row.contact_type}</TableCell>
+                          <TableCell>{contactTypeLabels[row.contact_types[0]] || row.contact_types[0]}</TableCell>
                         </TableRow>
                       ))}
                       {importData.length > 10 && (
