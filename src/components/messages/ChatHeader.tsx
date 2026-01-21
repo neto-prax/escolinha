@@ -170,28 +170,17 @@ export function ChatHeader({
           </Button>
         )}
 
-        {/* Show Resolve/Close buttons if ticket is accepted (has assigned_to) */}
+        {/* Show Close button if ticket is accepted (has assigned_to) */}
         {conversation.assigned_to && conversation.ticket_status !== 'closed' && conversation.ticket_status !== 'resolved' && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-green-600 border-green-300 hover:bg-green-50"
-              onClick={() => onChangeStatus('resolved')}
-            >
-              <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
-              Resolver
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={onCloseTicket}
-            >
-              <XCircle className="h-3.5 w-3.5 mr-1.5" />
-              Fechar
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+            onClick={onCloseTicket}
+          >
+            <XCircle className="h-3.5 w-3.5 mr-1.5" />
+            Encerrar
+          </Button>
         )}
 
         {conversation.ticket_status === 'resolved' && (
@@ -212,7 +201,7 @@ export function ChatHeader({
               onClick={onCloseTicket}
             >
               <XCircle className="h-3.5 w-3.5 mr-1.5" />
-              Fechar
+              Encerrar
             </Button>
           </>
         )}

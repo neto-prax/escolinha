@@ -689,12 +689,18 @@ const Mensagens = () => {
 
               {/* Input area - fixed at bottom */}
               <div className="flex-shrink-0 border-t bg-background">
-                <MessageInput
-                  onSend={handleSendMessage}
-                  replyTo={replyingTo}
-                  onCancelReply={() => setReplyingTo(null)}
-                  disabled={sendMessage.isPending}
-                />
+                {ticketFilter === 'pending' ? (
+                  <div className="p-4 text-center text-muted-foreground text-sm">
+                    Aceite o ticket para enviar mensagens
+                  </div>
+                ) : (
+                  <MessageInput
+                    onSend={handleSendMessage}
+                    replyTo={replyingTo}
+                    onCancelReply={() => setReplyingTo(null)}
+                    disabled={sendMessage.isPending}
+                  />
+                )}
               </div>
             </div>
           ) : (
