@@ -38,6 +38,7 @@ import { LinkStudentModal } from '@/components/messages/LinkStudentModal';
 import { ChangeContactTypeModal, ContactType } from '@/components/messages/ChangeContactTypeModal';
 import { NewConversationModal } from '@/components/messages/NewConversationModal';
 import { TransferSectorModal } from '@/components/messages/TransferSectorModal';
+import { ConversationHistoryModal } from '@/components/messages/ConversationHistoryModal';
 import {
   useWhatsAppConversations,
   useWhatsAppMessages,
@@ -63,6 +64,7 @@ const Mensagens = () => {
   const [changeTypeModalOpen, setChangeTypeModalOpen] = useState(false);
   const [newConversationModalOpen, setNewConversationModalOpen] = useState(false);
   const [transferSectorModalOpen, setTransferSectorModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -459,6 +461,80 @@ const Mensagens = () => {
     }
   };
 
+  // Generate conversation history from available data
+  const getConversationHistory = () => {
+    if (!selectedConversation) return [];
+    
+    const conversation = rawConversations.find(c => c.id === selectedConversation);
+    if (!conversation) return [];
+
+    const history: Array<{
+      id: string;
+      type: 'created' | 'accepted' | 'transferred' | 'resolved' | 'closed' | 'reopened' | 'message';
+      description: string;
+      timestamp: string;
+      user?: string;
+    }> = [];
+
+    // Conversation created
+    if (conversation.created_at) {
+      history.push({
+        id: 'created',
+        type: 'created',
+        description: `Conversa iniciada com ${conversation.contact_name || conversation.phone}`,
+        timestamp: conversation.created_at,
+      });
+    }
+
+    // First message timestamp as indicator
+    if (messages.length > 0) {
+      const firstMessage = messages[0];
+      if (firstMessage.direction === 'incoming') {
+        history.push({
+          id: 'first-message',
+          type: 'message',
+          description: 'Primeira mensagem recebida',
+          timestamp: firstMessage.created_at,
+        });
+      }
+    }
+
+    // Ticket accepted (has assigned_to)
+    if (conversation.assigned_to) {
+      history.push({
+        id: 'accepted',
+        type: 'accepted',
+        description: 'Ticket aceito por um atendente',
+        timestamp: conversation.updated_at || conversation.created_at,
+      });
+    }
+
+    // Resolution
+    if (conversation.resolution_summary) {
+      history.push({
+        id: 'resolved',
+        type: 'resolved',
+        description: conversation.resolution_summary,
+        timestamp: conversation.closed_at || conversation.updated_at || '',
+      });
+    }
+
+    // Closed
+    if (conversation.ticket_status === 'closed' && conversation.closed_at) {
+      history.push({
+        id: 'closed',
+        type: 'closed',
+        description: 'Ticket encerrado',
+        timestamp: conversation.closed_at,
+      });
+    }
+
+    // Sort by timestamp
+    return history.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+  };
+
   const handleCreateNewConversation = async (data: {
     name: string;
     phone: string;
@@ -686,6 +762,7 @@ const Mensagens = () => {
                   onAcceptTicket={handleAcceptTicket}
                   onViewContact={handleViewContact}
                   onTransferSector={() => setTransferSectorModalOpen(true)}
+                  onViewHistory={() => setHistoryModalOpen(true)}
                 />
               </div>
 
@@ -789,6 +866,13 @@ const Mensagens = () => {
         sectors={sectors.map((s) => ({ id: s.id, name: s.name, description: s.description }))}
         currentSectorId={rawConversations.find(c => c.id === selectedConversation)?.sector_id || undefined}
         contactName={activeConversation?.contact_name || ''}
+      />
+
+      <ConversationHistoryModal
+        open={historyModalOpen}
+        onClose={() => setHistoryModalOpen(false)}
+        contactName={activeConversation?.contact_name || ''}
+        history={getConversationHistory()}
       />
     </div>
   );
