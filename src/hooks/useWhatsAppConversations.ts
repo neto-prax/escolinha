@@ -24,6 +24,7 @@ export interface WhatsAppConversation {
     id: string;
     full_name: string;
     contact_type: string;
+    contact_types: string[] | null;
     linked_student_ids: string[] | null;
   } | null;
   sector?: {

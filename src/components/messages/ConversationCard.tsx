@@ -17,6 +17,7 @@ export interface Conversation {
   phone: string;
   avatar_url?: string;
   contact_type: 'lead' | 'guardian' | 'student' | 'staff' | 'other';
+  contact_types?: ('lead' | 'guardian' | 'student' | 'staff' | 'other')[];
   last_message?: string;
   last_message_at?: string;
   unread_count: number;
@@ -51,7 +52,9 @@ const ticketStatusIcons = {
 };
 
 export function ConversationCard({ conversation, isSelected, onClick }: ConversationCardProps) {
-  const typeConfig = contactTypeConfig[conversation.contact_type];
+  const contactTypes = conversation.contact_types || [conversation.contact_type];
+  const primaryType = contactTypes[0];
+  const typeConfig = contactTypeConfig[primaryType];
   const initials = conversation.contact_name
     .split(' ')
     .map(n => n[0])
@@ -102,9 +105,19 @@ export function ConversationCard({ conversation, isSelected, onClick }: Conversa
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-medium truncate">{conversation.contact_name}</span>
-            <Badge variant="secondary" className={cn("text-[10px] px-1.5 py-0 text-white", typeConfig.color)}>
-              {typeConfig.label}
-            </Badge>
+            {contactTypes.slice(0, 2).map((type) => {
+              const config = contactTypeConfig[type] || contactTypeConfig.other;
+              return (
+                <Badge key={type} variant="secondary" className={cn("text-[10px] px-1.5 py-0 text-white", config.color)}>
+                  {config.label}
+                </Badge>
+              );
+            })}
+            {contactTypes.length > 2 && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 text-white bg-gray-500">
+                +{contactTypes.length - 2}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {ticketStatusIcons[conversation.ticket_status]}
