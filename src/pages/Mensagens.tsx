@@ -47,13 +47,14 @@ import { toast } from 'sonner';
 import { getStudentsBillingStatus } from '@/hooks/useGuardianContact';
 
 const Mensagens = () => {
-  const { profile } = useAuth();
+  const { profile, sectors: userSectors, hasRole } = useAuth();
   const navigate = useNavigate();
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
-  const [selectedSector, setSelectedSector] = useState<string>('all');
+  const [selectedSector, setSelectedSector] = useState<string>('');
   const [selectedContactType, setSelectedContactType] = useState<string>('all');
   const [ticketFilter, setTicketFilter] = useState<string>('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sectorInitialized, setSectorInitialized] = useState(false);
 
   // Modal states
   const [ticketCloseModalOpen, setTicketCloseModalOpen] = useState(false);
@@ -77,6 +78,27 @@ const Mensagens = () => {
     },
     enabled: !!profile?.school_id,
   });
+
+  // Initialize sector filter based on user's sectors
+  useEffect(() => {
+    if (sectorInitialized || sectors.length === 0) return;
+
+    const isDirector = hasRole('director');
+    const userSectorIds = userSectors.map(s => s.id);
+    const hasAllSectors = sectors.every(s => userSectorIds.includes(s.id));
+
+    // Select 'all' only if director or user has all sectors
+    if (isDirector || hasAllSectors) {
+      setSelectedSector('all');
+    } else if (userSectorIds.length > 0) {
+      // Default to first user sector
+      setSelectedSector(userSectorIds[0]);
+    } else {
+      setSelectedSector('all');
+    }
+
+    setSectorInitialized(true);
+  }, [sectors, userSectors, hasRole, sectorInitialized]);
 
   // Fetch students for linking (with class info)
   const { data: students = [] } = useQuery({
