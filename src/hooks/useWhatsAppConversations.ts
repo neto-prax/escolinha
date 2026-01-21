@@ -19,6 +19,8 @@ export interface WhatsAppConversation {
   resolution_summary: string | null;
   opened_at: string | null;
   closed_at: string | null;
+  created_at: string;
+  updated_at: string;
   tags: string[];
   contact?: {
     id: string;

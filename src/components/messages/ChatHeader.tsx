@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Contact,
   ArrowRightLeft,
+  History,
 } from "lucide-react";
 import { Conversation } from "./ConversationCard";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ interface ChatHeaderProps {
   onAcceptTicket: () => void;
   onViewContact?: () => void;
   onTransferSector?: () => void;
+  onViewHistory?: () => void;
 }
 
 const contactTypeConfig = {
@@ -69,6 +71,7 @@ export function ChatHeader({
   onAcceptTicket,
   onViewContact,
   onTransferSector,
+  onViewHistory,
 }: ChatHeaderProps) {
   const contactTypes = conversation.contact_types || [conversation.contact_type];
   const priority = priorityConfig[conversation.priority];
@@ -250,6 +253,12 @@ export function ChatHeader({
               <DropdownMenuItem onClick={onTransferSector}>
                 <ArrowRightLeft className="h-4 w-4 mr-2" />
                 Transferir para outro setor
+              </DropdownMenuItem>
+            )}
+            {onViewHistory && (
+              <DropdownMenuItem onClick={onViewHistory}>
+                <History className="h-4 w-4 mr-2" />
+                Ver histórico
               </DropdownMenuItem>
             )}
 
