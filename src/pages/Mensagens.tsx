@@ -37,6 +37,7 @@ import { TicketCloseModal } from '@/components/messages/TicketCloseModal';
 import { LinkStudentModal } from '@/components/messages/LinkStudentModal';
 import { ChangeContactTypeModal, ContactType } from '@/components/messages/ChangeContactTypeModal';
 import { NewConversationModal } from '@/components/messages/NewConversationModal';
+import { TransferSectorModal } from '@/components/messages/TransferSectorModal';
 import {
   useWhatsAppConversations,
   useWhatsAppMessages,
@@ -61,6 +62,7 @@ const Mensagens = () => {
   const [linkStudentModalOpen, setLinkStudentModalOpen] = useState(false);
   const [changeTypeModalOpen, setChangeTypeModalOpen] = useState(false);
   const [newConversationModalOpen, setNewConversationModalOpen] = useState(false);
+  const [transferSectorModalOpen, setTransferSectorModalOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -426,6 +428,37 @@ const Mensagens = () => {
     }
   };
 
+  const handleTransferSector = async (sectorId: string, reason: string) => {
+    if (!selectedConversation) return;
+    
+    try {
+      const updates: Record<string, unknown> = {
+        sector_id: sectorId,
+        assigned_to: null, // Remove assignment so it goes to pending
+      };
+
+      const { error } = await supabase
+        .from('whatsapp_conversations')
+        .update(updates)
+        .eq('id', selectedConversation);
+
+      if (error) throw error;
+
+      // Add a system note about transfer if there's a reason
+      if (reason) {
+        const targetSector = sectors.find(s => s.id === sectorId);
+        console.log(`Ticket transferido para ${targetSector?.name || 'outro setor'}: ${reason}`);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
+      toast.success('Ticket transferido para outro setor');
+      setTransferSectorModalOpen(false);
+    } catch (error) {
+      console.error('Error transferring ticket:', error);
+      toast.error('Erro ao transferir ticket');
+    }
+  };
+
   const handleCreateNewConversation = async (data: {
     name: string;
     phone: string;
@@ -652,6 +685,7 @@ const Mensagens = () => {
                   onChangeStatus={handleChangeStatus}
                   onAcceptTicket={handleAcceptTicket}
                   onViewContact={handleViewContact}
+                  onTransferSector={() => setTransferSectorModalOpen(true)}
                 />
               </div>
 
@@ -746,6 +780,15 @@ const Mensagens = () => {
         onSelectExisting={handleSelectExistingContact}
         existingContacts={existingContacts}
         sectors={sectors.map((s) => ({ id: s.id, name: s.name }))}
+      />
+
+      <TransferSectorModal
+        open={transferSectorModalOpen}
+        onClose={() => setTransferSectorModalOpen(false)}
+        onConfirm={handleTransferSector}
+        sectors={sectors.map((s) => ({ id: s.id, name: s.name, description: s.description }))}
+        currentSectorId={rawConversations.find(c => c.id === selectedConversation)?.sector_id || undefined}
+        contactName={activeConversation?.contact_name || ''}
       />
     </div>
   );
