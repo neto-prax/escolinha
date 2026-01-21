@@ -20,6 +20,7 @@ import {
   Play,
   RotateCcw,
   Contact,
+  ArrowRightLeft,
 } from "lucide-react";
 import { Conversation } from "./ConversationCard";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ interface ChatHeaderProps {
   onChangeStatus: (status: 'open' | 'pending' | 'resolved' | 'closed') => void;
   onAcceptTicket: () => void;
   onViewContact?: () => void;
+  onTransferSector?: () => void;
 }
 
 const contactTypeConfig = {
@@ -66,6 +68,7 @@ export function ChatHeader({
   onChangeStatus,
   onAcceptTicket,
   onViewContact,
+  onTransferSector,
 }: ChatHeaderProps) {
   const contactTypes = conversation.contact_types || [conversation.contact_type];
   const priority = priorityConfig[conversation.priority];
@@ -243,6 +246,12 @@ export function ChatHeader({
               <Tag className="h-4 w-4 mr-2" />
               Alterar tipo
             </DropdownMenuItem>
+            {onTransferSector && conversation.ticket_status !== 'closed' && (
+              <DropdownMenuItem onClick={onTransferSector}>
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                Transferir para outro setor
+              </DropdownMenuItem>
+            )}
 
             <DropdownMenuSeparator />
 
