@@ -35,7 +35,7 @@ import { MessageInput } from '@/components/messages/MessageInput';
 import { SystemMessage } from '@/components/messages/SystemMessage';
 import { TicketCloseModal } from '@/components/messages/TicketCloseModal';
 import { LinkStudentModal } from '@/components/messages/LinkStudentModal';
-import { ChangeContactTypeModal } from '@/components/messages/ChangeContactTypeModal';
+import { ChangeContactTypeModal, ContactType } from '@/components/messages/ChangeContactTypeModal';
 import { NewConversationModal } from '@/components/messages/NewConversationModal';
 import {
   useWhatsAppConversations,
@@ -181,6 +181,9 @@ const Mensagens = () => {
       };
     });
 
+    const contactTypes = (conv.contact?.contact_types as string[]) || 
+      (conv.contact?.contact_type ? [conv.contact.contact_type] : ['other']);
+
     return {
       id: conv.id,
       contact_id: conv.contact_id,
@@ -190,7 +193,8 @@ const Mensagens = () => {
       last_message_at: conv.last_message_at || undefined,
       unread_count: conv.unread_count || 0,
       sector_name: conv.sector?.name,
-      contact_type: (conv.contact?.contact_type as 'lead' | 'guardian' | 'student' | 'staff' | 'other') || 'other',
+      contact_type: (contactTypes[0] as 'lead' | 'guardian' | 'student' | 'staff' | 'other') || 'other',
+      contact_types: contactTypes as ('lead' | 'guardian' | 'student' | 'staff' | 'other')[],
       ticket_status: (conv.ticket_status as 'open' | 'pending' | 'resolved' | 'closed') || 'open',
       priority: (conv.priority as 'low' | 'normal' | 'high' | 'urgent') || 'normal',
       linked_students: linkedStudents,
@@ -372,7 +376,7 @@ const Mensagens = () => {
     setLinkStudentModalOpen(false);
   };
 
-  const handleChangeContactType = async (newType: 'lead' | 'guardian' | 'student' | 'staff' | 'other') => {
+  const handleChangeContactTypes = async (newTypes: ContactType[]) => {
     if (!activeConversation) return;
     
     try {
@@ -384,14 +388,15 @@ const Mensagens = () => {
 
       const { error } = await supabase
         .from('contacts')
-        .update({ contact_type: newType })
+        .update({ contact_types: newTypes })
         .eq('id', conversation.contact_id);
 
       if (error) throw error;
-      toast.success('Tipo alterado');
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
+      toast.success('Tipos alterados');
     } catch (error) {
-      console.error('Error changing contact type:', error);
-      toast.error('Erro ao alterar tipo');
+      console.error('Error changing contact types:', error);
+      toast.error('Erro ao alterar tipos');
     }
     setChangeTypeModalOpen(false);
   };
@@ -723,8 +728,8 @@ const Mensagens = () => {
       <ChangeContactTypeModal
         open={changeTypeModalOpen}
         onClose={() => setChangeTypeModalOpen(false)}
-        onConfirm={handleChangeContactType}
-        currentType={activeConversation?.contact_type || 'other'}
+        onConfirm={handleChangeContactTypes}
+        currentTypes={activeConversation?.contact_types || ['other']}
         contactName={activeConversation?.contact_name || ''}
       />
 

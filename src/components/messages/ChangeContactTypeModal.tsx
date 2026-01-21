@@ -6,18 +6,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-type ContactType = 'lead' | 'guardian' | 'student' | 'staff' | 'other';
+export type ContactType = 'lead' | 'guardian' | 'student' | 'staff' | 'other';
 
 interface ChangeContactTypeModalProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: (type: ContactType) => void;
-  currentType: ContactType;
+  onConfirm: (types: ContactType[]) => void;
+  currentTypes: ContactType[];
   contactName: string;
 }
 
@@ -58,43 +57,65 @@ export function ChangeContactTypeModal({
   open,
   onClose,
   onConfirm,
-  currentType,
+  currentTypes,
   contactName,
 }: ChangeContactTypeModalProps) {
-  const [selectedType, setSelectedType] = useState<ContactType>(currentType);
+  const [selectedTypes, setSelectedTypes] = useState<ContactType[]>(currentTypes);
+
+  // Reset when modal opens with new data
+  useEffect(() => {
+    if (open) {
+      setSelectedTypes(currentTypes.length > 0 ? currentTypes : ['other']);
+    }
+  }, [open, currentTypes]);
+
+  const toggleType = (type: ContactType) => {
+    setSelectedTypes(prev => {
+      if (prev.includes(type)) {
+        // Don't allow removing the last type
+        if (prev.length === 1) return prev;
+        return prev.filter(t => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
+  };
 
   const handleConfirm = () => {
-    onConfirm(selectedType);
+    onConfirm(selectedTypes);
     onClose();
   };
+
+  const hasChanges = JSON.stringify(selectedTypes.sort()) !== JSON.stringify(currentTypes.sort());
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Alterar Tipo de Contato</DialogTitle>
+          <DialogTitle>Alterar Tipos de Contato</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-muted-foreground">
-            Altere o tipo do contato <strong>{contactName}</strong>.
+            Selecione os tipos do contato <strong>{contactName}</strong>. Um contato pode ter múltiplos tipos.
           </p>
 
-          <RadioGroup
-            value={selectedType}
-            onValueChange={(v) => setSelectedType(v as ContactType)}
-          >
+          <div className="space-y-2">
             {contactTypes.map(type => (
               <label
                 key={type.value}
                 className={cn(
                   "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                  selectedType === type.value
+                  selectedTypes.includes(type.value)
                     ? "border-primary bg-accent"
                     : "hover:bg-accent/50"
                 )}
               >
-                <RadioGroupItem value={type.value} className="mt-0.5" />
+                <Checkbox
+                  checked={selectedTypes.includes(type.value)}
+                  onCheckedChange={() => toggleType(type.value)}
+                  className="mt-0.5"
+                />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className={cn("w-2 h-2 rounded-full", type.color)} />
@@ -106,14 +127,14 @@ export function ChangeContactTypeModal({
                 </div>
               </label>
             ))}
-          </RadioGroup>
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={handleConfirm} disabled={selectedType === currentType}>
+          <Button onClick={handleConfirm} disabled={!hasChanges || selectedTypes.length === 0}>
             Confirmar
           </Button>
         </DialogFooter>

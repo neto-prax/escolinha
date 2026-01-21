@@ -67,7 +67,7 @@ export function ChatHeader({
   onAcceptTicket,
   onViewContact,
 }: ChatHeaderProps) {
-  const typeConfig = contactTypeConfig[conversation.contact_type];
+  const contactTypes = conversation.contact_types || [conversation.contact_type];
   const priority = priorityConfig[conversation.priority];
   const status = statusConfig[conversation.ticket_status];
   const StatusIcon = status.icon;
@@ -84,7 +84,7 @@ export function ChatHeader({
       <div className="flex items-center gap-3">
         <Avatar className="h-10 w-10">
           <AvatarImage src={conversation.avatar_url} />
-          <AvatarFallback className={cn("text-white", typeConfig.color)}>
+          <AvatarFallback className={cn("text-white", contactTypeConfig[contactTypes[0]]?.color || 'bg-gray-500')}>
             {initials}
           </AvatarFallback>
         </Avatar>
@@ -100,12 +100,18 @@ export function ChatHeader({
             >
               {conversation.contact_name}
             </h3>
-            <Badge
-              variant="secondary"
-              className={cn("text-[10px] px-1.5 py-0 text-white", typeConfig.color)}
-            >
-              {typeConfig.label}
-            </Badge>
+            {contactTypes.map((type) => {
+              const config = contactTypeConfig[type] || contactTypeConfig.other;
+              return (
+                <Badge
+                  key={type}
+                  variant="secondary"
+                  className={cn("text-[10px] px-1.5 py-0 text-white", config.color)}
+                >
+                  {config.label}
+                </Badge>
+              );
+            })}
             <div className={cn("flex items-center gap-1", status.color)}>
               <StatusIcon className="h-3.5 w-3.5" />
               <span className="text-xs">{status.label}</span>
