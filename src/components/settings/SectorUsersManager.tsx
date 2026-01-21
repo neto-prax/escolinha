@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,30 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Users, Plus, Trash2, Building2 } from 'lucide-react';
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Users, Building2, Search, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Sector {
@@ -48,16 +33,13 @@ interface UserSector {
   id: string;
   user_id: string;
   sector_id: string;
-  profile?: Profile;
-  sector?: Sector;
 }
 
 export function SectorUsersManager() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [selectedSector, setSelectedSector] = useState<string>('');
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pendingChanges, setPendingChanges] = useState<Record<string, boolean>>({});
 
   // Fetch sectors
   const { data: sectors = [] } = useQuery({
@@ -75,37 +57,9 @@ export function SectorUsersManager() {
     enabled: !!profile?.school_id,
   });
 
-  // Fetch user_sectors with profiles
-  const { data: userSectors = [], isLoading } = useQuery({
-    queryKey: ['user-sectors', profile?.school_id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('user_sectors')
-        .select(`
-          *,
-          sector:sectors(id, name, description)
-        `);
-
-      if (error) throw error;
-
-      // Fetch profiles separately
-      const userIds = data.map((us: UserSector) => us.user_id);
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url')
-        .in('id', userIds);
-
-      return data.map((us: UserSector) => ({
-        ...us,
-        profile: profiles?.find((p: Profile) => p.id === us.user_id),
-      })) as UserSector[];
-    },
-    enabled: !!profile?.school_id,
-  });
-
-  // Fetch available users (profiles) - only from the same school
-  const { data: availableUsers = [] } = useQuery({
-    queryKey: ['available-users', profile?.school_id],
+  // Fetch all users from the school
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['school-users', profile?.school_id],
     queryFn: async () => {
       if (!profile?.school_id) return [];
       
@@ -119,7 +73,21 @@ export function SectorUsersManager() {
       if (error) throw error;
       return data as Profile[];
     },
-    enabled: !!profile?.school_id && isAddOpen,
+    enabled: !!profile?.school_id,
+  });
+
+  // Fetch user_sectors
+  const { data: userSectors = [], isLoading } = useQuery({
+    queryKey: ['user-sectors', profile?.school_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_sectors')
+        .select('id, user_id, sector_id');
+
+      if (error) throw error;
+      return data as UserSector[];
+    },
+    enabled: !!profile?.school_id,
   });
 
   // Add user to sector
@@ -137,6 +105,9 @@ export function SectorUsersManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-sectors'] });
     },
+    onError: () => {
+      toast.error('Erro ao adicionar acesso');
+    },
   });
 
   // Remove user from sector
@@ -147,168 +118,215 @@ export function SectorUsersManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-sectors'] });
-      toast.success('Usuário removido do setor');
+    },
+    onError: () => {
+      toast.error('Erro ao remover acesso');
     },
   });
 
-  const handleAddUsers = async () => {
-    if (!selectedSector || selectedUsers.length === 0) return;
+  // Check if user has access to sector
+  const hasAccess = (userId: string, sectorId: string) => {
+    return userSectors.some(us => us.user_id === userId && us.sector_id === sectorId);
+  };
+
+  // Get user_sector id for removal
+  const getUserSectorId = (userId: string, sectorId: string) => {
+    return userSectors.find(us => us.user_id === userId && us.sector_id === sectorId)?.id;
+  };
+
+  // Handle toggle access
+  const handleToggleAccess = async (userId: string, sectorId: string, currentlyHasAccess: boolean) => {
+    const key = `${userId}-${sectorId}`;
+    setPendingChanges(prev => ({ ...prev, [key]: true }));
 
     try {
-      for (const userId of selectedUsers) {
-        await addUserToSector.mutateAsync({ userId, sectorId: selectedSector });
+      if (currentlyHasAccess) {
+        const userSectorId = getUserSectorId(userId, sectorId);
+        if (userSectorId) {
+          await removeUserFromSector.mutateAsync(userSectorId);
+        }
+      } else {
+        await addUserToSector.mutateAsync({ userId, sectorId });
       }
-      toast.success('Usuários adicionados ao setor');
-      setIsAddOpen(false);
-      setSelectedSector('');
-      setSelectedUsers([]);
-    } catch (error) {
-      toast.error('Erro ao adicionar usuários');
+    } finally {
+      setPendingChanges(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
     }
   };
 
-  // Group by sector
-  const groupedBySector = sectors.map(sector => ({
-    sector,
-    users: userSectors.filter(us => us.sector_id === sector.id),
-  }));
+  // Filter users based on search
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery.trim()) return allUsers;
+    const query = searchQuery.toLowerCase();
+    return allUsers.filter(user => 
+      user.full_name.toLowerCase().includes(query)
+    );
+  }, [allUsers, searchQuery]);
+
+  // Get user initials
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+  };
+
+  // Count users with access per sector
+  const getUserCountForSector = (sectorId: string) => {
+    return userSectors.filter(us => us.sector_id === sectorId).length;
+  };
+
+  // Toggle all users for a sector
+  const handleToggleAllForSector = async (sectorId: string, grantAccess: boolean) => {
+    const usersToProcess = filteredUsers.filter(user => {
+      const currentlyHasAccess = hasAccess(user.id, sectorId);
+      return grantAccess ? !currentlyHasAccess : currentlyHasAccess;
+    });
+
+    for (const user of usersToProcess) {
+      await handleToggleAccess(user.id, sectorId, !grantAccess);
+    }
+
+    toast.success(grantAccess ? 'Acesso concedido a todos' : 'Acesso removido de todos');
+  };
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Usuários por Setor
-              </CardTitle>
-              <CardDescription>Vincule usuários aos setores de atendimento</CardDescription>
-            </div>
-            <Button onClick={() => setIsAddOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Vincular Usuário
-            </Button>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Visibilidade por Setor
+            </CardTitle>
+            <CardDescription>
+              Configure quais usuários podem visualizar cada setor de atendimento
+            </CardDescription>
           </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-          ) : groupedBySector.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhum setor configurado
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {groupedBySector.map(({ sector, users }) => (
-                <div key={sector.id} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium">{sector.name}</h4>
-                    <Badge variant="secondary">{users.length} usuários</Badge>
-                  </div>
-                  {users.length > 0 ? (
-                    <Table>
-                      <TableBody>
-                        {users.map((us) => (
-                          <TableRow key={us.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Users className="h-4 w-4 text-muted-foreground" />
-                                <span>{us.profile?.full_name || 'Usuário'}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeUserFromSector.mutate(us.id)}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar usuário..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        {isLoading ? (
+          <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+        ) : sectors.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Nenhum setor configurado. Crie setores na página de Setores primeiro.
+          </div>
+        ) : (
+          <Accordion type="multiple" className="w-full" defaultValue={sectors.map(s => s.id)}>
+            {sectors.map((sector) => {
+              const userCount = getUserCountForSector(sector.id);
+              const allHaveAccess = filteredUsers.every(user => hasAccess(user.id, sector.id));
+              const someHaveAccess = filteredUsers.some(user => hasAccess(user.id, sector.id));
+
+              return (
+                <AccordionItem key={sector.id} value={sector.id}>
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{sector.name}</span>
+                      </div>
+                      <Badge variant="secondary" className="ml-auto mr-4">
+                        <Users className="h-3 w-3 mr-1" />
+                        {userCount} usuário{userCount !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-2 pt-2">
+                      {/* Bulk actions */}
+                      <div className="flex items-center justify-between pb-2 border-b">
+                        <span className="text-sm text-muted-foreground">
+                          {sector.description || 'Sem descrição'}
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleAllForSector(sector.id, true)}
+                            disabled={allHaveAccess}
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            Dar acesso a todos
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleAllForSector(sector.id, false)}
+                            disabled={!someHaveAccess}
+                          >
+                            <EyeOff className="h-3 w-3 mr-1" />
+                            Remover todos
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* User list */}
+                      <div className="grid gap-1 max-h-80 overflow-y-auto">
+                        {filteredUsers.length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-4 text-center">
+                            Nenhum usuário encontrado
+                          </p>
+                        ) : (
+                          filteredUsers.map((user) => {
+                            const userHasAccess = hasAccess(user.id, sector.id);
+                            const isPending = pendingChanges[`${user.id}-${sector.id}`];
+
+                            return (
+                              <label
+                                key={user.id}
+                                className={`flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer transition-colors ${
+                                  userHasAccess ? 'bg-accent/50' : ''
+                                }`}
                               >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p className="text-sm text-muted-foreground pl-4">Nenhum usuário vinculado</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Add User Dialog */}
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Vincular Usuários ao Setor</DialogTitle>
-            <DialogDescription>
-              Selecione o setor e os usuários que terão acesso
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Setor</label>
-              <Select value={selectedSector} onValueChange={setSelectedSector}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um setor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sectors.map((sector) => (
-                    <SelectItem key={sector.id} value={sector.id}>
-                      {sector.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {selectedSector && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Usuários</label>
-                <div className="border rounded-md max-h-60 overflow-y-auto">
-                  {availableUsers
-                    .filter(u => !userSectors.some(us => us.user_id === u.id && us.sector_id === selectedSector))
-                    .map((user) => (
-                      <label
-                        key={user.id}
-                        className="flex items-center gap-3 p-3 hover:bg-accent cursor-pointer"
-                      >
-                        <Checkbox
-                          checked={selectedUsers.includes(user.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedUsers([...selectedUsers, user.id]);
-                            } else {
-                              setSelectedUsers(selectedUsers.filter(id => id !== user.id));
-                            }
-                          }}
-                        />
-                        <span>{user.full_name}</span>
-                      </label>
-                    ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleAddUsers}
-              disabled={!selectedSector || selectedUsers.length === 0 || addUserToSector.isPending}
-            >
-              Vincular {selectedUsers.length > 0 ? `(${selectedUsers.length})` : ''}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+                                <Checkbox
+                                  checked={userHasAccess}
+                                  disabled={isPending}
+                                  onCheckedChange={() => handleToggleAccess(user.id, sector.id, userHasAccess)}
+                                />
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={user.avatar_url || undefined} />
+                                  <AvatarFallback className="text-xs">
+                                    {getInitials(user.full_name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm flex-1">{user.full_name}</span>
+                                {userHasAccess && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <Eye className="h-3 w-3 mr-1" />
+                                    Acesso
+                                  </Badge>
+                                )}
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
+        )}
+      </CardContent>
+    </Card>
   );
 }
