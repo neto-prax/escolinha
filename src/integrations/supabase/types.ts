@@ -1638,6 +1638,63 @@ export type Database = {
           },
         ]
       }
+      school_calendar: {
+        Row: {
+          affects_school_days: boolean | null
+          created_at: string | null
+          description: string | null
+          end_date: string | null
+          event_type: string
+          id: string
+          school_id: string
+          start_date: string
+          title: string
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          affects_school_days?: boolean | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          event_type?: string
+          id?: string
+          school_id: string
+          start_date: string
+          title: string
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          affects_school_days?: boolean | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          event_type?: string
+          id?: string
+          school_id?: string
+          start_date?: string
+          title?: string
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_calendar_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_calendar_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       school_subscriptions: {
         Row: {
           billing_day: number | null
