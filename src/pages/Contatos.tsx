@@ -49,6 +49,7 @@ import * as XLSX from 'xlsx';
 interface ContactRecord {
   id: string;
   full_name: string;
+  device_name: string | null;
   email: string | null;
   phone: string;
   contact_type: string;
@@ -62,10 +63,12 @@ interface ContactRecord {
 
 interface ContactFormData {
   full_name: string;
+  device_name: string;
   email: string;
   phone: string;
   contact_types: string[];
   notes: string;
+  guardian_id: string | null;
 }
 
 const contactTypeLabels: Record<string, string> = {
@@ -97,10 +100,12 @@ const Contatos = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formData, setFormData] = useState<ContactFormData>({
     full_name: '',
+    device_name: '',
     email: '',
     phone: '',
     contact_types: ['other'],
     notes: '',
+    guardian_id: null,
   });
   const [importData, setImportData] = useState<ContactFormData[]>([]);
 
@@ -110,7 +115,7 @@ const Contatos = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('contacts')
-        .select('id, full_name, email, phone, contact_type, contact_types, notes, tags, created_at, guardian_id, lead_id')
+        .select('id, full_name, device_name, email, phone, contact_type, contact_types, notes, tags, created_at, guardian_id, lead_id')
         .order('full_name');
       
       if (error) throw error;
@@ -118,6 +123,21 @@ const Contatos = () => {
         ...c,
         contact_types: c.contact_types || [c.contact_type || 'other'],
       })) as ContactRecord[];
+    },
+    enabled: !!profile?.school_id,
+  });
+
+  // Fetch guardians for linking
+  const { data: guardians = [] } = useQuery({
+    queryKey: ['guardians'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('guardians')
+        .select('id, full_name, phone, relationship')
+        .order('full_name');
+      
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!profile?.school_id,
   });
@@ -131,11 +151,13 @@ const Contatos = () => {
         .insert({
           school_id: profile!.school_id!,
           full_name: data.full_name,
+          device_name: data.device_name || null,
           email: data.email || null,
           phone: data.phone,
           contact_type: data.contact_types[0] || 'other',
           contact_types: data.contact_types,
           notes: data.notes || null,
+          guardian_id: data.guardian_id,
         });
       
       if (error) throw error;
@@ -158,11 +180,13 @@ const Contatos = () => {
         .from('contacts')
         .update({
           full_name: data.full_name,
+          device_name: data.device_name || null,
           email: data.email || null,
           phone: data.phone,
           contact_type: data.contact_types[0] || 'other',
           contact_types: data.contact_types,
           notes: data.notes || null,
+          guardian_id: data.guardian_id,
         })
         .eq('id', id);
       
@@ -215,10 +239,12 @@ const Contatos = () => {
     setEditingContact(null);
     setFormData({
       full_name: '',
+      device_name: '',
       email: '',
       phone: '',
       contact_types: ['other'],
       notes: '',
+      guardian_id: null,
     });
   };
 
@@ -226,10 +252,12 @@ const Contatos = () => {
     setEditingContact(contact);
     setFormData({
       full_name: contact.full_name,
+      device_name: contact.device_name || '',
       email: contact.email || '',
       phone: contact.phone,
       contact_types: contact.contact_types || [contact.contact_type || 'other'],
       notes: contact.notes || '',
+      guardian_id: contact.guardian_id,
     });
     setIsFormOpen(true);
   };
@@ -282,10 +310,12 @@ const Contatos = () => {
           const typeValue = row['Tipo'] || row['tipo'] || row['contact_type'] || 'other';
           return {
             full_name: row['Nome'] || row['nome'] || row['full_name'] || '',
+            device_name: row['Nome no Aparelho'] || row['device_name'] || '',
             email: row['Email'] || row['email'] || row['E-mail'] || '',
             phone: row['Telefone'] || row['telefone'] || row['phone'] || row['Celular'] || '',
             contact_types: [typeValue],
             notes: row['Observações'] || row['observacoes'] || row['notes'] || '',
+            guardian_id: null,
           };
         }).filter(row => row.full_name && row.phone);
 
@@ -529,8 +559,9 @@ const Contatos = () => {
                     />
                   </TableHead>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Nome no Aparelho</TableHead>
                   <TableHead>Telefone</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead>Responsável</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
@@ -560,8 +591,21 @@ const Contatos = () => {
                         </div>
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <span className="text-muted-foreground">
+                        {contact.device_name || '-'}
+                      </span>
+                    </TableCell>
                     <TableCell>{contact.phone}</TableCell>
-                    <TableCell>{contact.email || '-'}</TableCell>
+                    <TableCell>
+                      {contact.guardian_id ? (
+                        <Badge variant="outline" className="bg-success/10 text-success border-success/20">
+                          {guardians.find(g => g.id === contact.guardian_id)?.full_name || 'Vinculado'}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary">
                         {contactTypeLabels[contact.contact_type] || contact.contact_type}
@@ -622,15 +666,27 @@ const Contatos = () => {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="full_name">Nome completo *</Label>
-              <Input
-                id="full_name"
-                value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                placeholder="Nome completo"
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="full_name">Nome completo *</Label>
+                <Input
+                  id="full_name"
+                  value={formData.full_name}
+                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  placeholder="Nome completo"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="device_name">Nome no Aparelho</Label>
+                <Input
+                  id="device_name"
+                  value={formData.device_name}
+                  onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
+                  placeholder="Nome salvo no celular"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -665,15 +721,37 @@ const Contatos = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="email@exemplo.com"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="guardian_id">Vincular a Responsável</Label>
+                <Select
+                  value={formData.guardian_id || 'none'}
+                  onValueChange={(value) => setFormData({ ...formData, guardian_id: value === 'none' ? null : value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {guardians.map((guardian) => (
+                      <SelectItem key={guardian.id} value={guardian.id}>
+                        {guardian.full_name} {guardian.relationship ? `(${guardian.relationship})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">

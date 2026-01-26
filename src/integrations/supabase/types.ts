@@ -392,6 +392,7 @@ export type Database = {
           contact_type: string
           contact_types: string[] | null
           created_at: string | null
+          device_name: string | null
           email: string | null
           full_name: string
           guardian_id: string | null
@@ -411,6 +412,7 @@ export type Database = {
           contact_type: string
           contact_types?: string[] | null
           created_at?: string | null
+          device_name?: string | null
           email?: string | null
           full_name: string
           guardian_id?: string | null
@@ -430,6 +432,7 @@ export type Database = {
           contact_type?: string
           contact_types?: string[] | null
           created_at?: string | null
+          device_name?: string | null
           email?: string | null
           full_name?: string
           guardian_id?: string | null
