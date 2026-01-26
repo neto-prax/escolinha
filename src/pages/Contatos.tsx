@@ -18,6 +18,7 @@ import {
 import { Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Contact, MessageSquare, History, Users, GraduationCap } from 'lucide-react';
 import { ConvertToGuardianModal } from '@/components/contacts/ConvertToGuardianModal';
 import { LinkStudentsModal } from '@/components/contacts/LinkStudentsModal';
+import { GuardianCombobox } from '@/components/contacts/GuardianCombobox';
 import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import {
   DropdownMenu,
@@ -735,22 +736,11 @@ const Contatos = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="guardian_id">Vincular a Responsável</Label>
-                <Select
-                  value={formData.guardian_id || 'none'}
-                  onValueChange={(value) => setFormData({ ...formData, guardian_id: value === 'none' ? null : value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um responsável" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {guardians.map((guardian) => (
-                      <SelectItem key={guardian.id} value={guardian.id}>
-                        {guardian.full_name} {guardian.relationship ? `(${guardian.relationship})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <GuardianCombobox
+                  guardians={guardians}
+                  value={formData.guardian_id}
+                  onChange={(value) => setFormData({ ...formData, guardian_id: value })}
+                />
               </div>
             </div>
 
