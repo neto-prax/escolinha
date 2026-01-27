@@ -237,9 +237,9 @@ export const SchoolCalendarTab = () => {
 
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-    const cellSize = 4;
-    const monthWidth = 60;
-    const monthHeight = 38;
+    const cellSize = 5.5;
+    const monthWidth = 62;
+    const monthHeight = 48;
     const monthsPerRow = 3;
 
     const eventColors: Record<string, { r: number; g: number; b: number }> = {
@@ -266,15 +266,15 @@ export const SchoolCalendarTab = () => {
       const monthY = infoY + row * monthHeight;
 
       // Month name
-      doc.setFontSize(8);
+      doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      doc.text(months[m], monthX + 10, monthY);
+      doc.text(months[m], monthX + 16, monthY);
 
       // Week days header
-      doc.setFontSize(5);
+      doc.setFontSize(6);
       doc.setTextColor(100, 100, 100);
       for (let d = 0; d < 7; d++) {
-        doc.text(weekDays[d], monthX + d * cellSize + 1, monthY + 4);
+        doc.text(weekDays[d], monthX + d * cellSize + 1.5, monthY + 6);
       }
 
       // Days
@@ -289,14 +289,14 @@ export const SchoolCalendarTab = () => {
         const dayCol = position % 7;
         const dayRow = Math.floor(position / 7);
         const dayX = monthX + dayCol * cellSize;
-        const dayY = monthY + 6 + dayRow * cellSize;
+        const dayY = monthY + 10 + dayRow * cellSize;
 
         const dayEvents = getEventsForDay(day);
         
         if (dayEvents.length > 0) {
           const color = eventColors[dayEvents[0].event_type] || eventColors.event;
           doc.setFillColor(color.r, color.g, color.b);
-          doc.rect(dayX, dayY - 2.5, cellSize - 0.5, cellSize - 0.5, 'F');
+          doc.rect(dayX, dayY - 3.5, cellSize - 0.5, cellSize - 0.5, 'F');
           doc.setTextColor(255, 255, 255);
         } else if (isWeekend(day)) {
           doc.setTextColor(180, 180, 180);
@@ -304,13 +304,14 @@ export const SchoolCalendarTab = () => {
           doc.setTextColor(0, 0, 0);
         }
 
-        doc.setFontSize(5);
-        doc.text(dayOfMonth.toString(), dayX + 0.5, dayY);
+        doc.setFontSize(6);
+        doc.text(dayOfMonth.toString(), dayX + 1, dayY);
       });
     }
 
+
     // Legend
-    const legendY = infoY + 2 * monthHeight + 8;
+    const legendY = infoY + 4 * monthHeight + 10;
     doc.setFontSize(7);
     doc.setTextColor(0, 0, 0);
     const legendItems = [
