@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { CalendarStats } from './CalendarStats';
 import { CalendarEventModal, eventTypeLabels, eventTypeColors } from './CalendarEventModal';
 import { CalendarManager } from './CalendarManager';
+import { CalendarGridView, CalendarLegend } from './CalendarGridView';
 import { Plus, Download, Pencil, Trash2 } from 'lucide-react';
 import { format, eachDayOfInterval, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -193,11 +194,14 @@ export const SchoolCalendarTab = () => {
       ? new Date(selectedCalendar.class_end_date) 
       : new Date(selectedYear, 11, 20);
     
+    let infoY = 46;
     if (selectedCalendar?.class_start_date) {
-      doc.text(`Início das aulas: ${format(new Date(selectedCalendar.class_start_date), 'dd/MM/yyyy')}`, 14, 46);
+      doc.text(`Início das aulas: ${format(new Date(selectedCalendar.class_start_date), 'dd/MM/yyyy')}`, 14, infoY);
+      infoY += 8;
     }
     if (selectedCalendar?.class_end_date) {
-      doc.text(`Fim das aulas: ${format(new Date(selectedCalendar.class_end_date), 'dd/MM/yyyy')}`, 14, 54);
+      doc.text(`Fim das aulas: ${format(new Date(selectedCalendar.class_end_date), 'dd/MM/yyyy')}`, 14, infoY);
+      infoY += 8;
     }
 
     const allDays = eachDayOfInterval({ start: startDate, end: endDate }).filter(
@@ -223,12 +227,111 @@ export const SchoolCalendarTab = () => {
 
     // Summary
     doc.setFontSize(12);
-    const summaryY = selectedCalendar?.class_start_date || selectedCalendar?.class_end_date ? 66 : 50;
-    doc.text(`Total de Dias Letivos: ${totalSchoolDays}`, 14, summaryY);
+    doc.text(`Total de Dias Letivos: ${totalSchoolDays}`, 14, infoY);
+    infoY += 12;
+
+    // Calendar grid - visual representation of months
+    doc.setFontSize(10);
+    doc.text('Visão Anual:', 14, infoY);
+    infoY += 6;
+
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+    const cellSize = 4;
+    const monthWidth = 32;
+    const monthHeight = 35;
+    const monthsPerRow = 6;
+
+    const eventColors: Record<string, { r: number; g: number; b: number }> = {
+      holiday: { r: 239, g: 68, b: 68 },
+      recess: { r: 249, g: 115, b: 22 },
+      event: { r: 59, g: 130, b: 246 },
+      meeting: { r: 168, g: 85, b: 247 },
+      special: { r: 34, g: 197, b: 94 },
+    };
+
+    const getEventsForDay = (date: Date) => {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      return events.filter(event => {
+        const eventStartDate = event.start_date;
+        const eventEndDate = event.end_date || eventStartDate;
+        return dateStr >= eventStartDate && dateStr <= eventEndDate;
+      });
+    };
+
+    for (let m = 0; m < 12; m++) {
+      const col = m % monthsPerRow;
+      const row = Math.floor(m / monthsPerRow);
+      const monthX = 14 + col * monthWidth;
+      const monthY = infoY + row * monthHeight;
+
+      // Month name
+      doc.setFontSize(8);
+      doc.setTextColor(0, 0, 0);
+      doc.text(months[m], monthX + 10, monthY);
+
+      // Week days header
+      doc.setFontSize(5);
+      doc.setTextColor(100, 100, 100);
+      for (let d = 0; d < 7; d++) {
+        doc.text(weekDays[d], monthX + d * cellSize + 1, monthY + 4);
+      }
+
+      // Days
+      const monthStart = new Date(selectedYear, m, 1);
+      const monthEnd = new Date(selectedYear, m + 1, 0);
+      const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+      const startDayOfWeek = monthStart.getDay();
+
+      days.forEach((day, idx) => {
+        const dayOfMonth = day.getDate();
+        const position = startDayOfWeek + idx;
+        const dayCol = position % 7;
+        const dayRow = Math.floor(position / 7);
+        const dayX = monthX + dayCol * cellSize;
+        const dayY = monthY + 6 + dayRow * cellSize;
+
+        const dayEvents = getEventsForDay(day);
+        
+        if (dayEvents.length > 0) {
+          const color = eventColors[dayEvents[0].event_type] || eventColors.event;
+          doc.setFillColor(color.r, color.g, color.b);
+          doc.rect(dayX, dayY - 2.5, cellSize - 0.5, cellSize - 0.5, 'F');
+          doc.setTextColor(255, 255, 255);
+        } else if (isWeekend(day)) {
+          doc.setTextColor(180, 180, 180);
+        } else {
+          doc.setTextColor(0, 0, 0);
+        }
+
+        doc.setFontSize(5);
+        doc.text(dayOfMonth.toString(), dayX + 0.5, dayY);
+      });
+    }
+
+    // Legend
+    const legendY = infoY + 2 * monthHeight + 8;
+    doc.setFontSize(7);
+    doc.setTextColor(0, 0, 0);
+    const legendItems = [
+      { label: 'Feriado', color: eventColors.holiday },
+      { label: 'Recesso', color: eventColors.recess },
+      { label: 'Evento', color: eventColors.event },
+      { label: 'Reunião', color: eventColors.meeting },
+      { label: 'Dia Especial', color: eventColors.special },
+    ];
+
+    legendItems.forEach((item, idx) => {
+      const x = 14 + idx * 30;
+      doc.setFillColor(item.color.r, item.color.g, item.color.b);
+      doc.rect(x, legendY - 2, 3, 3, 'F');
+      doc.text(item.label, x + 4, legendY);
+    });
 
     // Events table
+    const tableStartY = legendY + 12;
     autoTable(doc, {
-      startY: summaryY + 10,
+      startY: tableStartY,
       head: [['Data Início', 'Data Fim', 'Título', 'Tipo', 'Afeta Dias Letivos']],
       body: events.map((e) => [
         format(new Date(e.start_date), 'dd/MM/yyyy'),
@@ -242,8 +345,9 @@ export const SchoolCalendarTab = () => {
     });
 
     // Footer with total
-    const finalY = (doc as any).lastAutoTable.finalY || 60;
+    const finalY = (doc as any).lastAutoTable.finalY || tableStartY + 20;
     doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
     doc.text(`Total de datas cadastradas: ${events.length}`, 14, finalY + 10);
 
     const filename = selectedCalendar 
@@ -289,6 +393,17 @@ export const SchoolCalendarTab = () => {
           classStartDate={selectedCalendar?.class_start_date}
           classEndDate={selectedCalendar?.class_end_date}
         />
+
+        {/* Calendar Grid View */}
+        <div className="space-y-3">
+          <CalendarLegend />
+          <CalendarGridView
+            year={selectedYear}
+            events={events}
+            classStartDate={selectedCalendar?.class_start_date}
+            classEndDate={selectedCalendar?.class_end_date}
+          />
+        </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="outline" onClick={handleExportPDF} disabled={events.length === 0}>
