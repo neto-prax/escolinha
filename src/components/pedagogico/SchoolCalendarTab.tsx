@@ -10,7 +10,7 @@ import { CalendarStats } from './CalendarStats';
 import { CalendarEventModal, eventTypeLabels, eventTypeColors } from './CalendarEventModal';
 import { CalendarManager } from './CalendarManager';
 import { Plus, Download, Pencil, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, eachDayOfInterval, isWeekend } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from '@/components/ui/use-toast';
 import jsPDF from 'jspdf';
@@ -174,7 +174,6 @@ export const SchoolCalendarTab = () => {
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    const { eachDayOfInterval, isWeekend } = require('date-fns');
 
     // Header
     doc.setFontSize(18);
