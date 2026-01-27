@@ -238,9 +238,9 @@ export const SchoolCalendarTab = () => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
     const cellSize = 4;
-    const monthWidth = 32;
-    const monthHeight = 35;
-    const monthsPerRow = 6;
+    const monthWidth = 60;
+    const monthHeight = 38;
+    const monthsPerRow = 3;
 
     const eventColors: Record<string, { r: number; g: number; b: number }> = {
       holiday: { r: 239, g: 68, b: 68 },
