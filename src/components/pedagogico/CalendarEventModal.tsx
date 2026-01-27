@@ -17,6 +17,7 @@ interface CalendarEvent {
   event_type: string;
   affects_school_days: boolean;
   year: number;
+  calendar_id?: string | null;
 }
 
 interface CalendarEventModalProps {
@@ -24,6 +25,7 @@ interface CalendarEventModalProps {
   onOpenChange: (open: boolean) => void;
   event?: CalendarEvent | null;
   year: number;
+  calendarId?: string | null;
   onSave: (event: Omit<CalendarEvent, 'id'>) => void;
   isLoading?: boolean;
 }
@@ -41,6 +43,7 @@ export const CalendarEventModal = ({
   onOpenChange,
   event,
   year,
+  calendarId,
   onSave,
   isLoading = false,
 }: CalendarEventModalProps) => {
@@ -52,6 +55,7 @@ export const CalendarEventModal = ({
     event_type: 'event',
     affects_school_days: false,
     year,
+    calendar_id: calendarId || null,
   });
 
   useEffect(() => {
@@ -64,6 +68,7 @@ export const CalendarEventModal = ({
         event_type: event.event_type,
         affects_school_days: event.affects_school_days,
         year: event.year,
+        calendar_id: event.calendar_id || calendarId || null,
       });
     } else {
       setFormData({
@@ -74,9 +79,10 @@ export const CalendarEventModal = ({
         event_type: 'event',
         affects_school_days: false,
         year,
+        calendar_id: calendarId || null,
       });
     }
-  }, [event, year, open]);
+  }, [event, year, calendarId, open]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
