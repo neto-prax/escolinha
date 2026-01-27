@@ -274,6 +274,63 @@ export type Database = {
           },
         ]
       }
+      calendars: {
+        Row: {
+          class_end_date: string | null
+          class_start_date: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          name: string
+          school_id: string
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          class_end_date?: string | null
+          class_start_date?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name: string
+          school_id: string
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          class_end_date?: string | null
+          class_start_date?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          name?: string
+          school_id?: string
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendars_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendars_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chart_of_accounts: {
         Row: {
           code: string
@@ -1641,6 +1698,7 @@ export type Database = {
       school_calendar: {
         Row: {
           affects_school_days: boolean | null
+          calendar_id: string | null
           created_at: string | null
           description: string | null
           end_date: string | null
@@ -1654,6 +1712,7 @@ export type Database = {
         }
         Insert: {
           affects_school_days?: boolean | null
+          calendar_id?: string | null
           created_at?: string | null
           description?: string | null
           end_date?: string | null
@@ -1667,6 +1726,7 @@ export type Database = {
         }
         Update: {
           affects_school_days?: boolean | null
+          calendar_id?: string | null
           created_at?: string | null
           description?: string | null
           end_date?: string | null
@@ -1679,6 +1739,13 @@ export type Database = {
           year?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "school_calendar_calendar_id_fkey"
+            columns: ["calendar_id"]
+            isOneToOne: false
+            referencedRelation: "calendars"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "school_calendar_school_id_fkey"
             columns: ["school_id"]

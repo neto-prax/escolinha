@@ -1,6 +1,7 @@
 import { StatCard } from '@/components/ui/stat-card';
-import { CalendarDays, CalendarCheck, CalendarX, Sun } from 'lucide-react';
-import { eachDayOfInterval, isWeekend, isBefore, startOfDay } from 'date-fns';
+import { CalendarDays, CalendarCheck, CalendarX, Sun, PlayCircle, StopCircle } from 'lucide-react';
+import { eachDayOfInterval, isWeekend, isBefore, startOfDay, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface CalendarEvent {
   id: string;
@@ -13,13 +14,19 @@ interface CalendarEvent {
 interface CalendarStatsProps {
   year: number;
   events: CalendarEvent[];
+  classStartDate?: string | null;
+  classEndDate?: string | null;
 }
 
-export const CalendarStats = ({ year, events }: CalendarStatsProps) => {
+export const CalendarStats = ({ year, events, classStartDate, classEndDate }: CalendarStatsProps) => {
   const calculateStats = () => {
-    // School year: Feb 1 to Dec 20
-    const startDate = new Date(year, 1, 1);
-    const endDate = new Date(year, 11, 20);
+    // Use configured dates or fallback to defaults (Feb 1 to Dec 20)
+    const startDate = classStartDate 
+      ? new Date(classStartDate) 
+      : new Date(year, 1, 1);
+    const endDate = classEndDate 
+      ? new Date(classEndDate) 
+      : new Date(year, 11, 20);
     const today = startOfDay(new Date());
 
     // All weekdays in the school year
@@ -63,37 +70,61 @@ export const CalendarStats = ({ year, events }: CalendarStatsProps) => {
       elapsedSchoolDays: Math.max(0, elapsedSchoolDays),
       remainingDays: Math.max(0, totalSchoolDays - elapsedSchoolDays),
       holidaysCount,
+      startDate,
+      endDate,
     };
   };
 
   const stats = calculateStats();
 
+  const formatDateDisplay = (date: Date) => format(date, "dd/MM/yyyy", { locale: ptBR });
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <StatCard
-        title="Total Dias Letivos"
-        value={stats.totalSchoolDays}
-        description={`Ano letivo ${year}`}
-        icon={CalendarDays}
-      />
-      <StatCard
-        title="Dias Transcorridos"
-        value={stats.elapsedSchoolDays}
-        description="Dias letivos já passados"
-        icon={CalendarCheck}
-      />
-      <StatCard
-        title="Dias Restantes"
-        value={stats.remainingDays}
-        description="Dias letivos restantes"
-        icon={CalendarX}
-      />
-      <StatCard
-        title="Feriados/Recessos"
-        value={stats.holidaysCount}
-        description="Total cadastrado"
-        icon={Sun}
-      />
+    <div className="space-y-4">
+      {(classStartDate || classEndDate) && (
+        <div className="flex flex-wrap gap-4 p-4 bg-muted/50 rounded-lg">
+          {classStartDate && (
+            <div className="flex items-center gap-2 text-sm">
+              <PlayCircle className="h-4 w-4 text-primary" />
+              <span className="text-muted-foreground">Início:</span>
+              <span className="font-medium">{formatDateDisplay(new Date(classStartDate))}</span>
+            </div>
+          )}
+          {classEndDate && (
+            <div className="flex items-center gap-2 text-sm">
+              <StopCircle className="h-4 w-4 text-destructive" />
+              <span className="text-muted-foreground">Fim:</span>
+              <span className="font-medium">{formatDateDisplay(new Date(classEndDate))}</span>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Dias Letivos"
+          value={stats.totalSchoolDays}
+          description={`Ano letivo ${year}`}
+          icon={CalendarDays}
+        />
+        <StatCard
+          title="Dias Transcorridos"
+          value={stats.elapsedSchoolDays}
+          description="Dias letivos já passados"
+          icon={CalendarCheck}
+        />
+        <StatCard
+          title="Dias Restantes"
+          value={stats.remainingDays}
+          description="Dias letivos restantes"
+          icon={CalendarX}
+        />
+        <StatCard
+          title="Feriados/Recessos"
+          value={stats.holidaysCount}
+          description="Total cadastrado"
+          icon={Sun}
+        />
+      </div>
     </div>
   );
 };
