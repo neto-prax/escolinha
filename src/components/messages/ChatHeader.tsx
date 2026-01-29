@@ -126,6 +126,14 @@ export function ChatHeader({
 
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-xs text-muted-foreground">{conversation.phone}</span>
+            {conversation.registered_name && (
+              <>
+                <span className="text-muted-foreground">•</span>
+                <span className="text-xs text-muted-foreground" title="Nome cadastrado no sistema">
+                  📋 {conversation.registered_name}
+                </span>
+              </>
+            )}
             {conversation.linked_students && conversation.linked_students.length > 0 && (
               <>
                 <span className="text-muted-foreground">•</span>

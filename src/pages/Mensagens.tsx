@@ -188,10 +188,15 @@ const Mensagens = () => {
     const contactTypes = (conv.contact?.contact_types as string[]) || 
       (conv.contact?.contact_type ? [conv.contact.contact_type] : ['other']);
 
+    // Priorize WhatsApp name (contact_name from conversation) over contact.full_name
+    const whatsappName = conv.contact_name || conv.phone;
+    const registeredName = conv.contact?.full_name;
+    
     return {
       id: conv.id,
       contact_id: conv.contact_id,
-      contact_name: conv.contact?.full_name || conv.contact_name || conv.phone,
+      contact_name: whatsappName,
+      registered_name: registeredName !== whatsappName ? registeredName : undefined,
       phone: conv.phone,
       last_message: '',
       last_message_at: conv.last_message_at || undefined,
