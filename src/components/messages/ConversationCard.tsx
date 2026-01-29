@@ -14,6 +14,7 @@ export interface Conversation {
   id: string;
   contact_id?: string | null;
   contact_name: string;
+  registered_name?: string; // Nome cadastrado no sistema (quando diferente do WhatsApp)
   phone: string;
   avatar_url?: string;
   contact_type: 'lead' | 'guardian' | 'student' | 'staff' | 'other';
@@ -104,17 +105,24 @@ export function ConversationCard({ conversation, isSelected, onClick }: Conversa
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="font-medium truncate">{conversation.contact_name}</span>
+            <div className="min-w-0">
+              <span className="font-medium truncate block">{conversation.contact_name}</span>
+              {conversation.registered_name && (
+                <span className="text-[10px] text-muted-foreground truncate block" title="Nome cadastrado">
+                  📋 {conversation.registered_name}
+                </span>
+              )}
+            </div>
             {contactTypes.slice(0, 2).map((type) => {
               const config = contactTypeConfig[type] || contactTypeConfig.other;
               return (
-                <Badge key={type} variant="secondary" className={cn("text-[10px] px-1.5 py-0 text-white", config.color)}>
+                <Badge key={type} variant="secondary" className={cn("text-[10px] px-1.5 py-0 text-white shrink-0", config.color)}>
                   {config.label}
                 </Badge>
               );
             })}
             {contactTypes.length > 2 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 text-white bg-gray-500">
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 text-white bg-gray-500 shrink-0">
                 +{contactTypes.length - 2}
               </Badge>
             )}
