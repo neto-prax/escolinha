@@ -1,72 +1,59 @@
 
 
-## Portal do Responsável — Plano de Implementação
+## Reestruturação do Portal do Responsável
 
-Portal web onde responsáveis fazem login com email/senha e visualizam dados completos dos seus alunos, incluindo informações acadêmicas e financeiras.
+### Objetivo
+Simplificar o portal para exibir apenas: **Atividades a fazer**, **Ocorrências**, **Boletos**, e no **Dashboard** mostrar **eventos e datas** do calendário escolar.
 
-### Visão Geral
+### Estrutura atual vs. nova
 
 ```text
-/portal/login  →  /portal/dashboard
-                      ├── Dados do Aluno (nome, turma, foto)
-                      ├── Frequência
-                      ├── Notas
-                      ├── Diário de Classe
-                      ├── Comunicados / Calendário Escolar
-                      └── Financeiro (boletos, pagamentos)
+ATUAL:                           NOVO:
+/portal/dashboard (cards alunos) /portal/dashboard (eventos + datas do calendário)
+/portal/aluno/:id (4 abas)      /portal/atividades (lição de casa dos alunos)
+/portal/calendario               /portal/ocorrencias (registros de ocorrência)
+                                 /portal/boletos (cobranças financeiras)
 ```
 
-### Etapas
+### Mudanças
 
-**1. Tabela de acesso do responsável (migration)**
-- Criar tabela `guardian_portal_access` com campos: `id`, `guardian_id` (ref guardians), `school_id`, `email`, `user_id` (ref auth.users), `is_active`, `created_at`
-- RLS: responsável vê apenas seus dados; diretores/secretários gerenciam acessos
-- Isso vincula um login (auth.users) a um responsável existente na tabela `guardians`
+**1. Migration: RLS para `psychology_records`**
+- Adicionar política SELECT para responsáveis verem ocorrências dos seus alunos (tipo `ocorrencia`)
+- Expressão: `student_id IN (SELECT get_guardian_student_ids(...))`
 
-**2. Criar role "guardian" no sistema**
-- Adicionar `'guardian'` ao enum `app_role` ou usar a tabela `guardian_portal_access` para identificar o tipo de usuário sem alterar o enum
-- Abordagem preferida: usar a tabela `guardian_portal_access` para evitar alterar o enum existente; no AuthContext, detectar se o usuário logado tem registro nessa tabela e redirecionar para o portal
+**2. Hook: novos queries em `useGuardianPortal.ts`**
+- `useStudentHomework`: busca `daily_entries` (campo `homework`) das turmas dos alunos vinculados
+- `useStudentOccurrences`: busca `psychology_records` onde `record_type = 'ocorrencia'` e `student_id` nos alunos do responsável
 
-**3. Rotas do Portal (`/portal/*`)**
-- `/portal/login` — tela de login exclusiva para responsáveis (visual diferenciado)
-- `/portal` — layout do portal com sidebar simplificada
-- `/portal/dashboard` — visão geral dos alunos vinculados
-- `/portal/aluno/:id` — detalhes do aluno (frequência, notas, diário, financeiro)
-- `/portal/calendario` — calendário escolar
-- `/portal/comunicados` — comunicados da escola
+**3. Dashboard (`PortalDashboard.tsx`)**
+- Remover cards de alunos
+- Exibir próximos eventos do calendário escolar (feriados, reuniões, provas) em formato de lista/timeline
+- Mostrar cards dos alunos vinculados de forma resumida no topo
 
-**4. Páginas e componentes**
-- **PortalLogin**: formulário de login que redireciona para `/portal/dashboard`
-- **PortalLayout**: layout limpo com header mostrando nome da escola e do responsável
-- **PortalDashboard**: cards com cada aluno vinculado (nome, turma, foto, status financeiro)
-- **PortalStudentDetail**: página com abas:
-  - **Dados**: info básica do aluno
-  - **Frequência**: tabela de presença por mês
-  - **Notas**: notas por disciplina/período
-  - **Diário**: entradas do diário de classe
-  - **Financeiro**: boletos, status de pagamento, histórico
+**4. Nova página: Atividades (`PortalAtividades.tsx`)**
+- Lista de atividades/lição de casa dos `daily_entries.homework` filtrados pelas turmas dos alunos
+- Mostra data, turma, conteúdo da atividade
 
-**5. Consultas de dados**
-- Buscar `guardian_portal_access` → `guardians` → `student_guardians` → `students` para listar alunos
-- Frequência: `attendance` filtrada por `student_id`
-- Notas: `grades` filtrada por `student_id`
-- Diário: `daily_entries` via `student_classes` → `class_id`
-- Financeiro: `billing` filtrada por `student_id` ou `guardian_id`
-- Calendário: `school_calendar` filtrada por `school_id`
+**5. Nova página: Ocorrências (`PortalOcorrencias.tsx`)**
+- Lista de ocorrências do `psychology_records` (tipo `ocorrencia`)
+- Mostra data, título, descrição, status
 
-**6. Gestão de acessos (lado admin)**
-- Na página de Responsáveis existente, adicionar botão "Criar acesso ao portal" que:
-  - Cria um usuário via edge function (email do responsável + senha temporária)
-  - Insere registro em `guardian_portal_access`
-  - Exibe credenciais para envio via WhatsApp
+**6. Nova página: Boletos (`PortalBoletos.tsx`)**
+- Migrar conteúdo financeiro do `PortalStudentDetail` para página própria
+- Lista todas as cobranças de todos os alunos vinculados
+- Filtro por status (pendente, pago, atrasado)
 
-### Segurança
-- RLS em todas as consultas: responsável só acessa dados dos seus alunos vinculados
-- Portal completamente isolado do painel administrativo (`/app/*`)
-- Sem acesso a dados de outros alunos ou escola
+**7. Layout: atualizar navegação (`PortalLayout.tsx`)**
+- Itens: Início, Atividades, Ocorrências, Boletos
+- Ícones: Home, BookOpen, AlertTriangle, DollarSign
+
+**8. Rotas (`App.tsx`)**
+- Remover `/portal/aluno/:id` e `/portal/calendario`
+- Adicionar `/portal/atividades`, `/portal/ocorrencias`, `/portal/boletos`
 
 ### Detalhes técnicos
-- Novas migrations: 1 tabela (`guardian_portal_access`) + políticas RLS para leitura de `attendance`, `grades`, `daily_entries`, `billing`, `school_calendar` por responsáveis
-- Nova edge function para criar acesso do responsável
-- ~8 novos arquivos (páginas + layout + componentes do portal)
+- 1 migration (RLS para `psychology_records`)
+- 3 novas páginas, 2 novos hooks
+- Remover `PortalStudentDetail.tsx` e `PortalCalendario.tsx`
+- Atualizar `PortalDashboard.tsx` e `PortalLayout.tsx`
 
