@@ -129,6 +129,12 @@ Deno.serve(async (req) => {
         const { data: users, error } = await query;
         if (error) throw error;
 
+        // Get all super admins
+        const { data: superAdmins } = await supabaseAdmin
+          .from("super_admins")
+          .select("user_id");
+        const superAdminIds = new Set((superAdmins || []).map((sa: any) => sa.user_id));
+
         // Get roles for each user
         const usersWithRoles = await Promise.all(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -146,6 +152,7 @@ Deno.serve(async (req) => {
               email: authUser?.user?.email || null,
               roles: roles?.map((r: { role: string }) => r.role) || [],
               school_name: userRecord.schools?.[0]?.name || null,
+              is_super_admin: superAdminIds.has(userRecord.id),
             };
           })
         );
@@ -272,6 +279,55 @@ Deno.serve(async (req) => {
           .eq("id", userId);
 
         if (updateError) throw updateError;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "toggle_super_admin": {
+        const { userId, isSuperAdmin } = params;
+
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: "userId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Prevent removing yourself
+        if (userId === user.id && !isSuperAdmin) {
+          return new Response(
+            JSON.stringify({ error: "Você não pode remover seu próprio acesso de Super Admin" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (isSuperAdmin) {
+          // Add as super admin
+          const { error: insertError } = await supabaseAdmin
+            .from("super_admins")
+            .insert({ user_id: userId });
+
+          if (insertError) {
+            if (insertError.message?.includes("duplicate")) {
+              return new Response(
+                JSON.stringify({ success: true, message: "Usuário já é Super Admin" }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+            throw insertError;
+          }
+        } else {
+          // Remove super admin
+          const { error: deleteError } = await supabaseAdmin
+            .from("super_admins")
+            .delete()
+            .eq("user_id", userId);
+
+          if (deleteError) throw deleteError;
+        }
 
         return new Response(
           JSON.stringify({ success: true }),
