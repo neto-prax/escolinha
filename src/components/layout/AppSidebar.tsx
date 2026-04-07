@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Contact,
   Megaphone,
+  Brain,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -63,6 +64,7 @@ const navigationGroups: NavGroup[] = [
       { title: 'Diário', url: '/app/diario', icon: ClipboardList, module: 'diario' },
       { title: 'Turmas', url: '/app/turmas', icon: Users, module: 'turmas' },
       { title: 'Pedagógico', url: '/app/pedagogico', icon: BookOpen, module: 'pedagogico' },
+      { title: 'Psicologia', url: '/app/psicologia', icon: Brain, module: 'pedagogico' },
     ],
   },
   {
