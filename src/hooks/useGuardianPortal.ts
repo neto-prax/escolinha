@@ -114,3 +114,66 @@ export const useSchoolCalendarPortal = (schoolId: string | undefined) => {
     enabled: !!schoolId,
   });
 };
+
+export const useStudentHomework = (guardianId: string | undefined) => {
+  return useQuery({
+    queryKey: ['guardian-student-homework', guardianId],
+    queryFn: async () => {
+      if (!guardianId) return [];
+      // Get student ids
+      const { data: links } = await supabase
+        .from('student_guardians')
+        .select('student_id')
+        .eq('guardian_id', guardianId);
+      if (!links?.length) return [];
+      const studentIds = links.map(l => l.student_id);
+
+      // Get class ids for these students
+      const { data: sc } = await supabase
+        .from('student_classes')
+        .select('class_id, classes(name), student_id')
+        .in('student_id', studentIds)
+        .eq('status', 'active');
+      if (!sc?.length) return [];
+      const classIds = [...new Set(sc.map(s => s.class_id))];
+
+      // Get daily entries with homework
+      const { data: entries, error } = await supabase
+        .from('daily_entries')
+        .select('id, entry_date, homework, content, class_id, classes(name)')
+        .in('class_id', classIds)
+        .not('homework', 'is', null)
+        .order('entry_date', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return entries || [];
+    },
+    enabled: !!guardianId,
+  });
+};
+
+export const useStudentOccurrences = (guardianId: string | undefined) => {
+  return useQuery({
+    queryKey: ['guardian-student-occurrences', guardianId],
+    queryFn: async () => {
+      if (!guardianId) return [];
+      const { data: links } = await supabase
+        .from('student_guardians')
+        .select('student_id')
+        .eq('guardian_id', guardianId);
+      if (!links?.length) return [];
+      const studentIds = links.map(l => l.student_id);
+
+      const { data, error } = await supabase
+        .from('psychology_records')
+        .select('id, title, description, record_date, status, student_id, students(full_name)')
+        .eq('record_type', 'ocorrencia')
+        .in('student_id', studentIds)
+        .order('record_date', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!guardianId,
+  });
+};
