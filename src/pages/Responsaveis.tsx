@@ -749,6 +749,54 @@ const Responsaveis = () => {
         }}
         itemLabel="responsáveis"
       />
+
+      {/* Credentials Modal */}
+      <Dialog open={!!credentialsModal} onOpenChange={() => setCredentialsModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Acesso ao Portal Criado!</DialogTitle>
+            <DialogDescription>
+              Compartilhe as credenciais abaixo com o responsável. A senha é temporária e deve ser alterada no primeiro acesso.
+            </DialogDescription>
+          </DialogHeader>
+          {credentialsModal && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Email (Login)</Label>
+                <div className="flex items-center gap-2">
+                  <Input value={credentialsModal.email} readOnly className="font-mono" />
+                  <Button variant="outline" size="icon" onClick={() => handleCopyCredentials(credentialsModal.email)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Senha Temporária</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    value={credentialsModal.password}
+                    readOnly
+                    className="font-mono"
+                  />
+                  <Button variant="outline" size="icon" onClick={() => setShowPassword(!showPassword)}>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={() => handleCopyCredentials(credentialsModal.password)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <Button className="w-full" onClick={() => {
+                handleCopyCredentials(`Email: ${credentialsModal.email}\nSenha: ${credentialsModal.password}`);
+              }}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copiar Tudo
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
