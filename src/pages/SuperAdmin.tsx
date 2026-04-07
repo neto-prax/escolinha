@@ -40,6 +40,7 @@ interface UserWithDetails {
   phone: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  is_super_admin: boolean;
   school_id: string | null;
   school_name: string | null;
   roles: string[];
@@ -211,6 +212,29 @@ export default function SuperAdmin() {
       loadData();
     } catch (error: any) {
       toast.error('Erro ao alterar status: ' + error.message);
+    }
+  };
+
+  const handleToggleSuperAdmin = async (userItem: UserWithDetails) => {
+    const newStatus = !userItem.is_super_admin;
+    try {
+      const { data, error } = await supabase.functions.invoke('super-admin', {
+        body: { action: 'toggle_super_admin', userId: userItem.id, isSuperAdmin: newStatus },
+      });
+
+      if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      toast.success(newStatus 
+        ? `${userItem.full_name} agora é Super Admin` 
+        : `${userItem.full_name} não é mais Super Admin`
+      );
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao alterar Super Admin: ' + error.message);
     }
   };
 
@@ -520,6 +544,11 @@ export default function SuperAdmin() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
+                            {userItem.is_super_admin && (
+                              <Badge className="bg-red-600 text-white">
+                                Super Admin
+                              </Badge>
+                            )}
                             {userItem.roles.map((role) => (
                               <Badge
                                 key={role}
@@ -537,6 +566,15 @@ export default function SuperAdmin() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button
+                              variant={userItem.is_super_admin ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => handleToggleSuperAdmin(userItem)}
+                              title={userItem.is_super_admin ? 'Remover Super Admin' : 'Tornar Super Admin'}
+                              className={userItem.is_super_admin ? 'bg-red-600 hover:bg-red-700' : ''}
+                            >
+                              <Shield className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="outline"
                               size="sm"
