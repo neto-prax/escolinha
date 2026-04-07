@@ -74,6 +74,8 @@ const Responsaveis = () => {
   const [editingGuardian, setEditingGuardian] = useState<Guardian | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [credentialsModal, setCredentialsModal] = useState<{ email: string; password: string } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<GuardianFormData>({
     full_name: '',
     email: '',
