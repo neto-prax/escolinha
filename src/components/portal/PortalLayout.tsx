@@ -1,7 +1,7 @@
 import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGuardianPortalAccess } from '@/hooks/useGuardianPortal';
-import { Loader2, GraduationCap, Home, Calendar, LogOut } from 'lucide-react';
+import { Loader2, GraduationCap, Home, BookOpen, AlertTriangle, DollarSign, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export const PortalLayout = () => {
@@ -41,7 +41,9 @@ export const PortalLayout = () => {
 
   const navItems = [
     { to: '/portal/dashboard', label: 'Início', icon: Home },
-    { to: '/portal/calendario', label: 'Calendário', icon: Calendar },
+    { to: '/portal/atividades', label: 'Atividades', icon: BookOpen },
+    { to: '/portal/ocorrencias', label: 'Ocorrências', icon: AlertTriangle },
+    { to: '/portal/boletos', label: 'Boletos', icon: DollarSign },
   ];
 
   return (
