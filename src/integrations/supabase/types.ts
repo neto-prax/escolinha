@@ -1225,6 +1225,61 @@ export type Database = {
           },
         ]
       }
+      guardian_portal_access: {
+        Row: {
+          created_at: string
+          email: string
+          guardian_id: string
+          id: string
+          is_active: boolean
+          school_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          guardian_id: string
+          id?: string
+          is_active?: boolean
+          school_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          guardian_id?: string
+          id?: string
+          is_active?: boolean
+          school_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_portal_access_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: true
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_portal_access_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_portal_access_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guardians: {
         Row: {
           address: string | null
@@ -2571,6 +2626,11 @@ export type Database = {
       }
     }
     Functions: {
+      get_guardian_id_for_user: { Args: { _user_id: string }; Returns: string }
+      get_guardian_student_ids: {
+        Args: { _guardian_id: string }
+        Returns: string[]
+      }
       get_user_school_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -2588,6 +2648,7 @@ export type Database = {
         Args: { _school_id?: string; _user_id: string }
         Returns: boolean
       }
+      is_guardian_user: { Args: { _user_id: string }; Returns: boolean }
       is_super_admin: { Args: { _user_id?: string }; Returns: boolean }
     }
     Enums: {
