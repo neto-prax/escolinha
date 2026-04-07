@@ -228,6 +228,7 @@ const Dashboard = () => {
           </Button>
         </Link>
       )}
+    </div>
   );
 };
 
