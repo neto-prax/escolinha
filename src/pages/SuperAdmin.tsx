@@ -215,6 +215,29 @@ export default function SuperAdmin() {
     }
   };
 
+  const handleToggleSuperAdmin = async (userItem: UserWithDetails) => {
+    const newStatus = !userItem.is_super_admin;
+    try {
+      const { data, error } = await supabase.functions.invoke('super-admin', {
+        body: { action: 'toggle_super_admin', userId: userItem.id, isSuperAdmin: newStatus },
+      });
+
+      if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      toast.success(newStatus 
+        ? `${userItem.full_name} agora é Super Admin` 
+        : `${userItem.full_name} não é mais Super Admin`
+      );
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao alterar Super Admin: ' + error.message);
+    }
+  };
+
   const handleOpenSettings = (school: SchoolWithCounts) => {
     const settings: Record<string, boolean> = {};
     FEATURE_FLAGS.forEach((flag) => {
