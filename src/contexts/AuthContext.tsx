@@ -115,11 +115,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (event === 'SIGNED_OUT') {
           setIsLoading(false);
         }
+
+        // Handle token refresh errors - force sign out
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          console.warn('Token refresh failed, signing out');
+          supabase.auth.signOut();
+        }
       }
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Session recovery failed:', error.message);
+        // Clear invalid session state
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setRoles([]);
+        setSchool(null);
+        setSectors([]);
+        setIsLoading(false);
+        supabase.auth.signOut();
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
 
