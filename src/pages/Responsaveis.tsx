@@ -471,6 +471,12 @@ const Responsaveis = () => {
                           </DropdownMenuItem>
                           <DropdownMenuItem>Ver alunos vinculados</DropdownMenuItem>
                           <DropdownMenuItem>Enviar mensagem</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleCreatePortalAccess(guardian)}
+                            disabled={!guardian.email}
+                          >
+                            Criar acesso ao portal
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
