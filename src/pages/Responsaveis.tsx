@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Users } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Users, Copy, Eye, EyeOff } from 'lucide-react';
 import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import {
   DropdownMenu,
