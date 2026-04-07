@@ -544,6 +544,11 @@ export default function SuperAdmin() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
+                            {userItem.is_super_admin && (
+                              <Badge className="bg-red-600 text-white">
+                                Super Admin
+                              </Badge>
+                            )}
                             {userItem.roles.map((role) => (
                               <Badge
                                 key={role}
@@ -561,6 +566,15 @@ export default function SuperAdmin() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            <Button
+                              variant={userItem.is_super_admin ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => handleToggleSuperAdmin(userItem)}
+                              title={userItem.is_super_admin ? 'Remover Super Admin' : 'Tornar Super Admin'}
+                              className={userItem.is_super_admin ? 'bg-red-600 hover:bg-red-700' : ''}
+                            >
+                              <Shield className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="outline"
                               size="sm"
