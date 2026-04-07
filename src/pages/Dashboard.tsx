@@ -217,7 +217,17 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       )}
-    </div>
+
+      {/* Super Admin Access */}
+      {isSuperAdmin && (
+        <Link to="/super-admin">
+          <Button variant="outline" className="w-full justify-start border-primary/30 hover:bg-primary/5">
+            <Shield className="mr-2 h-5 w-5 text-primary" />
+            Painel Super Admin
+            <ArrowRight className="ml-auto h-4 w-4" />
+          </Button>
+        </Link>
+      )}
   );
 };
 
