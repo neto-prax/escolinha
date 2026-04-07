@@ -40,6 +40,7 @@ interface UserWithDetails {
   phone: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  is_super_admin: boolean;
   school_id: string | null;
   school_name: string | null;
   roles: string[];
