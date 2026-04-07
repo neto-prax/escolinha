@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/types/auth';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 import {
   Users,
   GraduationCap,
@@ -15,11 +17,26 @@ import {
   CheckCircle,
   Clock,
   ArrowRight,
+  Shield,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Dashboard = () => {
-  const { profile, roles, school, hasPermission } = useAuth();
+  const { user, profile, roles, school, hasPermission } = useAuth();
+
+  const { data: isSuperAdmin } = useQuery({
+    queryKey: ['is-super-admin', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { data } = await supabase
+        .from('super_admins')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user?.id,
+  });
 
   const primaryRole = roles[0];
   const greeting = new Date().getHours() < 12
@@ -199,6 +216,17 @@ const Dashboard = () => {
             </Link>
           </CardContent>
         </Card>
+      )}
+
+      {/* Super Admin Access */}
+      {isSuperAdmin && (
+        <Link to="/super-admin">
+          <Button variant="outline" className="w-full justify-start border-primary/30 hover:bg-primary/5">
+            <Shield className="mr-2 h-5 w-5 text-primary" />
+            Painel Super Admin
+            <ArrowRight className="ml-auto h-4 w-4" />
+          </Button>
+        </Link>
       )}
     </div>
   );
