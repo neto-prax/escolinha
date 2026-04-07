@@ -254,13 +254,16 @@ const Responsaveis = () => {
         toast.error(data.error);
         return;
       }
-      toast.success(
-        `Acesso criado! Email: ${data.email} | Senha temporária: ${data.temporary_password}`,
-        { duration: 15000 }
-      );
+      setShowPassword(false);
+      setCredentialsModal({ email: data.email, password: data.temporary_password });
     } catch (error: any) {
       toast.error(error.message || 'Erro ao criar acesso ao portal');
     }
+  };
+
+  const handleCopyCredentials = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copiado!');
   };
 
   const handleOpenEdit = (guardian: Guardian) => {
