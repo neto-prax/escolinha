@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Users } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, UserPlus, Upload, Download, Users, Copy, Eye, EyeOff } from 'lucide-react';
 import { MultiSelectTableHeader, MultiSelectTableCell, MultiSelectActionBar } from '@/components/ui/multi-select-table';
 import {
   DropdownMenu,
@@ -74,6 +74,8 @@ const Responsaveis = () => {
   const [editingGuardian, setEditingGuardian] = useState<Guardian | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [credentialsModal, setCredentialsModal] = useState<{ email: string; password: string } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<GuardianFormData>({
     full_name: '',
     email: '',
@@ -252,13 +254,16 @@ const Responsaveis = () => {
         toast.error(data.error);
         return;
       }
-      toast.success(
-        `Acesso criado! Email: ${data.email} | Senha temporária: ${data.temporary_password}`,
-        { duration: 15000 }
-      );
+      setShowPassword(false);
+      setCredentialsModal({ email: data.email, password: data.temporary_password });
     } catch (error: any) {
       toast.error(error.message || 'Erro ao criar acesso ao portal');
     }
+  };
+
+  const handleCopyCredentials = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copiado!');
   };
 
   const handleOpenEdit = (guardian: Guardian) => {
@@ -744,6 +749,54 @@ const Responsaveis = () => {
         }}
         itemLabel="responsáveis"
       />
+
+      {/* Credentials Modal */}
+      <Dialog open={!!credentialsModal} onOpenChange={() => setCredentialsModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Acesso ao Portal Criado!</DialogTitle>
+            <DialogDescription>
+              Compartilhe as credenciais abaixo com o responsável. A senha é temporária e deve ser alterada no primeiro acesso.
+            </DialogDescription>
+          </DialogHeader>
+          {credentialsModal && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Email (Login)</Label>
+                <div className="flex items-center gap-2">
+                  <Input value={credentialsModal.email} readOnly className="font-mono" />
+                  <Button variant="outline" size="icon" onClick={() => handleCopyCredentials(credentialsModal.email)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Senha Temporária</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    value={credentialsModal.password}
+                    readOnly
+                    className="font-mono"
+                  />
+                  <Button variant="outline" size="icon" onClick={() => setShowPassword(!showPassword)}>
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={() => handleCopyCredentials(credentialsModal.password)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <Button className="w-full" onClick={() => {
+                handleCopyCredentials(`Email: ${credentialsModal.email}\nSenha: ${credentialsModal.password}`);
+              }}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copiar Tudo
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
