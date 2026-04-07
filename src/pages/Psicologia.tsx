@@ -51,7 +51,7 @@ const Psicologia = () => {
   const [search, setSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<PsychologyRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
 
   const { data: students = [], isLoading: loadingStudents } = useQuery({
     queryKey: ['students-psychology', school?.id],
@@ -171,7 +171,6 @@ const Psicologia = () => {
       <PageHeader
         title="Psicologia"
         description="Acompanhamento psicológico dos alunos"
-        icon={Brain}
       />
 
       <div className="flex items-center gap-4">
