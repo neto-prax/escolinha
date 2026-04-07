@@ -1,197 +1,72 @@
 
-# Plano: Calendário Escolar com Exportação em PDF
 
-## Resumo
-Implementar a funcionalidade completa de calendário escolar na página Pedagógico, incluindo criação de datas importantes, contador de dias letivos em tempo real e exportação do calendário em PDF.
+## Portal do Responsável — Plano de Implementação
 
-## O Que Será Construído
+Portal web onde responsáveis fazem login com email/senha e visualizam dados completos dos seus alunos, incluindo informações acadêmicas e financeiras.
 
-### 1. Banco de Dados
-Criar tabela `school_calendar` para armazenar os eventos do calendário escolar.
-
-### 2. Aba de Calendário no Pedagógico
-- Estrutura de abas: "Visão Geral" e "Calendário"
-- Contador em tempo real de dias letivos
-- Lista de eventos com filtros
-- Botão para criar novas datas
-- Botão para exportar em PDF
-
-### 3. Exportação em PDF
-- Documento formatado com cabeçalho da escola
-- Tabela organizada por data
-- Resumo de dias letivos
-- Download automático
-
----
-
-## Estrutura Visual
+### Visão Geral
 
 ```text
-+------------------------------------------+
-|  Pedagógico                               |
-|  Gestão pedagógica completa              |
-+------------------------------------------+
-|  [Visão Geral]  [Calendário]             |
-+------------------------------------------+
-|                                          |
-|  +--------+  +--------+  +--------+      |
-|  | 200    |  | 85     |  | 15     |      |
-|  | Dias   |  | Trans- |  | Feria- |      |
-|  | Letivos|  | corridos|  | dos    |      |
-|  +--------+  +--------+  +--------+      |
-|                                          |
-|  [+ Nova Data]  [Exportar PDF]           |
-|                                          |
-|  +--------------------------------------+|
-|  | Data    | Título       | Tipo | Afeta||
-|  |---------|--------------|------|------||
-|  | 01/01   | Ano Novo     | Fer. | Sim  ||
-|  | 20/02   | Carnaval     | Rec. | Sim  ||
-|  | 15/03   | Reunião Pais | Evnt | Não  ||
-|  +--------------------------------------+|
-+------------------------------------------+
+/portal/login  →  /portal/dashboard
+                      ├── Dados do Aluno (nome, turma, foto)
+                      ├── Frequência
+                      ├── Notas
+                      ├── Diário de Classe
+                      ├── Comunicados / Calendário Escolar
+                      └── Financeiro (boletos, pagamentos)
 ```
 
----
+### Etapas
 
-## Detalhes Tecnicos
+**1. Tabela de acesso do responsável (migration)**
+- Criar tabela `guardian_portal_access` com campos: `id`, `guardian_id` (ref guardians), `school_id`, `email`, `user_id` (ref auth.users), `is_active`, `created_at`
+- RLS: responsável vê apenas seus dados; diretores/secretários gerenciam acessos
+- Isso vincula um login (auth.users) a um responsável existente na tabela `guardians`
 
-### Migração do Banco de Dados
+**2. Criar role "guardian" no sistema**
+- Adicionar `'guardian'` ao enum `app_role` ou usar a tabela `guardian_portal_access` para identificar o tipo de usuário sem alterar o enum
+- Abordagem preferida: usar a tabela `guardian_portal_access` para evitar alterar o enum existente; no AuthContext, detectar se o usuário logado tem registro nessa tabela e redirecionar para o portal
 
-```sql
-CREATE TABLE public.school_calendar (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  school_id uuid NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
-  title text NOT NULL,
-  description text,
-  start_date date NOT NULL,
-  end_date date,
-  event_type text NOT NULL DEFAULT 'event',
-  affects_school_days boolean DEFAULT false,
-  year integer NOT NULL,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
+**3. Rotas do Portal (`/portal/*`)**
+- `/portal/login` — tela de login exclusiva para responsáveis (visual diferenciado)
+- `/portal` — layout do portal com sidebar simplificada
+- `/portal/dashboard` — visão geral dos alunos vinculados
+- `/portal/aluno/:id` — detalhes do aluno (frequência, notas, diário, financeiro)
+- `/portal/calendario` — calendário escolar
+- `/portal/comunicados` — comunicados da escola
 
--- RLS Policies
-ALTER TABLE public.school_calendar ENABLE ROW LEVEL SECURITY;
+**4. Páginas e componentes**
+- **PortalLogin**: formulário de login que redireciona para `/portal/dashboard`
+- **PortalLayout**: layout limpo com header mostrando nome da escola e do responsável
+- **PortalDashboard**: cards com cada aluno vinculado (nome, turma, foto, status financeiro)
+- **PortalStudentDetail**: página com abas:
+  - **Dados**: info básica do aluno
+  - **Frequência**: tabela de presença por mês
+  - **Notas**: notas por disciplina/período
+  - **Diário**: entradas do diário de classe
+  - **Financeiro**: boletos, status de pagamento, histórico
 
--- Diretores e secretários podem gerenciar
-CREATE POLICY "Directors and secretary can manage calendar"
-  ON public.school_calendar FOR ALL
-  USING (is_director(auth.uid(), school_id) 
-    OR has_role(auth.uid(), 'secretary', school_id));
+**5. Consultas de dados**
+- Buscar `guardian_portal_access` → `guardians` → `student_guardians` → `students` para listar alunos
+- Frequência: `attendance` filtrada por `student_id`
+- Notas: `grades` filtrada por `student_id`
+- Diário: `daily_entries` via `student_classes` → `class_id`
+- Financeiro: `billing` filtrada por `student_id` ou `guardian_id`
+- Calendário: `school_calendar` filtrada por `school_id`
 
--- Todos da escola podem visualizar
-CREATE POLICY "Users can view school calendar"
-  ON public.school_calendar FOR SELECT
-  USING (school_id = get_user_school_id(auth.uid()));
-```
+**6. Gestão de acessos (lado admin)**
+- Na página de Responsáveis existente, adicionar botão "Criar acesso ao portal" que:
+  - Cria um usuário via edge function (email do responsável + senha temporária)
+  - Insere registro em `guardian_portal_access`
+  - Exibe credenciais para envio via WhatsApp
 
-### Dependência a Instalar
-- `jspdf` - Biblioteca para geração de PDFs
-- `jspdf-autotable` - Plugin para criar tabelas formatadas
+### Segurança
+- RLS em todas as consultas: responsável só acessa dados dos seus alunos vinculados
+- Portal completamente isolado do painel administrativo (`/app/*`)
+- Sem acesso a dados de outros alunos ou escola
 
-### Componentes a Criar
+### Detalhes técnicos
+- Novas migrations: 1 tabela (`guardian_portal_access`) + políticas RLS para leitura de `attendance`, `grades`, `daily_entries`, `billing`, `school_calendar` por responsáveis
+- Nova edge function para criar acesso do responsável
+- ~8 novos arquivos (páginas + layout + componentes do portal)
 
-| Arquivo | Descrição |
-|---------|-----------|
-| `src/components/pedagogico/SchoolCalendarTab.tsx` | Componente principal da aba calendário |
-| `src/components/pedagogico/CalendarEventModal.tsx` | Modal para criar/editar eventos |
-| `src/components/pedagogico/CalendarStats.tsx` | Cards com estatísticas de dias letivos |
-
-### Modificar Arquivo Existente
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/pages/Pedagogico.tsx` | Adicionar estrutura de Tabs com abas "Visão Geral" e "Calendário" |
-
-### Tipos de Eventos Suportados
-
-| Tipo | Cor | Descrição |
-|------|-----|-----------|
-| holiday | Vermelho | Feriados nacionais/locais |
-| recess | Laranja | Recesso escolar |
-| event | Azul | Eventos da escola |
-| meeting | Roxo | Reuniões pedagógicas |
-| special | Verde | Dias letivos especiais (sábado letivo) |
-
-### Lógica de Cálculo de Dias Letivos
-
-```typescript
-// Usando date-fns
-const calculateSchoolDays = (year: number, events: CalendarEvent[]) => {
-  // 1. Pegar todos os dias do ano letivo (fev-dez)
-  const startDate = new Date(year, 1, 1); // 1 de fevereiro
-  const endDate = new Date(year, 11, 20); // 20 de dezembro
-  
-  // 2. Filtrar apenas dias úteis (seg-sex)
-  const allDays = eachDayOfInterval({ start: startDate, end: endDate })
-    .filter(day => !isWeekend(day));
-  
-  // 3. Subtrair feriados e recessos que afetam dias letivos
-  const nonSchoolDays = events
-    .filter(e => e.affects_school_days)
-    .flatMap(e => eachDayOfInterval({ 
-      start: new Date(e.start_date), 
-      end: new Date(e.end_date || e.start_date) 
-    }));
-  
-  // 4. Adicionar sábados letivos
-  const specialDays = events
-    .filter(e => e.event_type === 'special' && !e.affects_school_days);
-  
-  return allDays.length - nonSchoolDays.length + specialDays.length;
-};
-```
-
-### Função de Exportação PDF
-
-```typescript
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-
-const handleExportCalendarPDF = () => {
-  const doc = new jsPDF();
-  
-  // Cabeçalho
-  doc.setFontSize(18);
-  doc.text(`Calendário Escolar ${selectedYear}`, 14, 22);
-  doc.setFontSize(10);
-  doc.text(`Escola: ${school?.name}`, 14, 30);
-  doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}`, 14, 38);
-  
-  // Resumo
-  doc.setFontSize(12);
-  doc.text(`Total de Dias Letivos: ${totalSchoolDays}`, 14, 50);
-  
-  // Tabela de eventos
-  autoTable(doc, {
-    startY: 60,
-    head: [['Data Início', 'Data Fim', 'Título', 'Tipo', 'Afeta Dias Letivos']],
-    body: events.map(e => [
-      format(new Date(e.start_date), 'dd/MM/yyyy'),
-      e.end_date ? format(new Date(e.end_date), 'dd/MM/yyyy') : '-',
-      e.title,
-      eventTypeLabels[e.event_type],
-      e.affects_school_days ? 'Sim' : 'Não'
-    ]),
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [59, 130, 246] }
-  });
-  
-  doc.save(`calendario_escolar_${selectedYear}.pdf`);
-  toast.success('Calendário exportado com sucesso!');
-};
-```
-
----
-
-## Sequência de Implementação
-
-1. Criar migração da tabela `school_calendar`
-2. Instalar dependências `jspdf` e `jspdf-autotable`
-3. Criar componente `CalendarStats.tsx` com os contadores
-4. Criar componente `CalendarEventModal.tsx` para criar/editar eventos
-5. Criar componente `SchoolCalendarTab.tsx` com lista e exportação PDF
-6. Modificar `Pedagogico.tsx` para usar estrutura de Tabs
