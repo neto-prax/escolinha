@@ -12,8 +12,9 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalDashboard from "./pages/portal/PortalDashboard";
-import PortalStudentDetail from "./pages/portal/PortalStudentDetail";
-import PortalCalendario from "./pages/portal/PortalCalendario";
+import PortalAtividades from "./pages/portal/PortalAtividades";
+import PortalOcorrencias from "./pages/portal/PortalOcorrencias";
+import PortalBoletos from "./pages/portal/PortalBoletos";
 import { PortalLayout } from "./components/portal/PortalLayout";
 import Turmas from "./pages/Turmas";
 import Alunos from "./pages/Alunos";
@@ -76,8 +77,9 @@ const App = () => (
             <Route path="/portal/login" element={<PortalLogin />} />
             <Route path="/portal" element={<PortalLayout />}>
               <Route path="dashboard" element={<PortalDashboard />} />
-              <Route path="aluno/:id" element={<PortalStudentDetail />} />
-              <Route path="calendario" element={<PortalCalendario />} />
+              <Route path="atividades" element={<PortalAtividades />} />
+              <Route path="ocorrencias" element={<PortalOcorrencias />} />
+              <Route path="boletos" element={<PortalBoletos />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
