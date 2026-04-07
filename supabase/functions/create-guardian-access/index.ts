@@ -89,6 +89,12 @@ Deno.serve(async (req) => {
           // Reset password and create access
           await supabaseAdmin.auth.admin.updateUserById(existingUser.id, { password: tempPassword })
           
+          // Ensure profile has school_id
+          await supabaseAdmin
+            .from('profiles')
+            .update({ school_id })
+            .eq('id', existingUser.id)
+
           const { error: accessError } = await supabaseAdmin
             .from('guardian_portal_access')
             .insert({
@@ -112,6 +118,12 @@ Deno.serve(async (req) => {
       }
       throw createError
     }
+
+    // Set school_id on profile
+    await supabaseAdmin
+      .from('profiles')
+      .update({ school_id })
+      .eq('id', newUser.user.id)
 
     // Create guardian portal access
     const { error: accessError } = await supabaseAdmin
