@@ -62,7 +62,7 @@ export function WhatsAppInstancesManager() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isSavingSectors, setIsSavingSectors] = useState(false);
   const [selectedSectorIds, setSelectedSectorIds] = useState<string[]>([]);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch all sectors
   const { data: sectors = [] } = useQuery({
