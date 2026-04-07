@@ -14,6 +14,7 @@ import Turmas from "./pages/Turmas";
 import Alunos from "./pages/Alunos";
 import Diario from "./pages/Diario";
 import Pedagogico from "./pages/Pedagogico";
+import Psicologia from "./pages/Psicologia";
 import Secretaria from "./pages/Secretaria";
 import Mensagens from "./pages/Mensagens";
 import Financeiro from "./pages/Financeiro";
@@ -51,6 +52,7 @@ const App = () => (
               <Route path="alunos" element={<Alunos />} />
               <Route path="diario" element={<Diario />} />
               <Route path="pedagogico" element={<Pedagogico />} />
+              <Route path="psicologia" element={<Psicologia />} />
               <Route path="secretaria" element={<Secretaria />} />
               <Route path="mensagens" element={<Mensagens />} />
               <Route path="financeiro" element={<Financeiro />} />
