@@ -1627,6 +1627,92 @@ export type Database = {
           },
         ]
       }
+      psychology_records: {
+        Row: {
+          attachments: Json | null
+          created_at: string
+          description: string | null
+          duration_minutes: number | null
+          follow_up_date: string | null
+          follow_up_notes: string | null
+          id: string
+          participants: string | null
+          professional_id: string
+          record_date: string
+          record_type: string
+          school_id: string
+          status: string | null
+          student_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          attachments?: Json | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          follow_up_date?: string | null
+          follow_up_notes?: string | null
+          id?: string
+          participants?: string | null
+          professional_id: string
+          record_date?: string
+          record_type?: string
+          school_id: string
+          status?: string | null
+          student_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          attachments?: Json | null
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number | null
+          follow_up_date?: string | null
+          follow_up_notes?: string | null
+          id?: string
+          participants?: string | null
+          professional_id?: string
+          record_date?: string
+          record_type?: string
+          school_id?: string
+          status?: string | null
+          student_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "psychology_records_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "psychology_records_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "psychology_records_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "psychology_records_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quick_replies: {
         Row: {
           category: string | null
