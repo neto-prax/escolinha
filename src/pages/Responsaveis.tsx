@@ -238,6 +238,29 @@ const Responsaveis = () => {
     });
   };
 
+  const handleCreatePortalAccess = async (guardian: Guardian) => {
+    if (!guardian.email) {
+      toast.error('O responsável precisa ter um email cadastrado para criar acesso ao portal.');
+      return;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke('create-guardian-access', {
+        body: { guardian_id: guardian.id, school_id: profile?.school_id },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      toast.success(
+        `Acesso criado! Email: ${data.email} | Senha temporária: ${data.temporary_password}`,
+        { duration: 15000 }
+      );
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao criar acesso ao portal');
+    }
+  };
+
   const handleOpenEdit = (guardian: Guardian) => {
     setEditingGuardian(guardian);
     setFormData({
