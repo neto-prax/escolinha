@@ -59,33 +59,6 @@ const navigationGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Pedagógico',
-    items: [
-      { title: 'Diário', url: '/app/diario', icon: ClipboardList, module: 'diario' },
-      { title: 'Turmas', url: '/app/turmas', icon: Users, module: 'turmas' },
-      { title: 'Pedagógico', url: '/app/pedagogico', icon: BookOpen, module: 'pedagogico' },
-      { title: 'Psicologia', url: '/app/psicologia', icon: Brain, module: 'pedagogico' },
-    ],
-  },
-  {
-    label: 'Secretaria',
-    items: [
-      { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
-      { title: 'Responsáveis', url: '/app/responsaveis', icon: Users, module: 'secretaria' },
-      { title: 'Secretaria', url: '/app/secretaria', icon: Building2, module: 'secretaria' },
-      { title: 'CRM Matrículas', url: '/app/crm-matriculas', icon: Users, module: 'secretaria' },
-    ],
-  },
-  {
-    label: 'Comunicação',
-    items: [
-      { title: 'Mensagens', url: '/app/mensagens', icon: MessageSquare, module: 'mensagens' },
-      { title: 'Comunicados', url: '/app/comunicados', icon: Megaphone, module: 'mensagens' },
-      { title: 'Contatos', url: '/app/contatos', icon: Contact, module: 'mensagens' },
-      { title: 'Setores', url: '/app/setores', icon: Layers, module: 'setores' },
-    ],
-  },
-  {
     label: 'Financeiro',
     items: [
       { title: 'Administrativo', url: '/app/administrativo', icon: Briefcase, module: 'administrativo' },
