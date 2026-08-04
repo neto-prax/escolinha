@@ -102,33 +102,6 @@ const Dashboard = () => {
             <CardDescription>Acesse as funcionalidades mais utilizadas</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
-            {hasPermission('diario') && (
-              <Link to="/app/diario">
-                <Button variant="outline" className="w-full justify-start">
-                  <CalendarDays className="mr-2 h-4 w-4" />
-                  Registrar diário de classe
-                  <ArrowRight className="ml-auto h-4 w-4" />
-                </Button>
-              </Link>
-            )}
-            {hasPermission('alunos') && (
-              <Link to="/app/alunos">
-                <Button variant="outline" className="w-full justify-start">
-                  <GraduationCap className="mr-2 h-4 w-4" />
-                  Cadastrar novo aluno
-                  <ArrowRight className="ml-auto h-4 w-4" />
-                </Button>
-              </Link>
-            )}
-            {hasPermission('mensagens') && (
-              <Link to="/app/mensagens">
-                <Button variant="outline" className="w-full justify-start">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Ver mensagens
-                  <ArrowRight className="ml-auto h-4 w-4" />
-                </Button>
-              </Link>
-            )}
             {hasPermission('financeiro') && (
               <Link to="/app/financeiro">
                 <Button variant="outline" className="w-full justify-start">

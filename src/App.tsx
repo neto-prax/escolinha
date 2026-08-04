@@ -16,23 +16,11 @@ import PortalAtividades from "./pages/portal/PortalAtividades";
 import PortalOcorrencias from "./pages/portal/PortalOcorrencias";
 import PortalBoletos from "./pages/portal/PortalBoletos";
 import { PortalLayout } from "./components/portal/PortalLayout";
-import Turmas from "./pages/Turmas";
-import Alunos from "./pages/Alunos";
-import Diario from "./pages/Diario";
-import Pedagogico from "./pages/Pedagogico";
-import Psicologia from "./pages/Psicologia";
-import Secretaria from "./pages/Secretaria";
-import Mensagens from "./pages/Mensagens";
 import Financeiro from "./pages/Financeiro";
 import Administrativo from "./pages/Administrativo";
 import Relatorios from "./pages/Relatorios";
-import Setores from "./pages/Setores";
 import Configuracoes from "./pages/Configuracoes";
 import Usuarios from "./pages/Usuarios";
-import CRMMatriculas from "./pages/CRMMatriculas";
-import Responsaveis from "./pages/Responsaveis";
-import Contatos from "./pages/Contatos";
-import Comunicados from "./pages/Comunicados";
 import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 
@@ -54,23 +42,11 @@ const App = () => (
             {/* Protected routes */}
             <Route path="/app" element={<AppLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
-              <Route path="turmas" element={<Turmas />} />
-              <Route path="alunos" element={<Alunos />} />
-              <Route path="diario" element={<Diario />} />
-              <Route path="pedagogico" element={<Pedagogico />} />
-              <Route path="psicologia" element={<Psicologia />} />
-              <Route path="secretaria" element={<Secretaria />} />
-              <Route path="mensagens" element={<Mensagens />} />
               <Route path="financeiro" element={<Financeiro />} />
               <Route path="administrativo" element={<Administrativo />} />
               <Route path="relatorios" element={<Relatorios />} />
-              <Route path="setores" element={<Setores />} />
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="usuarios" element={<Usuarios />} />
-              <Route path="crm-matriculas" element={<CRMMatriculas />} />
-              <Route path="responsaveis" element={<Responsaveis />} />
-              <Route path="contatos" element={<Contatos />} />
-              <Route path="comunicados" element={<Comunicados />} />
             </Route>
             
             {/* Portal do Responsável */}
