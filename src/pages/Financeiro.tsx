@@ -1,33 +1,100 @@
+import React, { useState } from 'react';
+import { Tabs } from '@/components/financeiro/Tabs';
+import { LancamentosTab } from '@/components/financeiro/LancamentosTab';
+import { OrcamentosTab } from '@/components/financeiro/OrcamentosTab';
+import { SalariosTab } from '@/components/financeiro/SalariosTab';
+import { Lancamento, Orcamento, Salario } from '@/types/finance';
+import { mockExpenses } from '@/data/mockData';
+import { Wallet, Calculator, Users } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { DollarSign, TrendingUp, AlertTriangle, FileText } from 'lucide-react';
 
-const Financeiro = () => (
-  <div className="space-y-6">
-    <PageHeader title="Financeiro" description="Gestão financeira da escola" />
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-      {[
-        { icon: DollarSign, title: 'Mensalidades', desc: 'Geração e baixa de mensalidades' },
-        { icon: AlertTriangle, title: 'Inadimplência', desc: 'Controle de atrasos e cobranças' },
-        { icon: TrendingUp, title: 'Lançamentos', desc: 'Receitas e despesas' },
-        { icon: FileText, title: 'Relatórios', desc: 'Relatórios financeiros' },
-      ].map((item) => (
-        <Card key={item.title} className="card-interactive">
-          <CardHeader>
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-4">
-              <item.icon className="h-6 w-6" />
-            </div>
-            <CardTitle>{item.title}</CardTitle>
-            <CardDescription>{item.desc}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full" variant="outline">Acessar</Button>
-          </CardContent>
-        </Card>
-      ))}
+const Financeiro = () => {
+  const [lancamentos, setLancamentos] = useState<Lancamento[]>(mockExpenses);
+  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([
+    { id: 'orc-1', nome: 'Dia dos Pais', categoria: 'Eventos', valorOrcado: 1000 },
+    { id: 'orc-2', nome: 'Reforma do Pátio', categoria: 'Reformas', valorOrcado: 5000 },
+  ]);
+  const [salarios, setSalarios] = useState<Salario[]>([
+    { id: 'sal-1', colaborador: 'João Professor', salarioBase: 3500, encargos: 150, descontos: 350 }
+  ]);
+
+  const handleAddLancamento = (lancamento: Omit<Lancamento, 'id'>) => {
+    const newLancamento: Lancamento = {
+      ...lancamento,
+      id: crypto.randomUUID(),
+    };
+    setLancamentos([newLancamento, ...lancamentos]);
+  };
+
+  const handleAddOrcamento = (orcamento: Omit<Orcamento, 'id'>) => {
+    const newOrcamento: Orcamento = {
+      ...orcamento,
+      id: crypto.randomUUID(),
+    };
+    setOrcamentos([...orcamentos, newOrcamento]);
+  };
+
+  const handleAddSalario = (salario: Omit<Salario, 'id'>) => {
+    const newSalario: Salario = {
+      ...salario,
+      id: crypto.randomUUID(),
+    };
+    setSalarios([...salarios, newSalario]);
+  };
+
+  const tabs = [
+    {
+      id: 'lancamentos',
+      label: (
+        <span className="flex items-center gap-2">
+          <Wallet size={16} /> Lançamentos
+        </span>
+      ),
+      content: (
+        <LancamentosTab 
+          lancamentos={lancamentos} 
+          orcamentos={orcamentos} 
+          onAddLancamento={handleAddLancamento} 
+        />
+      ),
+    },
+    {
+      id: 'orcamentos',
+      label: (
+        <span className="flex items-center gap-2">
+          <Calculator size={16} /> Orçamentos
+        </span>
+      ),
+      content: (
+        <OrcamentosTab 
+          orcamentos={orcamentos} 
+          lancamentos={lancamentos} 
+          onAddOrcamento={handleAddOrcamento} 
+        />
+      ),
+    },
+    {
+      id: 'salarios',
+      label: (
+        <span className="flex items-center gap-2">
+          <Users size={16} /> Salário
+        </span>
+      ),
+      content: (
+        <SalariosTab 
+          salarios={salarios} 
+          onAddSalario={handleAddSalario} 
+        />
+      ),
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Financeiro" description="Gestão financeira da escola" />
+      <Tabs tabs={tabs} />
     </div>
-  </div>
-);
+  );
+};
 
 export default Financeiro;

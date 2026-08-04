@@ -39,6 +39,7 @@ import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { mockEmployees } from '@/data/mockData';
 import {
   Form,
   FormControl,
@@ -49,13 +50,6 @@ import {
 } from '@/components/ui/form';
 
 // Mock data
-const mockEmployees = [
-  { id: '1', name: 'Maria Silva', role: 'Professora', department: 'Pedagógico', phone: '(11) 99999-1111', status: 'active', hire_date: '2020-02-15' },
-  { id: '2', name: 'João Santos', role: 'Professor', department: 'Pedagógico', phone: '(11) 99999-2222', status: 'active', hire_date: '2019-08-01' },
-  { id: '3', name: 'Ana Costa', role: 'Secretária', department: 'Administrativo', phone: '(11) 99999-3333', status: 'active', hire_date: '2021-03-10' },
-  { id: '4', name: 'Carlos Lima', role: 'Auxiliar', department: 'Serviços Gerais', phone: '(11) 99999-4444', status: 'vacation', hire_date: '2018-05-20' },
-  { id: '5', name: 'Paula Oliveira', role: 'Coordenadora', department: 'Pedagógico', phone: '(11) 99999-5555', status: 'active', hire_date: '2017-01-05' },
-];
 
 const mockContracts = [
   { id: '1', title: 'Contrato de Matrícula 2026', type: 'Educacional', total: 324, signed: 280, pending: 44, status: 'active' },
