@@ -42,23 +42,11 @@ const App = () => (
             {/* Protected routes */}
             <Route path="/app" element={<AppLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
-              <Route path="turmas" element={<Turmas />} />
-              <Route path="alunos" element={<Alunos />} />
-              <Route path="diario" element={<Diario />} />
-              <Route path="pedagogico" element={<Pedagogico />} />
-              <Route path="psicologia" element={<Psicologia />} />
-              <Route path="secretaria" element={<Secretaria />} />
-              <Route path="mensagens" element={<Mensagens />} />
               <Route path="financeiro" element={<Financeiro />} />
               <Route path="administrativo" element={<Administrativo />} />
               <Route path="relatorios" element={<Relatorios />} />
-              <Route path="setores" element={<Setores />} />
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="usuarios" element={<Usuarios />} />
-              <Route path="crm-matriculas" element={<CRMMatriculas />} />
-              <Route path="responsaveis" element={<Responsaveis />} />
-              <Route path="contatos" element={<Contatos />} />
-              <Route path="comunicados" element={<Comunicados />} />
             </Route>
             
             {/* Portal do Responsável */}
