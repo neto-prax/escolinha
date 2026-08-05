@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Tabs } from '@/components/financeiro/Tabs';
 import { LancamentosTab } from '@/components/financeiro/LancamentosTab';
 import { OrcamentosTab } from '@/components/financeiro/OrcamentosTab';
@@ -10,13 +11,13 @@ import { Wallet, Calculator, Users, LayoutDashboard } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 
 const Financeiro = () => {
-  const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
-  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
-  const [salarios, setSalarios] = useState<Salario[]>([]);
-  const [caixas, setCaixas] = useState<Caixa[]>(mockCaixas);
-  const [cartoes, setCartoes] = useState<Cartao[]>(mockCartoes);
+  const [lancamentosStorage, setLancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+  const [orcamentos, setOrcamentos] = useLocalStorage<Orcamento[]>('escolinha_orcamentos', []);
+  const [salarios, setSalarios] = useLocalStorage<Salario[]>('escolinha_salarios', []);
+  const [caixas, setCaixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
+  const [cartoes, setCartoes] = useLocalStorage<Cartao[]>('escolinha_cartoes', mockCartoes);
   
-  const [categorias, setCategorias] = useState<string[]>([
+  const [categorias, setCategorias] = useLocalStorage<string[]>('escolinha_categorias', [
     'Administrativo',
     'Alimentação',
     'Operacional & Infraestrutura',
@@ -25,6 +26,16 @@ const Financeiro = () => {
     'Eventos',
     'Reformas'
   ]);
+
+  // Necessário porque o LocalStorage converte Date para string
+  const lancamentos: Lancamento[] = lancamentosStorage.map(l => ({
+    ...l,
+    data: typeof l.data === 'string' ? new Date(l.data) : l.data
+  }));
+
+  const setLancamentos = (novosLancamentos: Lancamento[]) => {
+    setLancamentosStorage(novosLancamentos);
+  };
 
   const handleAddCategoria = (novaCategoria: string) => {
     if (novaCategoria && !categorias.includes(novaCategoria)) {
