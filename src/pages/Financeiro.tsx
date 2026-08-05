@@ -4,10 +4,11 @@ import { Tabs } from '@/components/financeiro/Tabs';
 import { LancamentosTab } from '@/components/financeiro/LancamentosTab';
 import { OrcamentosTab } from '@/components/financeiro/OrcamentosTab';
 import { SalariosTab } from '@/components/financeiro/SalariosTab';
+import { CartoesTab } from '@/components/financeiro/CartoesTab';
 import { DashboardTab } from '@/components/financeiro/DashboardTab';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '@/types/finance';
 import { mockExpenses, mockCaixas, mockCartoes } from '@/data/mockData';
-import { Wallet, Calculator, Users, LayoutDashboard } from 'lucide-react';
+import { Wallet, Calculator, Users, LayoutDashboard, CreditCard } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 
 const Financeiro = () => {
@@ -82,6 +83,18 @@ const Financeiro = () => {
     setSalarios([...salarios, newSalario]);
   };
 
+  const handleAddCartao = (cartao: Omit<Cartao, 'id'>) => {
+    const newCartao: Cartao = {
+      ...cartao,
+      id: crypto.randomUUID(),
+    };
+    setCartoes([...cartoes, newCartao]);
+  };
+
+  const handleUpdateCartao = (id: string, updates: Partial<Cartao>) => {
+    setCartoes(cartoes.map(c => c.id === id ? { ...c, ...updates } : c));
+  };
+
   const tabs = [
     {
       id: 'dashboard',
@@ -151,6 +164,21 @@ const Financeiro = () => {
           cartoes={cartoes}
           onAddSalario={handleAddSalario} 
           onAddLancamento={handleAddLancamento}
+        />
+      ),
+    },
+    {
+      id: 'cartoes',
+      label: (
+        <span className="flex items-center gap-2">
+          <CreditCard size={16} /> Cartões
+        </span>
+      ),
+      content: (
+        <CartoesTab 
+          cartoes={cartoes} 
+          onAddCartao={handleAddCartao}
+          onUpdateCartao={handleUpdateCartao}
         />
       ),
     }
