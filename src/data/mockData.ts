@@ -1,4 +1,4 @@
-import { Expense } from '../types/finance';
+import { Expense, Caixa, Cartao } from '../types/finance';
 
 export const mockExpenses: Expense[] = [
   {
@@ -11,6 +11,8 @@ export const mockExpenses: Expense[] = [
     valor: 45000.00,
     formaPagamento: 'Transferência Bancária',
     tipo: 'Saída',
+    status: 'Pago',
+    caixaId: 'c2',
     observacoes: 'Referente ao mês anterior'
   },
   {
@@ -23,6 +25,8 @@ export const mockExpenses: Expense[] = [
     valor: 12500.50,
     formaPagamento: 'Boleto',
     tipo: 'Saída',
+    status: 'Pago',
+    caixaId: 'c1',
     observacoes: 'Apostilas do 3º Bimestre'
   },
   {
@@ -35,6 +39,7 @@ export const mockExpenses: Expense[] = [
     valor: 2300.00,
     formaPagamento: 'PIX',
     tipo: 'Saída',
+    status: 'Pago',
     observacoes: 'Manutenção do pátio principal'
   },
   {
@@ -47,6 +52,7 @@ export const mockExpenses: Expense[] = [
     valor: 1500.00,
     formaPagamento: 'Boleto',
     tipo: 'Saída',
+    status: 'Pago',
     observacoes: 'Novos estagiários'
   },
   {
@@ -59,6 +65,7 @@ export const mockExpenses: Expense[] = [
     valor: 850.75,
     formaPagamento: 'PIX',
     tipo: 'Saída',
+    status: 'Pago',
     observacoes: 'Semana 1'
   },
   {
@@ -70,6 +77,7 @@ export const mockExpenses: Expense[] = [
     tipoCusto: 'Fixo',
     valor: 3400.00,
     tipo: 'Saída',
+    status: 'Pago',
     formaPagamento: 'Transferência Bancária',
   },
   {
@@ -81,7 +89,9 @@ export const mockExpenses: Expense[] = [
     tipoCusto: 'Variável',
     valor: 980.20,
     tipo: 'Saída',
+    status: 'Pago',
     formaPagamento: 'Cartão',
+    cartaoId: 'cc1',
   }
 ];
 
@@ -91,4 +101,15 @@ export const mockEmployees = [
   { id: '3', name: 'Ana Costa', role: 'Secretária', department: 'Administrativo', phone: '(11) 99999-3333', status: 'active', hire_date: '2021-03-10' },
   { id: '4', name: 'Carlos Lima', role: 'Auxiliar', department: 'Serviços Gerais', phone: '(11) 99999-4444', status: 'vacation', hire_date: '2018-05-20' },
   { id: '5', name: 'Paula Oliveira', role: 'Coordenadora', department: 'Pedagógico', phone: '(11) 99999-5555', status: 'active', hire_date: '2017-01-05' },
+];
+
+export const mockCaixas: Caixa[] = [
+  { id: 'c1', nome: 'Caixa Secretaria (Dinheiro)', saldoInicial: 500 },
+  { id: 'c2', nome: 'Conta Banco do Brasil', saldoInicial: 15000 },
+  { id: 'c3', nome: 'Conta Nubank (PIX)', saldoInicial: 8000 },
+];
+
+export const mockCartoes: Cartao[] = [
+  { id: 'cc1', nome: 'Cartão Nubank (Escola)', limite: 10000, diaFechamento: 5, diaVencimento: 12 },
+  { id: 'cc2', nome: 'Cartão Itaú (Diretoria)', limite: 25000, diaFechamento: 15, diaVencimento: 25 },
 ];

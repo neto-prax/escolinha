@@ -74,7 +74,7 @@ const Usuarios = () => {
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
 
-  const [editForm, setEditForm] = useState({ full_name: '', phone: '' });
+  const [editForm, setEditForm] = useState({ full_name: '', phone: '', email: '' });
   const [rolesForm, setRolesForm] = useState<AppRole[]>([]);
   const [createForm, setCreateForm] = useState({
     email: '',
@@ -96,6 +96,7 @@ const Usuarios = () => {
     setEditForm({
       full_name: userToEdit.full_name,
       phone: userToEdit.phone || '',
+      email: userToEdit.email || '',
     });
     setIsEditOpen(true);
   };
@@ -147,6 +148,17 @@ const Usuarios = () => {
   const handleEditSave = async () => {
     if (!selectedUser) return;
     try {
+      if (editForm.email && editForm.email !== selectedUser.email) {
+        const { data, error } = await supabase.functions.invoke('update-user-email', {
+          body: {
+            userId: selectedUser.id,
+            newEmail: editForm.email,
+          },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+      }
+
       await updateProfile.mutateAsync({
         id: selectedUser.id,
         full_name: editForm.full_name,
@@ -159,8 +171,8 @@ const Usuarios = () => {
       if (selectedUser.id === user?.id) {
         await refreshProfile();
       }
-    } catch (error) {
-      toast.error('Erro ao atualizar perfil');
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao atualizar perfil');
     }
   };
 
@@ -372,6 +384,15 @@ const Usuarios = () => {
                 id="full_name"
                 value={editForm.full_name}
                 onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
               />
             </div>
             <div className="space-y-2">

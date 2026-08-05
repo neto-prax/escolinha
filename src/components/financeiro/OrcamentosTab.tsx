@@ -4,10 +4,11 @@ import { Orcamento, Categoria, Lancamento } from '../../types/finance';
 interface OrcamentosTabProps {
   orcamentos: Orcamento[];
   lancamentos: Lancamento[];
+  categorias: string[];
   onAddOrcamento: (orcamento: Omit<Orcamento, 'id'>) => void;
 }
 
-export function OrcamentosTab({ orcamentos, lancamentos, onAddOrcamento }: OrcamentosTabProps) {
+export function OrcamentosTab({ orcamentos, lancamentos, categorias, onAddOrcamento }: OrcamentosTabProps) {
   const [nome, setNome] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('Eventos');
   const [valorOrcado, setValorOrcado] = useState<number | ''>('');
@@ -67,13 +68,12 @@ export function OrcamentosTab({ orcamentos, lancamentos, onAddOrcamento }: Orcam
             <label className="text-sm font-medium text-gray-700 mb-1">Categoria</label>
             <select 
               value={categoria} 
-              onChange={(e) => setCategoria(e.target.value as Categoria)}
+              onChange={(e) => setCategoria(e.target.value)}
               className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
             >
-              <option value="Eventos">Eventos</option>
-              <option value="Reformas">Reformas</option>
-              <option value="Pedagógico & Material">Pedagógico & Material</option>
-              <option value="Operacional & Infraestrutura">Operacional & Infraestrutura</option>
+              {categorias.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           </div>
 

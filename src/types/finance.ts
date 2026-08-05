@@ -1,13 +1,6 @@
 export type Unidade = 'Senador' | 'Papagaio' | 'Todas';
 
-export type Categoria = 
-  | 'Pessoal/RH'
-  | 'Pedagógico & Material'
-  | 'Operacional & Infraestrutura'
-  | 'Alimentação'
-  | 'Administrativo'
-  | 'Eventos'
-  | 'Reformas';
+export type Categoria = string;
 
 export type TipoCusto = 'Fixo' | 'Variável';
 
@@ -25,8 +18,12 @@ export interface Lancamento {
   valor: number;
   formaPagamento: FormaPagamento;
   tipo: TipoLancamento;
+  status: 'Pago' | 'Em Aberto';
+  caixaId?: string;
+  cartaoId?: string;
   orcamentoId?: string; // Para vincular saídas a um orçamento
   observacoes?: string;
+  fechado?: boolean;
 }
 
 // Para retrocompatibilidade caso algo use Expense
@@ -39,10 +36,29 @@ export interface Orcamento {
   valorOrcado: number;
 }
 
+export interface SalarioItem {
+  id: string;
+  descricao: string;
+  tipo: 'Provento' | 'Desconto';
+  valor: number;
+}
+
 export interface Salario {
   id: string;
   colaborador: string;
-  salarioBase: number;
-  encargos: number;
-  descontos: number;
+  itens: SalarioItem[];
+}
+
+export interface Caixa {
+  id: string;
+  nome: string;
+  saldoInicial: number;
+}
+
+export interface Cartao {
+  id: string;
+  nome: string;
+  limite: number;
+  diaFechamento: number;
+  diaVencimento: number;
 }

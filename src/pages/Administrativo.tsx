@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { EmployeeHistoryDialog } from '@/components/administrativo/EmployeeHistoryDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,10 @@ const Administrativo = () => {
   const [activeTab, setActiveTab] = useState('employees');
   const [searchQuery, setSearchQuery] = useState('');
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = useState(false);
+  
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<any>(null);
+
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<EmployeeFormData>({
@@ -261,7 +266,12 @@ const Administrativo = () => {
                             <DropdownMenuItem>Ver ficha</DropdownMenuItem>
                             <DropdownMenuItem>Editar</DropdownMenuItem>
                             <DropdownMenuItem>Registrar férias</DropdownMenuItem>
-                            <DropdownMenuItem>Histórico</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedEmployeeHistory(employee);
+                              setIsHistoryOpen(true);
+                            }}>
+                              Histórico
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="text-destructive">Desligar</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -474,6 +484,12 @@ const Administrativo = () => {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <EmployeeHistoryDialog 
+        employee={selectedEmployeeHistory} 
+        isOpen={isHistoryOpen} 
+        onOpenChange={setIsHistoryOpen} 
+      />
     </div>
   );
 };
