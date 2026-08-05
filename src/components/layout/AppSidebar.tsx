@@ -16,7 +16,10 @@ import {
   Contact,
   Megaphone,
   Brain,
+  Shield,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -76,9 +79,23 @@ const navigationGroups: NavGroup[] = [
 ];
 
 export const AppSidebar = () => {
-  const { hasPermission, school, roles } = useAuth();
+  const { hasPermission, school, roles, user } = useAuth();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
+
+  const { data: isSuperAdmin } = useQuery({
+    queryKey: ['is-super-admin', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { data } = await supabase
+        .from('super_admins')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user?.id,
+  });
 
   // Filter navigation items based on user permissions
   // Se não há roles definidas, mostra tudo (modo desenvolvimento/setup inicial)
@@ -95,6 +112,15 @@ export const AppSidebar = () => {
       }),
     }))
     .filter((group) => group.items.length > 0);
+
+  if (isSuperAdmin) {
+    filteredGroups.push({
+      label: 'Sistema',
+      items: [
+        { title: 'Super Admin', url: '/super-admin', icon: Shield, module: 'superadmin' },
+      ],
+    });
+  }
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">

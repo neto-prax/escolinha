@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign } from 'lucide-react';
+import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2 } from 'lucide-react';
 import { BillingTab } from '@/components/superadmin/BillingTab';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -84,6 +84,8 @@ export default function SuperAdmin() {
   const [deleteSchoolDialog, setDeleteSchoolDialog] = useState<SchoolWithCounts | null>(null);
   const [resetPasswordDialog, setResetPasswordDialog] = useState<UserWithDetails | null>(null);
   const [settingsDialog, setSettingsDialog] = useState<SchoolWithCounts | null>(null);
+  const [linkSchoolDialog, setLinkSchoolDialog] = useState<UserWithDetails | null>(null);
+  const [selectedSchoolToLink, setSelectedSchoolToLink] = useState<string>('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -235,6 +237,32 @@ export default function SuperAdmin() {
       loadData();
     } catch (error: any) {
       toast.error('Erro ao alterar Super Admin: ' + error.message);
+    }
+  };
+
+  const handleLinkSchool = async () => {
+    if (!linkSchoolDialog) return;
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase.functions.invoke('super-admin', {
+        body: { 
+          action: 'link_user_to_school', 
+          userId: linkSchoolDialog.id, 
+          schoolId: selectedSchoolToLink === 'none' ? null : selectedSchoolToLink 
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success(`Usuário vinculado à escola com sucesso`);
+      setLinkSchoolDialog(null);
+      setSelectedSchoolToLink('');
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao vincular escola: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -578,7 +606,19 @@ export default function SuperAdmin() {
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => {
+                                setLinkSchoolDialog(userItem);
+                                setSelectedSchoolToLink(userItem.school_id || 'none');
+                              }}
+                              title="Vincular a Escola"
+                            >
+                              <Building2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => setResetPasswordDialog(userItem)}
+                              title="Redefinir Senha"
                             >
                               <Key className="h-4 w-4" />
                             </Button>
@@ -732,6 +772,45 @@ export default function SuperAdmin() {
               <Button onClick={handleSaveSettings} disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Link School Dialog */}
+        <Dialog open={!!linkSchoolDialog} onOpenChange={() => setLinkSchoolDialog(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Vincular a Escola</DialogTitle>
+              <DialogDescription>
+                Selecione a escola para vincular ao usuário <strong>{linkSchoolDialog?.full_name}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="schoolSelect">Escola</Label>
+                <select
+                  id="schoolSelect"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={selectedSchoolToLink}
+                  onChange={(e) => setSelectedSchoolToLink(e.target.value)}
+                >
+                  <option value="none">Nenhuma escola</option>
+                  {schools.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setLinkSchoolDialog(null)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleLinkSchool} disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar Vínculo
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -335,6 +335,29 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "link_user_to_school": {
+        const { userId, schoolId } = params;
+
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: "userId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { error: updateError } = await supabaseAdmin
+          .from("profiles")
+          .update({ school_id: schoolId })
+          .eq("id", userId);
+
+        if (updateError) throw updateError;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: "Unknown action" }),
