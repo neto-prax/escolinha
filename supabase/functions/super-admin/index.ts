@@ -151,7 +151,9 @@ Deno.serve(async (req) => {
               ...userRecord,
               email: authUser?.user?.email || null,
               roles: roles?.map((r: { role: string }) => r.role) || [],
-              school_name: userRecord.schools?.[0]?.name || null,
+              school_name: Array.isArray(userRecord.schools)
+                ? (userRecord.schools[0]?.name ?? null)
+                : (userRecord.schools?.name ?? null),
               is_super_admin: superAdminIds.has(userRecord.id),
             };
           })
