@@ -32,7 +32,12 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
             <Bot className="h-4 w-4" />
             Automação
           </TabsTrigger>
+          <TabsTrigger value="report" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Relatório diário
+          </TabsTrigger>
           <TabsTrigger value="sectors" className="gap-2">
+
             <Building2 className="h-4 w-4" />
             Setores
           </TabsTrigger>
