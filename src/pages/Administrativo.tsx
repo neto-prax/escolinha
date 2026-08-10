@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Table,
@@ -52,12 +53,7 @@ import {
 
 // Mock data
 
-const mockContracts = [
-  { id: '1', title: 'Contrato de Matrícula 2026', type: 'Educacional', total: 324, signed: 280, pending: 44, status: 'active' },
-  { id: '2', title: 'Fornecimento de Alimentação', type: 'Serviço', vendor: 'Nutrilar LTDA', value: 'R$ 15.000/mês', expires: '2026-12-31', status: 'active' },
-  { id: '3', title: 'Manutenção Predial', type: 'Serviço', vendor: 'ManutençãoJá', value: 'R$ 3.500/mês', expires: '2026-06-30', status: 'active' },
-  { id: '4', title: 'Sistema de Gestão', type: 'Software', vendor: 'Interagir ERP', value: 'R$ 499/mês', expires: '2027-01-01', status: 'active' },
-];
+// Mock data
 
 const employeeSchema = z.object({
   name: z.string().min(3, 'Nome é obrigatório'),
@@ -72,7 +68,6 @@ type EmployeeFormData = z.infer<typeof employeeSchema>;
 
 const Administrativo = () => {
   const [employees, setEmployees] = useState(mockEmployees);
-  const [contracts] = useState(mockContracts);
   const [activeTab, setActiveTab] = useState('employees');
   const [searchQuery, setSearchQuery] = useState('');
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = useState(false);
@@ -81,6 +76,10 @@ const Administrativo = () => {
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<any>(null);
 
   const [isLoading, setIsLoading] = useState(false);
+
+  const [isDadosEscolaOpen, setIsDadosEscolaOpen] = useState(false);
+  const [isCargosOpen, setIsCargosOpen] = useState(false);
+  const [isRelatoriosOpen, setIsRelatoriosOpen] = useState(false);
 
   const form = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
@@ -149,7 +148,7 @@ const Administrativo = () => {
       </PageHeader>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Total Funcionários</CardTitle>
@@ -170,26 +169,6 @@ const Administrativo = () => {
             <p className="text-xs text-muted-foreground">Este mês</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Contratos Ativos</CardTitle>
-            <FileText className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-success">{contracts.length}</div>
-            <p className="text-xs text-muted-foreground">Com fornecedores</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Matrículas Assinadas</CardTitle>
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">280/324</div>
-            <p className="text-xs text-muted-foreground">86% do total</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Tabs */}
@@ -198,10 +177,6 @@ const Administrativo = () => {
           <TabsTrigger value="employees" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Funcionários
-          </TabsTrigger>
-          <TabsTrigger value="contracts" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Contratos
           </TabsTrigger>
           <TabsTrigger value="settings" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -284,75 +259,49 @@ const Administrativo = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="contracts" className="mt-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {contracts.map((contract) => (
-              <Card key={contract.id} className="card-interactive">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline">{contract.type}</Badge>
-                    <Badge variant="secondary" className="badge-success">Ativo</Badge>
-                  </div>
-                  <CardTitle className="text-base mt-2">{contract.title}</CardTitle>
-                  <CardDescription>
-                    {contract.vendor && `Fornecedor: ${contract.vendor}`}
-                    {contract.total && `Total: ${contract.total} contratos`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 text-sm">
-                    {contract.value && (
-                      <p><span className="text-muted-foreground">Valor:</span> {contract.value}</p>
-                    )}
-                    {contract.expires && (
-                      <p><span className="text-muted-foreground">Vencimento:</span> {new Date(contract.expires).toLocaleDateString('pt-BR')}</p>
-                    )}
-                    {contract.signed !== undefined && (
-                      <div className="pt-2">
-                        <div className="flex justify-between text-sm mb-1">
-                          <span>Assinados</span>
-                          <span>{contract.signed}/{contract.total}</span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2">
-                          <div
-                            className="bg-primary h-2 rounded-full"
-                            style={{ width: `${(contract.signed / (contract.total || 1)) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <Button className="w-full mt-4" variant="outline">Ver Detalhes</Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
         <TabsContent value="settings" className="mt-6">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[
-              { icon: Settings, title: 'Dados da Escola', desc: 'Nome, endereço, CNPJ' },
-              { icon: Users, title: 'Cargos e Funções', desc: 'Gerenciar cargos' },
-              { icon: Calendar, title: 'Calendário Escolar', desc: 'Feriados e eventos' },
-            ].map((item) => (
-              <Card key={item.title} className="card-interactive">
-                <CardHeader>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-4">
-                    <item.icon className="h-6 w-6" />
-                  </div>
-                  <CardTitle>{item.title}</CardTitle>
-                  <CardDescription>{item.desc}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button className="w-full" variant="outline">Configurar</Button>
-                </CardContent>
-              </Card>
-            ))}
+            <Card className="card-interactive">
+              <CardHeader>
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-4">
+                  <Settings className="h-6 w-6" />
+                </div>
+                <CardTitle>Dados da Escola</CardTitle>
+                <CardDescription>Nome, endereço, CNPJ</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" variant="outline" onClick={() => setIsDadosEscolaOpen(true)}>Configurar</Button>
+              </CardContent>
+            </Card>
+
+            <Card className="card-interactive">
+              <CardHeader>
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-4">
+                  <Users className="h-6 w-6" />
+                </div>
+                <CardTitle>Cargos e Funções</CardTitle>
+                <CardDescription>Gerenciar cargos</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" variant="outline" onClick={() => setIsCargosOpen(true)}>Configurar</Button>
+              </CardContent>
+            </Card>
+
+            <Card className="card-interactive">
+              <CardHeader>
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary mb-4">
+                  <FileText className="h-6 w-6" />
+                </div>
+                <CardTitle>Responsáveis por Relatórios</CardTitle>
+                <CardDescription>Gerenciar quem recebe os relatórios</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" variant="outline" onClick={() => setIsRelatoriosOpen(true)}>Configurar</Button>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
-
       {/* Employee Form Dialog */}
       <Dialog open={isEmployeeFormOpen} onOpenChange={setIsEmployeeFormOpen}>
         <DialogContent className="max-w-md">
@@ -490,6 +439,113 @@ const Administrativo = () => {
         isOpen={isHistoryOpen} 
         onOpenChange={setIsHistoryOpen} 
       />
+
+      {/* Dialogs de Configurações */}
+      <Dialog open={isDadosEscolaOpen} onOpenChange={setIsDadosEscolaOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Dados da Escola</DialogTitle>
+            <DialogDescription>Atualize os dados cadastrais da escola</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nome da Instituição</label>
+              <Input placeholder="Colégio Interagir" defaultValue="Colégio Interagir - Unidade Papagaio" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">CNPJ</label>
+              <Input placeholder="00.000.000/0000-00" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Endereço</label>
+              <Input placeholder="Rua, Número, Bairro" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsDadosEscolaOpen(false)}>Cancelar</Button>
+            <Button onClick={() => {
+              toast.success("Dados da escola salvos com sucesso!");
+              setIsDadosEscolaOpen(false);
+            }}>Salvar Alterações</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCargosOpen} onOpenChange={setIsCargosOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cargos e Funções</DialogTitle>
+            <DialogDescription>Gerencie os cargos disponíveis no sistema</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex gap-2">
+              <Input placeholder="Novo cargo..." />
+              <Button>Adicionar</Button>
+            </div>
+            <div className="border rounded-md p-4 space-y-2">
+              <div className="flex justify-between items-center"><span className="text-sm">Professor(a)</span> <Badge variant="secondary">15 vinculados</Badge></div>
+              <div className="flex justify-between items-center"><span className="text-sm">Coordenador(a)</span> <Badge variant="secondary">3 vinculados</Badge></div>
+              <div className="flex justify-between items-center"><span className="text-sm">Secretário(a)</span> <Badge variant="secondary">2 vinculados</Badge></div>
+              <div className="flex justify-between items-center"><span className="text-sm">Auxiliar</span> <Badge variant="secondary">5 vinculados</Badge></div>
+            </div>
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setIsCargosOpen(false)}>Fechar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRelatoriosOpen} onOpenChange={setIsRelatoriosOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Responsáveis por Relatórios</DialogTitle>
+            <DialogDescription>Adicione as pessoas que irão receber os relatórios do sistema</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Mensagem Padrão do Relatório</label>
+              <Textarea 
+                placeholder="Digite a mensagem que acompanhará o relatório..."
+                defaultValue="Olá! Segue em anexo o relatório financeiro e administrativo atualizado da nossa unidade."
+                className="min-h-[80px]"
+              />
+            </div>
+            
+            <div className="pt-2">
+              <label className="text-sm font-medium">Adicionar Responsável</label>
+              <div className="flex gap-2 mt-2">
+                <Input placeholder="Nome" className="flex-1" />
+                <Input placeholder="WhatsApp" className="flex-1" />
+                <Button>Adicionar</Button>
+              </div>
+            </div>
+            
+            <div className="border rounded-md p-4 space-y-3 mt-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-medium">Direção Escolar</p>
+                  <p className="text-xs text-muted-foreground">(11) 99999-9999</p>
+                </div>
+                <Button variant="ghost" size="sm" className="text-destructive">Remover</Button>
+              </div>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-medium">Coordenação</p>
+                  <p className="text-xs text-muted-foreground">(11) 98888-8888</p>
+                </div>
+                <Button variant="ghost" size="sm" className="text-destructive">Remover</Button>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end pt-2 gap-2">
+            <Button variant="outline" onClick={() => setIsRelatoriosOpen(false)}>Cancelar</Button>
+            <Button onClick={() => {
+              toast.success("Configurações de relatórios salvas!");
+              setIsRelatoriosOpen(false);
+            }}>Salvar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,5 +1,9 @@
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatCard } from '@/components/ui/stat-card';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { DashboardTab } from '@/components/financeiro/DashboardTab';
+import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '@/types/finance';
+import { mockCaixas, mockCartoes } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +27,17 @@ import { Link } from 'react-router-dom';
 
 const Dashboard = () => {
   const { user, profile, roles, school, hasPermission } = useAuth();
+
+  const [lancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+  const [orcamentos] = useLocalStorage<Orcamento[]>('escolinha_orcamentos', []);
+  const [salarios] = useLocalStorage<Salario[]>('escolinha_salarios', []);
+  const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
+  const [cartoes] = useLocalStorage<Cartao[]>('escolinha_cartoes', mockCartoes);
+
+  const lancamentos: Lancamento[] = lancamentosStorage.map(l => ({
+    ...l,
+    data: typeof l.data === 'string' ? new Date(l.data) : l.data
+  }));
 
   const { data: isSuperAdmin } = useQuery({
     queryKey: ['is-super-admin', user?.id],
@@ -57,138 +72,18 @@ const Dashboard = () => {
         </p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {hasPermission('alunos') && (
-          <StatCard
-            title="Total de Alunos"
-            value="324"
-            icon={GraduationCap}
-            trend={{ value: 5.2, label: 'vs mês passado' }}
-          />
-        )}
-        {hasPermission('turmas') && (
-          <StatCard
-            title="Turmas Ativas"
-            value="12"
-            icon={Users}
-            description="Ano letivo 2025"
-          />
-        )}
-        {hasPermission('financeiro') && (
-          <StatCard
-            title="Receita do Mês"
-            value="R$ 45.230"
-            icon={DollarSign}
-            trend={{ value: 8.1, label: 'vs mês passado' }}
-          />
-        )}
-        {hasPermission('financeiro') && (
-          <StatCard
-            title="Taxa de Adimplência"
-            value="94%"
-            icon={TrendingUp}
-            trend={{ value: 2.3, label: 'vs mês passado' }}
-          />
-        )}
-      </div>
 
-      {/* Quick Actions & Recent Activity */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Ações Rápidas</CardTitle>
-            <CardDescription>Acesse as funcionalidades mais utilizadas</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            {hasPermission('financeiro') && (
-              <Link to="/app/financeiro">
-                <Button variant="outline" className="w-full justify-start">
-                  <DollarSign className="mr-2 h-4 w-4" />
-                  Gerar cobrança
-                  <ArrowRight className="ml-auto h-4 w-4" />
-                </Button>
-              </Link>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Atividade Recente</CardTitle>
-            <CardDescription>Últimas atualizações do sistema</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/10">
-                  <CheckCircle className="h-4 w-4 text-success" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Nova matrícula realizada</p>
-                  <p className="text-xs text-muted-foreground">
-                    João Silva - 5º Ano A • Há 2 horas
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-warning/10">
-                  <AlertCircle className="h-4 w-4 text-warning" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">3 mensalidades vencidas</p>
-                  <p className="text-xs text-muted-foreground">
-                    Verificar inadimplência • Há 5 horas
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-info/10">
-                  <MessageSquare className="h-4 w-4 text-info" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">5 novas mensagens</p>
-                  <p className="text-xs text-muted-foreground">
-                    Setor Financeiro • Há 6 horas
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                  <Clock className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Diário atualizado</p>
-                  <p className="text-xs text-muted-foreground">
-                    3º Ano B - Profª Maria • Há 1 dia
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Alerts for specific roles */}
       {hasPermission('financeiro') && (
-        <Card className="border-warning/50 bg-warning/5">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-warning" />
-              <CardTitle className="text-lg">Atenção: Inadimplência</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              Existem 8 alunos com mensalidades em atraso. Considere enviar uma cobrança via WhatsApp.
-            </p>
-            <Link to="/app/financeiro">
-              <Button size="sm">Ver inadimplentes</Button>
-            </Link>
-          </CardContent>
-        </Card>
+        <div className="pt-2">
+          <DashboardTab
+            lancamentos={lancamentos}
+            orcamentos={orcamentos}
+            salarios={salarios}
+            caixas={caixas}
+            cartoes={cartoes}
+          />
+        </div>
       )}
 
       {/* Super Admin Access */}

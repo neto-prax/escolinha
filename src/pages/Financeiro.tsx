@@ -5,7 +5,6 @@ import { LancamentosTab } from '@/components/financeiro/LancamentosTab';
 import { OrcamentosTab } from '@/components/financeiro/OrcamentosTab';
 import { SalariosTab } from '@/components/financeiro/SalariosTab';
 import { CartoesTab } from '@/components/financeiro/CartoesTab';
-import { DashboardTab } from '@/components/financeiro/DashboardTab';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '@/types/finance';
 import { mockExpenses, mockCaixas, mockCartoes } from '@/data/mockData';
 import { Wallet, Calculator, Users, LayoutDashboard, CreditCard } from 'lucide-react';
@@ -105,23 +104,6 @@ const Financeiro = () => {
   };
 
   const tabs = [
-    {
-      id: 'dashboard',
-      label: (
-        <span className="flex items-center gap-2">
-          <LayoutDashboard size={16} /> Visão Geral
-        </span>
-      ),
-      content: (
-        <DashboardTab
-          lancamentos={lancamentos}
-          orcamentos={orcamentos}
-          salarios={salarios}
-          caixas={caixas}
-          cartoes={cartoes}
-        />
-      ),
-    },
     {
       id: 'lancamentos',
       label: (

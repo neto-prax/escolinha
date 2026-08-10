@@ -7,13 +7,15 @@ import { FinancialSettings } from '@/components/settings/FinancialSettings';
 import { Phone, Building2, Bell, Shield, Bot, CreditCard } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-const Configuracoes = () => {
+const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Configurações"
-        description="Configure as integrações e permissões do sistema"
-      />
+      {!hideHeader && (
+        <PageHeader
+          title="Configurações"
+          description="Configure as integrações e permissões do sistema"
+        />
+      )}
 
       <Tabs defaultValue="whatsapp" className="space-y-6">
         <TabsList className="flex-wrap">
