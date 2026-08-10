@@ -63,6 +63,11 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
           <AutomationSettings />
         </TabsContent>
 
+        <TabsContent value="report" className="space-y-6">
+          <DailyReportSettings />
+        </TabsContent>
+
+
         <TabsContent value="sectors" className="space-y-6">
           <SectorUsersManager />
         </TabsContent>
