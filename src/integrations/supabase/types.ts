@@ -687,6 +687,54 @@ export type Database = {
           },
         ]
       }
+      daily_report_settings: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_sent_at: string | null
+          recipients: string[]
+          school_id: string
+          send_hour: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_sent_at?: string | null
+          recipients?: string[]
+          school_id: string
+          send_hour?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_sent_at?: string | null
+          recipients?: string[]
+          school_id?: string
+          send_hour?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_report_settings_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: true
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_report_settings_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: true
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       discount_types: {
         Row: {
           created_at: string

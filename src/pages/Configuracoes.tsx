@@ -4,7 +4,8 @@ import { WhatsAppInstancesManager } from '@/components/settings/WhatsAppInstance
 import { SectorUsersManager } from '@/components/settings/SectorUsersManager';
 import { AutomationSettings } from '@/components/settings/AutomationSettings';
 import { FinancialSettings } from '@/components/settings/FinancialSettings';
-import { Phone, Building2, Bell, Shield, Bot, CreditCard } from 'lucide-react';
+import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
+import { Phone, Building2, Bell, Shield, Bot, CreditCard, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
@@ -31,7 +32,12 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
             <Bot className="h-4 w-4" />
             Automação
           </TabsTrigger>
+          <TabsTrigger value="report" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Relatório diário
+          </TabsTrigger>
           <TabsTrigger value="sectors" className="gap-2">
+
             <Building2 className="h-4 w-4" />
             Setores
           </TabsTrigger>
@@ -56,6 +62,11 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
         <TabsContent value="automation" className="space-y-6">
           <AutomationSettings />
         </TabsContent>
+
+        <TabsContent value="report" className="space-y-6">
+          <DailyReportSettings />
+        </TabsContent>
+
 
         <TabsContent value="sectors" className="space-y-6">
           <SectorUsersManager />
