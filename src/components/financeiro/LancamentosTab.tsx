@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { Lancamento, TipoLancamento, Categoria, Unidade, FormaPagamento, Orcamento, Caixa, Cartao } from '../../types/finance';
-import { Calculator, X, DollarSign, CreditCard, Landmark, Banknote, QrCode, CheckCircle2 } from 'lucide-react';
+import { Calculator, X, DollarSign, CreditCard, Landmark, Banknote, QrCode, CheckCircle2, Download, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface LancamentosTabProps {
   lancamentos: Lancamento[];
@@ -12,9 +14,10 @@ interface LancamentosTabProps {
   onUpdateLancamento: (id: string, updates: Partial<Lancamento>) => void;
   onAddCategoria: (novaCategoria: string) => void;
   onFecharCaixa: (caixaId: string) => void;
+  onImportLancamentos?: (novosLancamentos: Omit<Lancamento, 'id'>[]) => void;
 }
 
-export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categorias, onAddLancamento, onUpdateLancamento, onAddCategoria, onFecharCaixa }: LancamentosTabProps) {
+export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categorias, onAddLancamento, onUpdateLancamento, onAddCategoria, onFecharCaixa, onImportLancamentos }: LancamentosTabProps) {
   const [tipo, setTipo] = useState<TipoLancamento>('Entrada');
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState<number | ''>('');
@@ -30,6 +33,75 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
 
   const [isFecharCaixaOpen, setIsFecharCaixaOpen] = useState(false);
   const [caixaFechamentoId, setCaixaFechamentoId] = useState<string>(caixas[0]?.id || '');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = () => {
+    const dataToExport = lancamentos.map(l => ({
+      Data: l.data.toLocaleDateString('pt-BR'),
+      Tipo: l.tipo,
+      Descricao: l.descricao,
+      Valor: l.valor,
+      Categoria: l.categoria,
+      Unidade: l.unidade,
+      'Forma de Pagamento': l.formaPagamento,
+      Status: l.status
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Lançamentos");
+    XLSX.writeFile(workbook, "lancamentos.xlsx");
+    toast.success("Planilha exportada com sucesso!");
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json<any>(ws);
+
+        const novosLancamentos: Omit<Lancamento, 'id'>[] = data.map(row => {
+          let parsedDate = new Date();
+          if (row.Data) {
+            const parts = String(row.Data).split('/');
+            if (parts.length === 3) {
+              parsedDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+            }
+          }
+          
+          return {
+            tipo: row.Tipo === 'Saída' ? 'Saída' : 'Entrada',
+            descricao: row.Descricao || 'Importado',
+            valor: Number(row.Valor) || 0,
+            data: parsedDate,
+            categoria: categorias.includes(row.Categoria) ? row.Categoria : categorias[0],
+            unidade: row.Unidade === 'Senador' || row.Unidade === 'Papagaio' ? row.Unidade : 'Todas',
+            formaPagamento: row['Forma de Pagamento'] || 'PIX',
+            status: row.Status === 'Em Aberto' ? 'Em Aberto' : 'Pago',
+            tipoCusto: 'Variável',
+            caixaId: caixas[0]?.id,
+          };
+        });
+
+        if (onImportLancamentos && novosLancamentos.length > 0) {
+          onImportLancamentos(novosLancamentos);
+          toast.success(`${novosLancamentos.length} lançamentos importados com sucesso!`);
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error("Erro ao importar planilha. Verifique o formato.");
+      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsBinaryString(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,7 +181,28 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
   return (
     <div className="space-y-6 relative">
       
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <input 
+          type="file" 
+          accept=".xlsx, .xls" 
+          ref={fileInputRef} 
+          onChange={handleImport} 
+          className="hidden" 
+        />
+        <button 
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors"
+        >
+          <Upload size={18} />
+          Importar
+        </button>
+        <button 
+          onClick={handleExport}
+          className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors"
+        >
+          <Download size={18} />
+          Exportar
+        </button>
         <button 
           onClick={() => setIsFecharCaixaOpen(true)}
           className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium shadow transition-colors"

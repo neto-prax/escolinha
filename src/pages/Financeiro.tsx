@@ -57,6 +57,15 @@ const Financeiro = () => {
     setLancamentos([newLancamento, ...lancamentos]);
   };
 
+  const handleImportLancamentos = (novosLancamentos: Omit<Lancamento, 'id'>[]) => {
+    const comIds = novosLancamentos.map(l => ({
+      ...l,
+      id: crypto.randomUUID(),
+      fechado: false
+    }));
+    setLancamentos([...comIds, ...lancamentos]);
+  };
+
   const handleFecharCaixa = (caixaId: string) => {
     setLancamentos(lancamentos.map(l => {
       // Se for pago, não for cartão, e for do caixa selecionado, mas não estava fechado, marca como fechado
@@ -128,6 +137,7 @@ const Financeiro = () => {
           cartoes={cartoes}
           categorias={categorias}
           onAddLancamento={handleAddLancamento}
+          onImportLancamentos={handleImportLancamentos}
           onUpdateLancamento={handleUpdateLancamento}
           onAddCategoria={handleAddCategoria}
           onFecharCaixa={handleFecharCaixa}
