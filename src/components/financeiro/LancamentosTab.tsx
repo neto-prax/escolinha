@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Lancamento, TipoLancamento, Categoria, Unidade, FormaPagamento, Orcamento, Caixa, Cartao } from '../../types/finance';
-import { Calculator, X, DollarSign, CreditCard, Landmark, Banknote, QrCode, CheckCircle2, Download, Upload } from 'lucide-react';
+import { Calculator, X, DollarSign, CreditCard, Landmark, Banknote, QrCode, CheckCircle2, Download, Upload, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LancamentosTabProps {
@@ -52,6 +52,24 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
     XLSX.utils.book_append_sheet(workbook, worksheet, "Lançamentos");
     XLSX.writeFile(workbook, "lancamentos.xlsx");
     toast.success("Planilha exportada com sucesso!");
+  };
+
+  const handleDownloadTemplate = () => {
+    const templateData = [{
+      Data: 'dd/mm/aaaa',
+      Tipo: 'Entrada ou Saída',
+      Descricao: 'Descrição do lançamento',
+      Valor: '0.00',
+      Categoria: 'Administrativo (ou outra)',
+      Unidade: 'Todas',
+      'Forma de Pagamento': 'PIX, Dinheiro, Cartão, Boleto...',
+      Status: 'Pago ou Em Aberto'
+    }];
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
+    XLSX.writeFile(workbook, "modelo_importacao.xlsx");
+    toast.success("Modelo baixado com sucesso!");
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +207,14 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
           onChange={handleImport} 
           className="hidden" 
         />
+        <button 
+          onClick={handleDownloadTemplate}
+          className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-indigo-600 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors"
+          title="Baixar planilha de exemplo para importação"
+        >
+          <FileDown size={18} />
+          Baixar Modelo
+        </button>
         <button 
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors"

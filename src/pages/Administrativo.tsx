@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { EmployeeHistoryDialog } from '@/components/administrativo/EmployeeHistoryDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,7 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Briefcase, Users, FileText, Settings, Plus, Search, MoreHorizontal, Clock, Calendar, Loader2 } from 'lucide-react';
+import { Briefcase, Users, FileText, Settings, Plus, Search, MoreHorizontal, Clock, Calendar, Loader2, Download, Upload, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -76,6 +77,76 @@ const Administrativo = () => {
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<any>(null);
 
   const [isLoading, setIsLoading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = () => {
+    const dataToExport = employees.map(e => ({
+      Nome: e.name,
+      Cargo: e.role,
+      Departamento: e.department,
+      Telefone: e.phone,
+      Email: e.email || '',
+      'Data de Admissão': e.hire_date,
+      Status: e.status === 'active' ? 'Ativo' : e.status === 'vacation' ? 'Férias' : 'Afastado'
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Funcionarios");
+    XLSX.writeFile(workbook, "funcionarios.xlsx");
+    toast.success("Planilha exportada com sucesso!");
+  };
+
+  const handleDownloadTemplate = () => {
+    const templateData = [{
+      Nome: 'João da Silva',
+      Cargo: 'Professor(a)',
+      Departamento: 'Pedagógico',
+      Telefone: '(11) 99999-9999',
+      Email: 'joao@escola.com',
+      'Data de Admissão': '2024-01-15'
+    }];
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
+    XLSX.writeFile(workbook, "modelo_funcionarios.xlsx");
+    toast.success("Modelo baixado com sucesso!");
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json<any>(ws);
+
+        const novosFuncionarios = data.map(row => ({
+          id: String(Date.now() + Math.random()),
+          name: row.Nome,
+          role: row.Cargo || 'Auxiliar',
+          department: row.Departamento || 'Administrativo',
+          phone: String(row.Telefone || ''),
+          email: String(row.Email || ''),
+          status: 'active',
+          hire_date: String(row['Data de Admissão'] || new Date().toISOString().split('T')[0]),
+        }));
+
+        setEmployees(prev => [...prev, ...novosFuncionarios]);
+        toast.success(`${novosFuncionarios.length} funcionários importados com sucesso!`);
+      } catch (error) {
+        console.error(error);
+        toast.error("Erro ao importar planilha. Verifique o formato.");
+      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsBinaryString(file);
+  };
 
   const [isDadosEscolaOpen, setIsDadosEscolaOpen] = useState(false);
   const [isCargosOpen, setIsCargosOpen] = useState(false);
@@ -187,7 +258,7 @@ const Administrativo = () => {
         <TabsContent value="employees" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
                 <div className="relative flex-1 max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -196,6 +267,32 @@ const Administrativo = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  <input 
+                    type="file" 
+                    accept=".xlsx, .xls" 
+                    ref={fileInputRef} 
+                    onChange={handleImport} 
+                    className="hidden" 
+                  />
+                  <Button 
+                    variant="outline"
+                    onClick={handleDownloadTemplate}
+                    title="Baixar planilha de exemplo para importação"
+                    className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  >
+                    <FileDown className="mr-2 h-4 w-4" />
+                    Modelo
+                  </Button>
+                  <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Importar
+                  </Button>
+                  <Button variant="outline" onClick={handleExport}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar
+                  </Button>
                 </div>
               </div>
             </CardHeader>
