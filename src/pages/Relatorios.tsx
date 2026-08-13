@@ -4,15 +4,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FileText, Download, TrendingUp, TrendingDown, Landmark, Users, AlertCircle, PieChart } from 'lucide-react';
+import { FileText, Download, TrendingUp, TrendingDown, Landmark, Users, AlertCircle, PieChart, CheckCircle, Clock, GraduationCap } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { mockExpenses, mockEmployees, mockCaixas } from '@/data/mockData';
 import { toast } from 'sonner';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { Aluno, Mensalidade } from '@/types/aluno';
 
 const Relatorios = () => {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
+  
+  const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
+  const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -93,6 +98,126 @@ const Relatorios = () => {
     generatePDF("Saídas Agrupadas por Orçamento", [['Orçamento', 'Valor Previsto', 'Valor Realizado', 'Saldo Restante']], body);
   };
 
+  const exportMensalidadesRecebidas = () => {
+    let data = mensalidades.filter(m => m.status === 'Pago' && m.dataPagamento);
+    if (dataInicio && dataFim) {
+      const inicio = new Date(dataInicio).setHours(0,0,0,0);
+      const fim = new Date(dataFim).setHours(23,59,59,999);
+      data = data.filter(m => {
+        const d = new Date(m.dataPagamento!).getTime();
+        return d >= inicio && d <= fim;
+      });
+    }
+    
+    if(data.length === 0) return toast.error("Nenhuma mensalidade recebida no período.");
+    
+    const body = data.map(m => {
+      const aluno = alunos.find(a => a.id === m.alunoId);
+      return [
+        aluno?.nome || 'Desconhecido',
+        m.mesReferencia,
+        new Date(m.dataPagamento!).toLocaleDateString('pt-BR'),
+        formatCurrency(m.valorFinal)
+      ];
+    });
+    
+    generatePDF("Relatório de Mensalidades Recebidas", [['Aluno', 'Mês Referência', 'Data Pagamento', 'Valor']], body);
+  };
+
+  const exportMensalidadesAtraso = () => {
+    const today = new Date().setHours(0,0,0,0);
+    let data = mensalidades.filter(m => m.status === 'Pendente' && new Date(m.dataVencimento).getTime() < today);
+    if (dataInicio && dataFim) {
+      const inicio = new Date(dataInicio).setHours(0,0,0,0);
+      const fim = new Date(dataFim).setHours(23,59,59,999);
+      data = data.filter(m => {
+        const d = new Date(m.dataVencimento).getTime();
+        return d >= inicio && d <= fim;
+      });
+    }
+    
+    if(data.length === 0) return toast.error("Nenhuma mensalidade em atraso no período.");
+    
+    const body = data.map(m => {
+      const aluno = alunos.find(a => a.id === m.alunoId);
+      return [
+        aluno?.nome || 'Desconhecido',
+        m.mesReferencia,
+        new Date(m.dataVencimento).toLocaleDateString('pt-BR'),
+        formatCurrency(m.valorFinal)
+      ];
+    });
+    
+    generatePDF("Relatório de Mensalidades em Atraso", [['Aluno', 'Mês Referência', 'Data Vencimento', 'Valor']], body);
+  };
+
+  const exportRecebidasAgrupadas = () => {
+    let data = mensalidades.filter(m => m.status === 'Pago' && m.dataPagamento);
+    if (dataInicio && dataFim) {
+      const inicio = new Date(dataInicio).setHours(0,0,0,0);
+      const fim = new Date(dataFim).setHours(23,59,59,999);
+      data = data.filter(m => {
+        const d = new Date(m.dataPagamento!).getTime();
+        return d >= inicio && d <= fim;
+      });
+    }
+
+    const map = new Map<string, { qtd: number, valor: number }>();
+    data.forEach(m => {
+      const aluno = alunos.find(a => a.id === m.alunoId);
+      if (!aluno) return;
+      const key = `${aluno.setor || 'Sem Curso'}|${aluno.classe || ''} ${aluno.turma || ''}`.trim();
+      const curr = map.get(key) || { qtd: 0, valor: 0 };
+      curr.qtd++;
+      curr.valor += m.valorFinal;
+      map.set(key, curr);
+    });
+
+    const body = Array.from(map.entries()).map(([key, val]) => {
+      const [curso, turma] = key.split('|');
+      return [curso, turma, val.qtd.toString(), formatCurrency(val.valor)];
+    });
+    
+    body.sort((a,b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+
+    if(body.length === 0) return toast.error("Nenhuma mensalidade recebida no período.");
+    generatePDF("Mensalidades Recebidas por Curso/Turma", [['Curso', 'Turma', 'Quantidade', 'Valor Total']], body);
+  };
+
+  const exportAtrasoAgrupadas = () => {
+    const today = new Date().setHours(0,0,0,0);
+    let data = mensalidades.filter(m => m.status === 'Pendente' && new Date(m.dataVencimento).getTime() < today);
+    if (dataInicio && dataFim) {
+      const inicio = new Date(dataInicio).setHours(0,0,0,0);
+      const fim = new Date(dataFim).setHours(23,59,59,999);
+      data = data.filter(m => {
+        const d = new Date(m.dataVencimento).getTime();
+        return d >= inicio && d <= fim;
+      });
+    }
+
+    const map = new Map<string, { qtd: number, valor: number }>();
+    data.forEach(m => {
+      const aluno = alunos.find(a => a.id === m.alunoId);
+      if (!aluno) return;
+      const key = `${aluno.setor || 'Sem Curso'}|${aluno.classe || ''} ${aluno.turma || ''}`.trim();
+      const curr = map.get(key) || { qtd: 0, valor: 0 };
+      curr.qtd++;
+      curr.valor += m.valorFinal;
+      map.set(key, curr);
+    });
+
+    const body = Array.from(map.entries()).map(([key, val]) => {
+      const [curso, turma] = key.split('|');
+      return [curso, turma, val.qtd.toString(), formatCurrency(val.valor)];
+    });
+    
+    body.sort((a,b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+
+    if(body.length === 0) return toast.error("Nenhuma mensalidade em atraso no período.");
+    generatePDF("Mensalidades em Atraso por Curso/Turma", [['Curso', 'Turma', 'Quantidade', 'Valor Total em Atraso']], body);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Relatórios Gerenciais" description="Emita relatórios detalhados em PDF filtrados por período." />
@@ -114,6 +239,11 @@ const Relatorios = () => {
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <ReportCard title="Mensalidades Recebidas" icon={<CheckCircle className="h-6 w-6" />} color="text-teal-700" bg="bg-teal-100" onClick={exportMensalidadesRecebidas} desc="Mensalidades pagas, listadas individualmente." />
+        <ReportCard title="Mensalidades em Atraso" icon={<Clock className="h-6 w-6" />} color="text-rose-700" bg="bg-rose-100" onClick={exportMensalidadesAtraso} desc="Mensalidades vencidas e pendentes, por aluno." />
+        <ReportCard title="Recebidas por Turma/Curso" icon={<GraduationCap className="h-6 w-6" />} color="text-teal-700" bg="bg-teal-100" onClick={exportRecebidasAgrupadas} desc="Total de recebimentos agrupado por turma." />
+        <ReportCard title="Atrasadas por Turma/Curso" icon={<GraduationCap className="h-6 w-6" />} color="text-rose-700" bg="bg-rose-100" onClick={exportAtrasoAgrupadas} desc="Inadimplência consolidada agrupada por turma." />
+        
         <ReportCard title="Entradas por Período" icon={<TrendingUp className="h-6 w-6" />} color="text-green-700" bg="bg-green-100" onClick={exportEntradas} desc="Todas as receitas registradas no período." />
         <ReportCard title="Saídas por Período" icon={<TrendingDown className="h-6 w-6" />} color="text-red-700" bg="bg-red-100" onClick={exportSaidas} desc="Todas as despesas e pagamentos efetuados." />
         <ReportCard title="Caixa Agrupado" icon={<Landmark className="h-6 w-6" />} color="text-indigo-700" bg="bg-indigo-100" onClick={exportCaixa} desc="Movimentação e saldos agrupados por caixa." />

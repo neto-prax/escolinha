@@ -2,8 +2,10 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { StatCard } from '@/components/ui/stat-card';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { DashboardTab } from '@/components/financeiro/DashboardTab';
+import { DashboardTurmasTab } from '@/components/financeiro/DashboardTurmasTab';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '@/types/finance';
 import { mockCaixas, mockCartoes } from '@/data/mockData';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -76,13 +78,26 @@ const Dashboard = () => {
 
       {hasPermission('financeiro') && (
         <div className="pt-2">
-          <DashboardTab
-            lancamentos={lancamentos}
-            orcamentos={orcamentos}
-            salarios={salarios}
-            caixas={caixas}
-            cartoes={cartoes}
-          />
+          <Tabs defaultValue="geral" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="geral">Visão Geral</TabsTrigger>
+              <TabsTrigger value="turmas">Por Turma</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="geral" className="space-y-4 m-0">
+              <DashboardTab
+                lancamentos={lancamentos}
+                orcamentos={orcamentos}
+                salarios={salarios}
+                caixas={caixas}
+                cartoes={cartoes}
+              />
+            </TabsContent>
+            
+            <TabsContent value="turmas" className="space-y-4 m-0">
+              <DashboardTurmasTab lancamentos={lancamentos} />
+            </TabsContent>
+          </Tabs>
         </div>
       )}
 

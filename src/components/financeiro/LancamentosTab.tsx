@@ -10,6 +10,7 @@ interface LancamentosTabProps {
   caixas: Caixa[];
   cartoes: Cartao[];
   categorias: string[];
+  turmas: TurmaConfig[];
   onAddLancamento: (lancamento: Omit<Lancamento, 'id'>) => void;
   onUpdateLancamento: (id: string, updates: Partial<Lancamento>) => void;
   onAddCategoria: (novaCategoria: string) => void;
@@ -17,13 +18,14 @@ interface LancamentosTabProps {
   onImportLancamentos?: (novosLancamentos: Omit<Lancamento, 'id'>[]) => void;
 }
 
-export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categorias, onAddLancamento, onUpdateLancamento, onAddCategoria, onFecharCaixa, onImportLancamentos }: LancamentosTabProps) {
+export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categorias, turmas, onAddLancamento, onUpdateLancamento, onAddCategoria, onFecharCaixa, onImportLancamentos }: LancamentosTabProps) {
   const [tipo, setTipo] = useState<TipoLancamento>('Entrada');
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState<number | ''>('');
   const [data, setData] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('Administrativo');
   const [unidade, setUnidade] = useState<Unidade>('Todas');
+  const [turmasSelecionadas, setTurmasSelecionadas] = useState<TurmaConfig[]>([]);
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('PIX');
   const [status, setStatus] = useState<'Pago' | 'Em Aberto'>('Pago');
   
@@ -132,6 +134,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
       data: new Date(data),
       categoria,
       unidade,
+      turmas: turmasSelecionadas.length > 0 ? turmasSelecionadas : undefined,
       formaPagamento,
       status,
       caixaId: formaPagamento !== 'Cartão' ? caixaId : undefined,
@@ -143,6 +146,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
     setDescricao('');
     setValor('');
     setOrcamentoId('');
+    setTurmasSelecionadas([]);
   };
 
   const handleQuitar = (id: string) => {
@@ -154,11 +158,11 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
   };
 
   const resumoCaixa = useMemo(() => {
-    // Lançamentos pagos, do caixa selecionado, que NÃO são de cartão, e que AINDA NÃO FORAM FECHADOS
+    // Lançamentos pagos, do caixa selecionado (ou todos), que NÃO são de cartão, e que AINDA NÃO FORAM FECHADOS
     const lancamentosNaoFechados = lancamentos.filter(
       l => l.status === 'Pago' && 
            l.formaPagamento !== 'Cartão' &&
-           l.caixaId === caixaFechamentoId &&
+           (caixaFechamentoId === 'todos' || l.caixaId === caixaFechamentoId) &&
            !l.fechado
     );
 
@@ -318,6 +322,101 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
             </select>
           </div>
 
+          <div className="flex flex-col lg:col-span-2">
+            <label className="text-sm font-medium text-gray-700 mb-1">Classes e Turmas (Opcional)</label>
+            <div className="flex flex-col gap-3 p-3 border border-gray-300 rounded bg-white max-h-48 overflow-y-auto">
+              {turmas.length === 0 ? <span className="text-sm text-gray-400">Nenhuma classe cadastrada</span> : 
+                Array.from(new Set(turmas.map(t => t.setor))).map(setor => (
+                  <div key={setor} className="flex flex-col gap-2 pb-2 border-b border-gray-200 last:border-0 last:pb-0">
+                    <span 
+                      onClick={() => {
+                        const isSetorSelected = turmasSelecionadas.some(ts => ts.setor === setor && ts.nome === '');
+                        if (!isSetorSelected) {
+                          setTurmasSelecionadas([...turmasSelecionadas, { setor, nome: '', letras: [] }]);
+                        } else {
+                          setTurmasSelecionadas(turmasSelecionadas.filter(ts => !(ts.setor === setor && ts.nome === '')));
+                        }
+                      }}
+                      className={`text-xs font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors w-fit px-2 py-1 rounded ${
+                        turmasSelecionadas.some(ts => ts.setor === setor && ts.nome === '') 
+                          ? 'bg-blue-100 text-blue-700' 
+                          : 'text-gray-500 hover:bg-gray-100'
+                      }`}
+                    >
+                      {setor}
+                    </span>
+                    {turmas.filter(t => t.setor === setor).map(t => (
+                      <div key={t.nome} className="flex flex-col gap-2 pl-3 border-l-2 border-indigo-100 ml-2">
+                        <span 
+                          onClick={() => {
+                            const isClasseSelected = turmasSelecionadas.some(ts => ts.setor === t.setor && ts.nome === t.nome && ts.letras.length === 0);
+                            if (!isClasseSelected) {
+                              setTurmasSelecionadas([...turmasSelecionadas, { setor: t.setor, nome: t.nome, letras: [] }]);
+                            } else {
+                              setTurmasSelecionadas(turmasSelecionadas.filter(ts => !(ts.setor === t.setor && ts.nome === t.nome && ts.letras.length === 0)));
+                            }
+                          }}
+                          className={`text-sm font-bold cursor-pointer select-none transition-colors w-fit px-2 py-1 rounded ${
+                            turmasSelecionadas.some(ts => ts.setor === t.setor && ts.nome === t.nome && ts.letras.length === 0)
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'text-gray-800 hover:bg-gray-100'
+                          }`}
+                        >
+                          {t.nome}
+                        </span>
+                        
+                        {t.letras.length > 0 && (
+                          <div className="flex flex-wrap gap-2 pl-3">
+                            {t.letras.map(l => {
+                              const isLetraSelected = turmasSelecionadas.some(ts => ts.setor === t.setor && ts.nome === t.nome && ts.letras.includes(l));
+                              return (
+                                <span 
+                                  key={l} 
+                                  onClick={() => {
+                                    let novas = [...turmasSelecionadas];
+                                    let index = novas.findIndex(ts => ts.nome === t.nome && ts.setor === t.setor && ts.letras.length > 0);
+                                    
+                                    if (!isLetraSelected) {
+                                      if (index === -1) {
+                                        novas.push({ setor: t.setor, nome: t.nome, letras: [l] });
+                                      } else {
+                                        const turmaMod = { ...novas[index] };
+                                        if (!turmaMod.letras.includes(l)) turmaMod.letras = [...turmaMod.letras, l].sort();
+                                        novas[index] = turmaMod;
+                                      }
+                                    } else {
+                                      if (index !== -1) {
+                                        const turmaMod = { ...novas[index] };
+                                        turmaMod.letras = turmaMod.letras.filter(letra => letra !== l);
+                                        if (turmaMod.letras.length === 0) {
+                                          novas = novas.filter(ts => !(ts.nome === t.nome && ts.setor === t.setor && ts.letras.length > 0));
+                                        } else {
+                                          novas[index] = turmaMod;
+                                        }
+                                      }
+                                    }
+                                    setTurmasSelecionadas(novas);
+                                  }}
+                                  className={`flex items-center justify-center min-w-[28px] px-2 py-1 text-xs font-bold rounded cursor-pointer select-none transition-colors shadow-sm ${
+                                    isLetraSelected
+                                      ? 'bg-blue-600 text-white' 
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                                  }`}
+                                >
+                                  {l}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+
           <div className="flex flex-col">
             <label className="text-sm font-medium text-gray-700 mb-1">Forma de Pgto.</label>
             <select 
@@ -429,6 +528,18 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
                           {orcamentos.find(o => o.id === lanc.orcamentoId)?.nome}
                         </span>
                       )}
+                      {lanc.turmas && lanc.turmas.map(t => (
+                        <span key={`${t.setor}-${t.nome}`} className="ml-2 inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full mt-1">
+                          {t.nome === '' ? (
+                            <span className="font-bold">{t.setor}</span>
+                          ) : (
+                            <>
+                              <span className="opacity-50">{t.setor ? `${t.setor} > ` : ''}</span>
+                              <span className="font-bold">{t.nome}</span> {t.letras.length > 0 && `(${t.letras.join(', ')})`}
+                            </>
+                          )}
+                        </span>
+                      ))}
                     </td>
                     <td className="py-3 px-4 text-xs">{lanc.categoria}</td>
                     <td className="py-3 px-4">
@@ -498,6 +609,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
                   onChange={(e) => setCaixaFechamentoId(e.target.value)}
                   className="p-2 border border-gray-300 rounded font-medium text-indigo-700 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50"
                 >
+                  <option value="todos">Todos os Caixas</option>
                   {caixas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
               </div>

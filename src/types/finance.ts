@@ -8,6 +8,12 @@ export type FormaPagamento = 'PIX' | 'Boleto' | 'Transferência Bancária' | 'Ca
 
 export type TipoLancamento = 'Entrada' | 'Saída';
 
+export interface TurmaConfig {
+  setor: string;
+  nome: string;
+  letras: string[];
+}
+
 export interface Lancamento {
   id: string;
   data: Date;
@@ -23,6 +29,7 @@ export interface Lancamento {
   cartaoId?: string;
   orcamentoId?: string; // Para vincular saídas a um orçamento
   observacoes?: string;
+  turmas?: TurmaConfig[];
   fechado?: boolean;
 }
 

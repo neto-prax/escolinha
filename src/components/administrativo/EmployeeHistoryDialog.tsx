@@ -22,30 +22,27 @@ interface Employee {
   email?: string;
   hire_date: string;
   status: string;
+  ocorrencias?: any[];
 }
 
 interface EmployeeHistoryDialogProps {
   employee: Employee | null;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  onAddOcorrencia?: (employeeId: string, ocorrencia: any) => void;
 }
 
-export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange }: EmployeeHistoryDialogProps) {
+export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOcorrencia }: EmployeeHistoryDialogProps) {
   if (!employee) return null;
 
-  // Mock de histórico financeiro para demonstração
   const mockFinanceiro = [
     { id: '1', data: '2026-07-05', descricao: 'Salário Julho/2026', liquido: 3500 },
     { id: '2', data: '2026-06-05', descricao: 'Salário Junho/2026', liquido: 3500 },
     { id: '3', data: '2026-05-05', descricao: 'Salário Maio/2026', liquido: 3500 },
   ];
 
-  // Mock de histórico de ocorrências para demonstração
-  const [ocorrencias, setOcorrencias] = useState([
-    { id: '1', data: '2026-07-15', tipo: 'Atestado Médico', descricao: 'Afastamento de 2 dias (Gripe)', gravidade: 'info' },
-    { id: '2', data: '2026-05-20', tipo: 'Falta Injustificada', descricao: 'Não compareceu ao plantão', gravidade: 'warning' },
-    { id: '3', data: '2026-02-10', tipo: 'Elogio', descricao: 'Destaque na organização do evento', gravidade: 'success' },
-  ]);
+  // Ocorrências agora vêm do funcionário
+  const ocorrencias = employee.ocorrencias || [];
 
   const [novaOcorrencia, setNovaOcorrencia] = useState({
     data: '',
@@ -66,7 +63,9 @@ export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange }: Employ
       gravidade: novaOcorrencia.gravidade
     };
 
-    setOcorrencias([newOco, ...ocorrencias]);
+    if (onAddOcorrencia) {
+      onAddOcorrencia(employee.id, newOco);
+    }
     setNovaOcorrencia({ data: '', tipo: 'Atestado Médico', descricao: '', gravidade: 'info' });
   };
 

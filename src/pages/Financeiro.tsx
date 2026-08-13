@@ -5,7 +5,7 @@ import { LancamentosTab } from '@/components/financeiro/LancamentosTab';
 import { OrcamentosTab } from '@/components/financeiro/OrcamentosTab';
 import { SalariosTab } from '@/components/financeiro/SalariosTab';
 import { CartoesTab } from '@/components/financeiro/CartoesTab';
-import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '@/types/finance';
+import { Lancamento, Orcamento, Salario, Caixa, Cartao, TurmaConfig } from '@/types/finance';
 import { mockExpenses, mockCaixas, mockCartoes } from '@/data/mockData';
 import { Wallet, Calculator, Users, LayoutDashboard, CreditCard } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -16,6 +16,12 @@ const Financeiro = () => {
   const [salarios, setSalarios] = useLocalStorage<Salario[]>('escolinha_salarios', []);
   const [caixas, setCaixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
   const [cartoes, setCartoes] = useLocalStorage<Cartao[]>('escolinha_cartoes', mockCartoes);
+  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', [
+    { setor: 'Educação Infantil', nome: 'Maternal', letras: ['A', 'B'] },
+    { setor: 'Ensino Fundamental 1', nome: '1º Ano', letras: ['A', 'B'] },
+    { setor: 'Ensino Fundamental 2', nome: '6º Ano', letras: ['A'] },
+    { setor: 'Ensino Médio', nome: '1º Ano EM', letras: [] }
+  ]);
   
   const [categorias, setCategorias] = useLocalStorage<string[]>('escolinha_categorias', [
     'Administrativo',
@@ -67,8 +73,8 @@ const Financeiro = () => {
 
   const handleFecharCaixa = (caixaId: string) => {
     setLancamentos(lancamentos.map(l => {
-      // Se for pago, não for cartão, e for do caixa selecionado, mas não estava fechado, marca como fechado
-      if (l.status === 'Pago' && l.formaPagamento !== 'Cartão' && l.caixaId === caixaId && !l.fechado) {
+      // Se for pago, não for cartão, e for do caixa selecionado (ou todos), mas não estava fechado, marca como fechado
+      if (l.status === 'Pago' && l.formaPagamento !== 'Cartão' && (caixaId === 'todos' || l.caixaId === caixaId) && !l.fechado) {
         return { ...l, fechado: true };
       }
       return l;
@@ -118,6 +124,7 @@ const Financeiro = () => {
           caixas={caixas}
           cartoes={cartoes}
           categorias={categorias}
+          turmas={turmas}
           onAddLancamento={handleAddLancamento}
           onImportLancamentos={handleImportLancamentos}
           onUpdateLancamento={handleUpdateLancamento}

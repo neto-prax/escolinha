@@ -59,6 +59,7 @@ const navigationGroups: NavGroup[] = [
     label: 'Principal',
     items: [
       { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, module: 'dashboard' },
+      { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
     ],
   },
   {
