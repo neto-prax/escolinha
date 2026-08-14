@@ -8,8 +8,27 @@ import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { Phone, Building2, Bell, Shield, Bot, CreditCard, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
+  const { user } = useAuth();
+
+  const { data: isSuperAdmin } = useQuery({
+    queryKey: ['is-super-admin', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { data } = await supabase
+        .from('super_admins')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user?.id,
+  });
+
   return (
     <div className="space-y-6">
       {!hideHeader && (
@@ -19,12 +38,15 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
         />
       )}
 
-      <Tabs defaultValue="uazapi" className="space-y-6">
+      <Tabs defaultValue={isSuperAdmin ? 'uazapi' : 'whatsapp'} className="space-y-6">
         <TabsList className="flex-wrap">
-          <TabsTrigger value="uazapi" className="gap-2">
-            <Phone className="h-4 w-4" />
-            WhatsApp (Uazapi)
-          </TabsTrigger>
+          {isSuperAdmin && (
+            <TabsTrigger value="uazapi" className="gap-2">
+              <Phone className="h-4 w-4" />
+              WhatsApp (Uazapi)
+            </TabsTrigger>
+          )}
+
           <TabsTrigger value="whatsapp" className="gap-2">
             <Phone className="h-4 w-4" />
             Instâncias
