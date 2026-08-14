@@ -13,8 +13,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft } from 'lucide-react';
+import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone } from 'lucide-react';
 import { BillingTab } from '@/components/superadmin/BillingTab';
+import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -423,7 +424,12 @@ export default function SuperAdmin() {
               <DollarSign className="mr-2 h-4 w-4" />
               Cobrança
             </TabsTrigger>
+            <TabsTrigger value="whatsapp">
+              <Phone className="mr-2 h-4 w-4" />
+              WhatsApp
+            </TabsTrigger>
           </TabsList>
+
 
           {/* Schools Tab */}
           <TabsContent value="schools">
@@ -660,7 +666,13 @@ export default function SuperAdmin() {
           <TabsContent value="billing">
             <BillingTab schools={schools.map(s => ({ id: s.id, name: s.name, slug: s.slug }))} />
           </TabsContent>
+
+          {/* WhatsApp Tab */}
+          <TabsContent value="whatsapp">
+            <UazapiSettings />
+          </TabsContent>
         </Tabs>
+
 
         {/* Delete School Dialog */}
         <Dialog open={!!deleteSchoolDialog} onOpenChange={() => setDeleteSchoolDialog(null)}>
