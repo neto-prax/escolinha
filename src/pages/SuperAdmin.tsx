@@ -666,7 +666,13 @@ export default function SuperAdmin() {
           <TabsContent value="billing">
             <BillingTab schools={schools.map(s => ({ id: s.id, name: s.name, slug: s.slug }))} />
           </TabsContent>
+
+          {/* WhatsApp Tab */}
+          <TabsContent value="whatsapp">
+            <UazapiSettings />
+          </TabsContent>
         </Tabs>
+
 
         {/* Delete School Dialog */}
         <Dialog open={!!deleteSchoolDialog} onOpenChange={() => setDeleteSchoolDialog(null)}>
