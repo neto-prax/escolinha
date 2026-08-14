@@ -79,6 +79,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Nunca expor o token da instância ao frontend
+    if (result && typeof result === 'object') {
+      const r = result as { instance?: Record<string, unknown> };
+      if (r.instance?.token) delete r.instance.token;
+    }
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
