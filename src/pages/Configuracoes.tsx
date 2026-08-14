@@ -56,6 +56,10 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="uazapi" className="space-y-6">
+          <UazapiSettings />
+        </TabsContent>
+
         <TabsContent value="whatsapp" className="space-y-6">
           <WhatsAppInstancesManager />
         </TabsContent>
