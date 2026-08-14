@@ -240,7 +240,7 @@ const Alunos = () => {
         
         return { 
           ...m, 
-          status: 'Pago', 
+          status: 'Pago' as const, 
           dataPagamento: new Date(detail.dataPagamento).toISOString(), 
           lancamentoId: novoLancamento.id 
         };

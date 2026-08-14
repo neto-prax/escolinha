@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Lancamento, TipoLancamento, Categoria, Unidade, FormaPagamento, Orcamento, Caixa, Cartao } from '../../types/finance';
+import { Lancamento, TipoLancamento, Categoria, Unidade, FormaPagamento, Orcamento, Caixa, Cartao, TurmaConfig } from '../../types/finance';
 import { Calculator, X, DollarSign, CreditCard, Landmark, Banknote, QrCode, CheckCircle2, Download, Upload, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 
