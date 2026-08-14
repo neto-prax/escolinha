@@ -19,7 +19,7 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
         />
       )}
 
-      <Tabs defaultValue="whatsapp" className="space-y-6">
+      <Tabs defaultValue="uazapi" className="space-y-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="uazapi" className="gap-2">
             <Phone className="h-4 w-4" />
