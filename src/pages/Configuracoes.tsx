@@ -21,9 +21,13 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
 
       <Tabs defaultValue="whatsapp" className="space-y-6">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="uazapi" className="gap-2">
+            <Phone className="h-4 w-4" />
+            WhatsApp (Uazapi)
+          </TabsTrigger>
           <TabsTrigger value="whatsapp" className="gap-2">
             <Phone className="h-4 w-4" />
-            WhatsApp
+            Instâncias
           </TabsTrigger>
           <TabsTrigger value="financial" className="gap-2">
             <CreditCard className="h-4 w-4" />
