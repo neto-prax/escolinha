@@ -423,7 +423,12 @@ export default function SuperAdmin() {
               <DollarSign className="mr-2 h-4 w-4" />
               Cobrança
             </TabsTrigger>
+            <TabsTrigger value="whatsapp">
+              <Phone className="mr-2 h-4 w-4" />
+              WhatsApp
+            </TabsTrigger>
           </TabsList>
+
 
           {/* Schools Tab */}
           <TabsContent value="schools">
