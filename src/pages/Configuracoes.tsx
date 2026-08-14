@@ -5,6 +5,7 @@ import { SectorUsersManager } from '@/components/settings/SectorUsersManager';
 import { AutomationSettings } from '@/components/settings/AutomationSettings';
 import { FinancialSettings } from '@/components/settings/FinancialSettings';
 import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
+import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { Phone, Building2, Bell, Shield, Bot, CreditCard, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -18,11 +19,15 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
         />
       )}
 
-      <Tabs defaultValue="whatsapp" className="space-y-6">
+      <Tabs defaultValue="uazapi" className="space-y-6">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="uazapi" className="gap-2">
+            <Phone className="h-4 w-4" />
+            WhatsApp (Uazapi)
+          </TabsTrigger>
           <TabsTrigger value="whatsapp" className="gap-2">
             <Phone className="h-4 w-4" />
-            WhatsApp
+            Instâncias
           </TabsTrigger>
           <TabsTrigger value="financial" className="gap-2">
             <CreditCard className="h-4 w-4" />
@@ -50,6 +55,10 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
             Segurança
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="uazapi" className="space-y-6">
+          <UazapiSettings />
+        </TabsContent>
 
         <TabsContent value="whatsapp" className="space-y-6">
           <WhatsAppInstancesManager />

@@ -70,7 +70,7 @@ const employeeSchema = z.object({
 type EmployeeFormData = z.infer<typeof employeeSchema>;
 
 const Administrativo = () => {
-  const [employees, setEmployees] = useState(mockEmployees.map(emp => ({
+  const [employees, setEmployees] = useState<any[]>(mockEmployees.map(emp => ({
     ...emp,
     ocorrencias: [
       { id: '1', data: '2026-07-15', tipo: 'Atestado Médico', descricao: 'Afastamento de 2 dias (Gripe)', gravidade: 'info' },

@@ -86,19 +86,28 @@ async function getInstance(schoolId: string) {
 async function sendFor(schoolId: string, recipients: string[]) {
   if (!recipients.length) throw new Error('Nenhum número configurado para receber o relatório');
 
-  const instance = await getInstance(schoolId);
-  if (!instance?.instance_name) throw new Error('Nenhuma instância WhatsApp conectada');
+  const uazUrl = (Deno.env.get('UAZAPI_URL') ?? '').replace(/\/$/, '');
+  const uazToken = Deno.env.get('UAZAPI_TOKEN') ?? '';
 
-  const baseUrl = instance.api_url || EVOLUTION_API_URL;
-  const apiKey = instance.api_key || EVOLUTION_API_KEY;
-  if (!baseUrl || !apiKey) throw new Error('Credenciais da Evolution API não configuradas');
+  let sender: (phone: string, message: string) => Promise<void>;
 
-  const message = await buildReport(schoolId);
-
-  const results: Array<{ phone: string; ok: boolean; error?: string }> = [];
-  for (const raw of recipients) {
-    const phone = normalizePhone(raw);
-    try {
+  if (uazUrl && uazToken) {
+    sender = async (phone, message) => {
+      const res = await fetch(`${uazUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: uazToken },
+        body: JSON.stringify({ number: phone, text: message }),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`[${res.status}] ${text}`);
+    };
+  } else {
+    const instance = await getInstance(schoolId);
+    if (!instance?.instance_name) throw new Error('Nenhuma instância WhatsApp conectada');
+    const baseUrl = instance.api_url || EVOLUTION_API_URL;
+    const apiKey = instance.api_key || EVOLUTION_API_KEY;
+    if (!baseUrl || !apiKey) throw new Error('Credenciais da API de WhatsApp não configuradas');
+    sender = async (phone, message) => {
       const res = await fetch(`${baseUrl}/message/sendText/${instance.instance_name}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: apiKey },
@@ -106,6 +115,16 @@ async function sendFor(schoolId: string, recipients: string[]) {
       });
       const text = await res.text();
       if (!res.ok) throw new Error(`[${res.status}] ${text}`);
+    };
+  }
+
+  const message = await buildReport(schoolId);
+
+  const results: Array<{ phone: string; ok: boolean; error?: string }> = [];
+  for (const raw of recipients) {
+    const phone = normalizePhone(raw);
+    try {
+      await sender(phone, message);
       results.push({ phone, ok: true });
     } catch (e) {
       console.error('Falha ao enviar para', phone, e);
