@@ -5,6 +5,7 @@ import { SectorUsersManager } from '@/components/settings/SectorUsersManager';
 import { AutomationSettings } from '@/components/settings/AutomationSettings';
 import { FinancialSettings } from '@/components/settings/FinancialSettings';
 import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
+import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { Phone, Building2, Bell, Shield, Bot, CreditCard, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
