@@ -221,6 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       relatorios: ['teacher', 'secretary', 'admin', 'director'],
       configuracoes: ['director'],
       usuarios: ['director'],
+      vendas: ['seller', 'director'],
     };
 
     const allowedRoles = modulePermissions[module] || [];

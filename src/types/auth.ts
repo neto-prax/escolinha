@@ -1,4 +1,4 @@
-export type AppRole = 'teacher' | 'secretary' | 'admin' | 'director';
+export type AppRole = 'teacher' | 'secretary' | 'admin' | 'director' | 'seller';
 
 export interface UserProfile {
   id: string;
@@ -58,6 +58,7 @@ export const ROLE_PERMISSIONS: Record<AppRole, string[]> = {
   teacher: ['pedagogico', 'diario', 'turmas'],
   secretary: ['secretaria', 'turmas', 'alunos', 'mensagens'],
   admin: ['administrativo', 'financeiro', 'mensagens'],
+  seller: ['vendas'],
   director: ['*'], // Acesso total
 };
 
@@ -65,5 +66,6 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   teacher: 'Professora',
   secretary: 'Secretaria',
   admin: 'Administrativo',
+  seller: 'Vendedor',
   director: 'Diretora',
 };

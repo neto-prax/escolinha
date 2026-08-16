@@ -13,9 +13,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone } from 'lucide-react';
+import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone, Plus } from 'lucide-react';
 import { BillingTab } from '@/components/superadmin/BillingTab';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
+import { ConfiguracoesTab } from '@/components/superadmin/ConfiguracoesTab';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -60,6 +61,7 @@ const ROLE_LABELS: Record<string, string> = {
   secretary: 'Secretaria',
   admin: 'Administrativo',
   director: 'Diretor',
+  seller: 'Vendedor',
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -67,6 +69,7 @@ const ROLE_COLORS: Record<string, string> = {
   secretary: 'bg-green-500',
   admin: 'bg-purple-500',
   director: 'bg-amber-500',
+  seller: 'bg-indigo-500',
 };
 
 export default function SuperAdmin() {
@@ -91,6 +94,20 @@ export default function SuperAdmin() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [schoolSettings, setSchoolSettings] = useState<Record<string, boolean>>({});
+
+  // Create User State
+  const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
+  const [createUserForm, setCreateUserForm] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    phone: '',
+    school_id: '',
+    roles: [] as string[],
+  });
+
+  // Bulk actions state
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   // Check if user is super admin
   useEffect(() => {
@@ -297,6 +314,75 @@ export default function SuperAdmin() {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!createUserForm.email || !createUserForm.password || !createUserForm.full_name) {
+      toast.error('Preencha os campos obrigatórios (Nome, Email e Senha)');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('super-admin', {
+        body: { 
+          action: 'create_user', 
+          payload: {
+            ...createUserForm,
+            school_id: createUserForm.school_id || null, // null if empty string
+          } 
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success('Usuário criado com sucesso!');
+      setIsCreateUserOpen(false);
+      setCreateUserForm({ email: '', password: '', full_name: '', phone: '', school_id: '', roles: [] });
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao criar usuário: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBulkDeleteUsers = async () => {
+    if (selectedUserIds.length === 0) return;
+    if (!window.confirm(`Tem certeza que deseja deletar ${selectedUserIds.length} usuário(s)?`)) return;
+
+    setIsSubmitting(true);
+    try {
+      // O ideal seria criar um 'bulk_delete_users' na function, 
+      // mas iterar aqui chamando a action 'delete_user' também funciona para volumes pequenos.
+      for (const id of selectedUserIds) {
+        const { error } = await supabase.functions.invoke('super-admin', {
+          body: { action: 'delete_user', userId: id },
+        });
+        if (error) throw error;
+      }
+      toast.success(`${selectedUserIds.length} usuário(s) excluído(s) com sucesso`);
+      setSelectedUserIds([]);
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao excluir usuários: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleSelectUser = (id: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((userId) => userId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllUsers = (filteredUsersList: UserWithDetails[]) => {
+    if (selectedUserIds.length === filteredUsersList.length && filteredUsersList.length > 0) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(filteredUsersList.map((u) => u.id));
+    }
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -428,6 +514,10 @@ export default function SuperAdmin() {
               <Phone className="mr-2 h-4 w-4" />
               WhatsApp
             </TabsTrigger>
+            <TabsTrigger value="settings">
+              <Settings className="mr-2 h-4 w-4" />
+              Configurações
+            </TabsTrigger>
           </TabsList>
 
 
@@ -528,7 +618,22 @@ export default function SuperAdmin() {
                     <CardTitle>Usuários do Sistema</CardTitle>
                     <CardDescription>Gerencie usuários de todas as escolas</CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center flex-wrap">
+                    {selectedUserIds.length > 0 && (
+                      <div className="flex items-center gap-2 mr-2">
+                        <span className="text-sm text-muted-foreground">
+                          {selectedUserIds.length} selecionado(s)
+                        </span>
+                        <Button variant="destructive" onClick={handleBulkDeleteUsers} size="sm" disabled={isSubmitting}>
+                          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                          Deletar
+                        </Button>
+                      </div>
+                    )}
+                    <Button onClick={() => setIsCreateUserOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Novo Usuário
+                    </Button>
                     <select
                       className="rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={selectedSchoolFilter}
@@ -557,6 +662,14 @@ export default function SuperAdmin() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                          checked={selectedUserIds.length === filteredUsers.length && filteredUsers.length > 0}
+                          onChange={() => toggleSelectAllUsers(filteredUsers)}
+                        />
+                      </TableHead>
                       <TableHead>Usuário</TableHead>
                       <TableHead>Escola</TableHead>
                       <TableHead>Perfis</TableHead>
@@ -566,7 +679,15 @@ export default function SuperAdmin() {
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.map((userItem) => (
-                      <TableRow key={userItem.id}>
+                      <TableRow key={userItem.id} className={selectedUserIds.includes(userItem.id) ? 'bg-muted/50' : ''}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            checked={selectedUserIds.includes(userItem.id)}
+                            onChange={() => toggleSelectUser(userItem.id)}
+                          />
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10">
@@ -670,6 +791,11 @@ export default function SuperAdmin() {
           {/* WhatsApp Tab */}
           <TabsContent value="whatsapp">
             <UazapiSettings />
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings">
+            <ConfiguracoesTab />
           </TabsContent>
         </Tabs>
 
@@ -833,6 +959,108 @@ export default function SuperAdmin() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={isCreateUserOpen} onOpenChange={setIsCreateUserOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Criar Novo Usuário</DialogTitle>
+            <DialogDescription>
+              Preencha os dados abaixo para criar um novo usuário no sistema.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Nome Completo *</Label>
+              <Input
+                placeholder="Ex: João da Silva"
+                value={createUserForm.full_name}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, full_name: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>E-mail *</Label>
+              <Input
+                type="email"
+                placeholder="Ex: joao@escola.com"
+                value={createUserForm.email}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Senha *</Label>
+              <Input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={createUserForm.password}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Telefone</Label>
+              <Input
+                placeholder="Ex: (00) 00000-0000"
+                value={createUserForm.phone}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, phone: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Vincular a uma Sede</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={createUserForm.school_id}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, school_id: e.target.value })}
+              >
+                <option value="">Nenhuma Sede</option>
+                {schools.map((school) => (
+                  <option key={school.id} value={school.id}>
+                    {school.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Perfis Padrão</Label>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(ROLE_LABELS).map(([role, label]) => (
+                  <Button
+                    key={role}
+                    type="button"
+                    variant={createUserForm.roles.includes(role) ? 'default' : 'outline'}
+                    size="sm"
+                    className={createUserForm.roles.includes(role) ? ROLE_COLORS[role] : ''}
+                    onClick={() => {
+                      setCreateUserForm((prev) => {
+                        if (prev.roles.includes(role)) {
+                          return { ...prev, roles: prev.roles.filter(r => r !== role) };
+                        }
+                        return { ...prev, roles: [...prev.roles, role] };
+                      });
+                    }}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateUserOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateUser} disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                'Criar Usuário'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
     </div>
   );

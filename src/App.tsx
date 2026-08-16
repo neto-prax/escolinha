@@ -24,6 +24,7 @@ import Usuarios from "./pages/Usuarios";
 import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 import Alunos from "./pages/Alunos";
+import PainelVendedor from "./pages/PainelVendedor";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ const App = () => (
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="usuarios" element={<Usuarios />} />
               <Route path="alunos" element={<Alunos />} />
+              <Route path="vendas" element={<PainelVendedor />} />
             </Route>
             
             {/* Portal do Responsável */}

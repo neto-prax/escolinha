@@ -57,6 +57,87 @@ Deno.serve(async (req) => {
     const { action, ...params } = await req.json();
 
     switch (action) {
+      case "create_user": {
+        const { payload } = params;
+        const { email, password, full_name, phone, roles, school_id } = payload;
+
+        if (!email || !password || !full_name) {
+          return new Response(
+            JSON.stringify({ error: "Email, password and full_name are required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          phone,
+          user_metadata: { full_name, roles, school_id },
+          email_confirm: true,
+        });
+
+        if (createError) throw createError;
+
+        if (!userData.user) {
+          return new Response(
+            JSON.stringify({ error: "Failed to create user" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const userId = userData.user.id;
+
+        // Update profile with school_id
+        if (school_id) {
+          const { error: profileError } = await supabaseAdmin
+            .from("profiles")
+            .update({ school_id })
+            .eq("id", userId);
+          
+          if (profileError) throw profileError;
+        }
+
+        // Add roles
+        if (roles && roles.length > 0) {
+          const roleData = roles.map((role: string) => ({
+            user_id: userId,
+            role: role,
+          }));
+
+          const { error: rolesError } = await supabaseAdmin
+            .from("user_roles")
+            .insert(roleData);
+
+          if (rolesError) throw rolesError;
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, user: userData.user }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "delete_user": {
+        const { userId } = params;
+
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: "userId is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Deleting from auth.users cascades to profiles and user_roles
+        const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+
+        if (deleteError) throw deleteError;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "list_schools": {
         const { data: schools, error } = await supabaseAdmin
           .from("schools")

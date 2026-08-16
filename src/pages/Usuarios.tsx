@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+// Duplicate supabase import removed
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound } from 'lucide-react';
+import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppRole } from '@/types/auth';
@@ -50,6 +51,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   admin: 'Administrativo',
   secretary: 'Secretaria',
   teacher: 'Professor(a)',
+  seller: 'Vendedor(a)',
 };
 
 const ROLE_COLORS: Record<AppRole, string> = {
@@ -57,6 +59,7 @@ const ROLE_COLORS: Record<AppRole, string> = {
   admin: 'bg-blue-500',
   secretary: 'bg-green-500',
   teacher: 'bg-orange-500',
+  seller: 'bg-indigo-500',
 };
 
 const Usuarios = () => {
@@ -67,12 +70,37 @@ const Usuarios = () => {
   const toggleActive = useToggleUserActive();
   const createUser = useCreateUser();
 
-  const [isEditOpen, setIsEditOpen] = useState(false);
   const [isRolesOpen, setIsRolesOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
+  const handleBulkDelete = async () => {
+    if (selectedUserIds.length === 0) return;
+    if (!window.confirm(`Tem certeza que deseja deletar ${selectedUserIds.length} usuário(s)?`)) return;
+    try {
+      const { error } = await supabase.from('users').delete().in('id', selectedUserIds);
+      if (error) throw error;
+      toast.success('Usuários deletados com sucesso');
+      // Refetch users (useUsers hook should refetch automatically on mutation)
+      // Forcing a refresh by calling refreshProfile or invalidating query cache
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao deletar usuários');
+    } finally {
+      setSelectedUserIds([]);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!window.confirm('Tem certeza que deseja deletar este usuário?')) return;
+    try {
+      const { error } = await supabase.from('users').delete().eq('id', userId);
+      if (error) throw error;
+      toast.success('Usuário deletado com sucesso');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao deletar usuário');
+    }
+  };
 
   const [editForm, setEditForm] = useState({ full_name: '', phone: '', email: '' });
   const [rolesForm, setRolesForm] = useState<AppRole[]>([]);
@@ -250,10 +278,22 @@ const Usuarios = () => {
                 {users.length} usuário(s) cadastrado(s)
               </CardDescription>
             </div>
-            <Button onClick={() => setIsCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Usuário
-            </Button>
+            <div className="flex gap-2 items-center">
+              <Button onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo Usuário
+              </Button>
+              {selectedUserIds.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {selectedUserIds.length} selecionado(s)
+                  </span>
+                  <Button variant="destructive" onClick={handleBulkDelete} size="sm">
+                    Deletar
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
