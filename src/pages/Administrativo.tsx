@@ -111,6 +111,34 @@ const Administrativo = () => {
   const [novoResponsavelNome, setNovoResponsavelNome] = useState('');
   const [novoResponsavelTelefone, setNovoResponsavelTelefone] = useState('');
 
+  // Caixas para o relatório
+  const [caixas] = useLocalStorage<any[]>('escolinha_caixas', []);
+
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertVariable = (variable: string) => {
+    const textarea = textAreaRef.current;
+    if (!textarea) {
+      setMensagemRelatorio(prev => prev + variable);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = mensagemRelatorio;
+    const before = text.substring(0, start);
+    const after = text.substring(end, text.length);
+
+    const newText = before + variable + after;
+    setMensagemRelatorio(newText);
+    
+    // Focus and move cursor after state update
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + variable.length, start + variable.length);
+    }, 0);
+  };
+
   const handleAddResponsavel = () => {
     if (!novoResponsavelNome.trim() || !novoResponsavelTelefone.trim()) {
       toast.error('Preencha o nome e o telefone do responsável');
@@ -123,6 +151,84 @@ const Administrativo = () => {
     }]);
     setNovoResponsavelNome('');
     setNovoResponsavelTelefone('');
+  };
+
+  const handleSendRelatorio = async () => {
+    if (responsaveisRelatorio.length === 0) {
+      toast.error('Adicione pelo menos um responsável em Configurar antes de enviar.');
+      return;
+    }
+
+    const activeEmployees = employees.filter(e => e.status === 'active').length;
+    const totalEmployees = employees.length;
+    const ocorrenciasHoje = employees.flatMap(e => e.ocorrencias || []).filter(o => o.data === new Date().toISOString().split('T')[0]).length;
+    
+    const saldoCaixas = caixas.reduce((acc, c) => acc + (c.saldoInicial || 0), 0);
+    const formattedCaixa = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldoCaixas);
+
+    let finalMessage = mensagemRelatorio
+      .replace(/{{data}}/g, new Date().toLocaleDateString('pt-BR'))
+      .replace(/{{total_funcionarios}}/g, String(totalEmployees))
+      .replace(/{{ativos}}/g, String(activeEmployees))
+      .replace(/{{ocorrencias}}/g, String(ocorrenciasHoje))
+      .replace(/{{caixa}}/g, formattedCaixa);
+
+    // Se o usuário não incluiu variáveis, adiciona o bloco padrão de admin ao final da mensagem para não quebrar a lógica anterior
+    if (!mensagemRelatorio.includes('{{')) {
+      finalMessage = `*Relatório Administrativo Diário*
+Data: ${new Date().toLocaleDateString('pt-BR')}
+
+👥 *Quadro de Funcionários*
+Total: ${totalEmployees}
+Ativos: ${activeEmployees}
+
+⚠️ *Ocorrências Hoje*: ${ocorrenciasHoje}
+
+${mensagemRelatorio}`;
+    }
+
+    setIsLoading(true);
+    let sentCount = 0;
+    
+    try {
+      for (const resp of responsaveisRelatorio) {
+        // Limpar o telefone para enviar apenas números
+        const phone = resp.telefone.replace(/\D/g, '');
+        if (!phone) continue;
+        
+        // Em um ambiente real, você pode precisar do código do país
+        const fullPhone = phone.length <= 11 ? `55${phone}` : phone;
+
+        const personalizedMessage = finalMessage.replace(/{{nome_responsavel}}/g, resp.nome);
+
+        const { error } = await supabase.functions.invoke('evolution-api', {
+          body: {
+            action: 'send-text',
+            data: {
+              phone: fullPhone,
+              message: personalizedMessage,
+            }
+          }
+        });
+
+        if (error) {
+          console.error(`Erro ao enviar para ${resp.nome}:`, error);
+        } else {
+          sentCount++;
+        }
+      }
+      
+      if (sentCount > 0) {
+        toast.success(`Relatório enviado para ${sentCount} responsável(eis)!`);
+      } else {
+        toast.error('Não foi possível enviar o relatório para nenhum responsável.');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Ocorreu um erro ao enviar os relatórios.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -592,7 +698,18 @@ const Administrativo = () => {
                     <CardDescription>Gerenciar configurações do relatório diário</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button className="w-full" variant="outline" onClick={() => setIsRelatoriosOpen(true)}>Configurar</Button>
+                    <div className="flex flex-col gap-2">
+                      <Button 
+                        className="w-full" 
+                        variant="default" 
+                        onClick={handleSendRelatorio}
+                        disabled={isLoading}
+                      >
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Enviar Agora
+                      </Button>
+                      <Button className="w-full" variant="outline" onClick={() => setIsRelatoriosOpen(true)}>Configurar</Button>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -1072,11 +1189,30 @@ const Administrativo = () => {
             <div className="space-y-2">
               <label className="text-sm font-medium">Mensagem Padrão do Relatório</label>
               <Textarea 
+                ref={textAreaRef}
                 placeholder="Digite a mensagem que acompanhará o relatório..."
                 value={mensagemRelatorio}
                 onChange={(e) => setMensagemRelatorio(e.target.value)}
-                className="min-h-[80px]"
+                className="min-h-[120px]"
               />
+              <div className="bg-muted p-3 rounded-md mt-2">
+                <p className="text-xs font-semibold mb-2">Clique para inserir variáveis:</p>
+                <div className="flex flex-wrap gap-2 text-xs font-mono">
+                  {['{{nome_responsavel}}', '{{data}}', '{{total_funcionarios}}', '{{ativos}}', '{{ocorrencias}}', '{{caixa}}'].map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => insertVariable(v)}
+                      className="bg-background px-2 py-1 rounded border hover:bg-primary/10 hover:border-primary transition-colors text-slate-700"
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-tight">
+                  Dica: Se você não usar nenhuma variável, os dados administrativos serão enviados automaticamente no topo da mensagem.
+                </p>
+              </div>
             </div>
             
             <div className="pt-2">
