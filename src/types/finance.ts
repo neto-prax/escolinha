@@ -48,6 +48,7 @@ export interface SalarioItem {
   descricao: string;
   tipo: 'Provento' | 'Desconto';
   valor: number;
+  isPercentual?: boolean;
 }
 
 export interface Salario {

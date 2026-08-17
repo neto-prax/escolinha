@@ -39,10 +39,19 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
 
   const calcularTotais = (listaItens: SalarioItem[]) => {
     let proventos = 0;
-    let descontos = 0;
     listaItens.forEach(i => {
       if (i.tipo === 'Provento') proventos += Number(i.valor || 0);
-      else descontos += Number(i.valor || 0);
+    });
+
+    let descontos = 0;
+    listaItens.forEach(i => {
+      if (i.tipo === 'Desconto') {
+        if (i.isPercentual) {
+          descontos += (proventos * Number(i.valor || 0)) / 100;
+        } else {
+          descontos += Number(i.valor || 0);
+        }
+      }
     });
     return { proventos, descontos, liquido: proventos - descontos };
   };
@@ -222,14 +231,30 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
                     </select>
                   </div>
 
+                  {item.tipo === 'Desconto' && (
+                    <div className="flex flex-col w-20 shrink-0">
+                      <label className="text-xs text-gray-500 mb-1">Cálculo</label>
+                      <select
+                        value={item.isPercentual ? 'true' : 'false'}
+                        onChange={(e) => handleUpdateItem(item.id, 'isPercentual', e.target.value === 'true')}
+                        className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 w-full"
+                      >
+                        <option value="false">R$</option>
+                        <option value="true">%</option>
+                      </select>
+                    </div>
+                  )}
+
                   <div className="flex flex-col w-32 shrink-0">
-                    <label className="text-xs text-gray-500 mb-1">Valor (R$)</label>
+                    <label className="text-xs text-gray-500 mb-1">
+                      Valor {item.tipo === 'Desconto' && item.isPercentual ? '(%)' : '(R$)'}
+                    </label>
                     <input 
                       type="number" 
                       step="0.01"
-                      value={item.valor || ''}
+                      value={item.valor === 0 && item.descricao === '' ? '' : item.valor}
                       onChange={(e) => handleUpdateItem(item.id, 'valor', e.target.value === '' ? 0 : Number(e.target.value))}
-                      placeholder="0,00"
+                      placeholder={item.isPercentual ? "0%" : "0,00"}
                       required
                       min="0.01"
                       className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 w-full"
@@ -306,14 +331,18 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
                       <td className="py-3 px-4 font-medium">{sal.colaborador}</td>
                       <td className="py-3 px-4 text-xs">
                         <div className="flex flex-wrap gap-1">
-                          {sal.itens.map(item => (
-                            <span 
-                              key={item.id} 
-                              className={`px-2 py-0.5 rounded-full ${item.tipo === 'Provento' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
-                            >
-                              {item.descricao}
-                            </span>
-                          ))}
+                          {sal.itens.map(item => {
+                            const isDescPercent = item.tipo === 'Desconto' && item.isPercentual;
+                            const displayValor = isDescPercent ? `${item.valor}%` : formatCurrency(item.valor);
+                            return (
+                              <span 
+                                key={item.id} 
+                                className={`px-2 py-0.5 text-[11px] font-medium rounded-full ${item.tipo === 'Provento' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                              >
+                                {item.descricao} ({displayValor})
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right text-green-600 font-medium">+{formatCurrency(proventos)}</td>

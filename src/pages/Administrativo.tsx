@@ -101,6 +101,29 @@ const Administrativo = () => {
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<any>(null);
 
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Relatórios States
+  const [mensagemRelatorio, setMensagemRelatorio] = useLocalStorage('escolinha_relatorio_msg', 'Olá! Segue em anexo o relatório financeiro e administrativo atualizado da nossa unidade.');
+  const [responsaveisRelatorio, setResponsaveisRelatorio] = useLocalStorage<{id: string, nome: string, telefone: string}[]>('escolinha_relatorio_responsaveis', [
+    { id: '1', nome: 'Direção Escolar', telefone: '(11) 99999-9999' },
+    { id: '2', nome: 'Coordenação', telefone: '(11) 98888-8888' }
+  ]);
+  const [novoResponsavelNome, setNovoResponsavelNome] = useState('');
+  const [novoResponsavelTelefone, setNovoResponsavelTelefone] = useState('');
+
+  const handleAddResponsavel = () => {
+    if (!novoResponsavelNome.trim() || !novoResponsavelTelefone.trim()) {
+      toast.error('Preencha o nome e o telefone do responsável');
+      return;
+    }
+    setResponsaveisRelatorio([...responsaveisRelatorio, {
+      id: crypto.randomUUID(),
+      nome: novoResponsavelNome,
+      telefone: novoResponsavelTelefone
+    }]);
+    setNovoResponsavelNome('');
+    setNovoResponsavelTelefone('');
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1050,7 +1073,8 @@ const Administrativo = () => {
               <label className="text-sm font-medium">Mensagem Padrão do Relatório</label>
               <Textarea 
                 placeholder="Digite a mensagem que acompanhará o relatório..."
-                defaultValue="Olá! Segue em anexo o relatório financeiro e administrativo atualizado da nossa unidade."
+                value={mensagemRelatorio}
+                onChange={(e) => setMensagemRelatorio(e.target.value)}
                 className="min-h-[80px]"
               />
             </div>
@@ -1058,27 +1082,42 @@ const Administrativo = () => {
             <div className="pt-2">
               <label className="text-sm font-medium">Adicionar Responsável</label>
               <div className="flex gap-2 mt-2">
-                <Input placeholder="Nome" className="flex-1" />
-                <Input placeholder="WhatsApp" className="flex-1" />
-                <Button>Adicionar</Button>
+                <Input 
+                  placeholder="Nome" 
+                  value={novoResponsavelNome}
+                  onChange={(e) => setNovoResponsavelNome(e.target.value)}
+                  className="flex-1" 
+                />
+                <Input 
+                  placeholder="WhatsApp" 
+                  value={novoResponsavelTelefone}
+                  onChange={(e) => setNovoResponsavelTelefone(e.target.value)}
+                  className="flex-1" 
+                />
+                <Button onClick={handleAddResponsavel}>Adicionar</Button>
               </div>
             </div>
             
-            <div className="border rounded-md p-4 space-y-3 mt-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-medium">Direção Escolar</p>
-                  <p className="text-xs text-muted-foreground">(11) 99999-9999</p>
+            <div className="border rounded-md p-4 space-y-3 mt-4 max-h-[200px] overflow-y-auto">
+              {responsaveisRelatorio.map(resp => (
+                <div key={resp.id} className="flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-medium">{resp.nome}</p>
+                    <p className="text-xs text-muted-foreground">{resp.telefone}</p>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-destructive"
+                    onClick={() => setResponsaveisRelatorio(responsaveisRelatorio.filter(r => r.id !== resp.id))}
+                  >
+                    Remover
+                  </Button>
                 </div>
-                <Button variant="ghost" size="sm" className="text-destructive">Remover</Button>
-              </div>
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-medium">Coordenação</p>
-                  <p className="text-xs text-muted-foreground">(11) 98888-8888</p>
-                </div>
-                <Button variant="ghost" size="sm" className="text-destructive">Remover</Button>
-              </div>
+              ))}
+              {responsaveisRelatorio.length === 0 && (
+                <p className="text-sm text-center text-muted-foreground py-2">Nenhum responsável cadastrado</p>
+              )}
             </div>
           </div>
           <div className="flex justify-end pt-2 gap-2">
