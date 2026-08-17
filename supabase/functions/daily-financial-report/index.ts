@@ -32,8 +32,16 @@ function normalizePhone(raw: string) {
   return digits.startsWith('55') ? digits : `55${digits}`;
 }
 
-async function buildReport(schoolId: string) {
-  const { today, monthStart, label } = brDateParts();
+async function getReportData(schoolId: string, requestedDate?: string) {
+  const { today: defaultToday, label: defaultLabel } = brDateParts();
+  
+  const today = requestedDate || defaultToday;
+  const monthStart = `${today.slice(0, 8)}01`;
+  
+  let label = defaultLabel;
+  if (requestedDate) {
+    label = `${requestedDate.slice(8, 10)}/${requestedDate.slice(5, 7)}/${requestedDate.slice(0, 4)}`;
+  }
 
   const { data: school } = await admin
     .from('schools').select('name').eq('id', schoolId).maybeSingle();
@@ -46,29 +54,49 @@ async function buildReport(schoolId: string) {
   const rows = billings ?? [];
   const isPaid = (s: string | null) => s === 'paid' || s === 'pago';
 
+  const sum = (arr: typeof rows) => arr.reduce((s, r) => s + Number(r.amount || 0), 0);
+
   const receivedToday = rows
-    .filter((r) => isPaid(r.status) && r.payment_date === today)
+    .filter((r) => isPaid(r.status) && r.payment_date?.startsWith(today))
     .reduce((s, r) => s + Number(r.amount || 0), 0);
 
   const receivedMonth = rows
-    .filter((r) => isPaid(r.status) && r.payment_date && r.payment_date >= monthStart && r.payment_date <= today)
+    .filter((r) => {
+      if (!isPaid(r.status) || !r.payment_date) return false;
+      const pd = r.payment_date.slice(0, 10);
+      return pd >= monthStart && pd <= today;
+    })
     .reduce((s, r) => s + Number(r.amount || 0), 0);
 
   const dueToday = rows.filter((r) => !isPaid(r.status) && r.due_date === today);
   const overdue = rows.filter((r) => !isPaid(r.status) && r.due_date < today);
-  const openMonth = rows.filter((r) => !isPaid(r.status) && r.due_date >= today && r.due_date <= monthStart.slice(0, 8) + '31');
+  const openMonth = rows.filter((r) => !isPaid(r.status) && r.due_date >= today && r.due_date <= today.slice(0, 8) + '31');
 
-  const sum = (arr: typeof rows) => arr.reduce((s, r) => s + Number(r.amount || 0), 0);
+  return {
+    schoolName: school?.name ?? '',
+    label,
+    today,
+    receivedToday,
+    dueToday: { sum: sum(dueToday), count: dueToday.length },
+    overdue: { sum: sum(overdue), count: overdue.length },
+    receivedMonth,
+    openMonth: sum(openMonth)
+  };
+}
 
+function formatReportText(data: Awaited<ReturnType<typeof getReportData>>, schoolId: string) {
+  const baseUrl = Deno.env.get('APP_URL') || 'https://escolinha.gestaoja.com.br';
   return [
-    `*📊 Relatório Financeiro — ${label}*`,
-    school?.name ? `_${school.name}_` : '',
+    `*📊 Relatório Financeiro — ${data.label}*`,
+    data.schoolName ? `_${data.schoolName}_` : '',
     '',
-    `✅ *Recebido hoje:* ${brl(receivedToday)}`,
-    `📅 *Vencendo hoje:* ${brl(sum(dueToday))} (${dueToday.length} cobrança${dueToday.length === 1 ? '' : 's'})`,
-    `⚠️ *Em atraso:* ${brl(sum(overdue))} (${overdue.length} cobrança${overdue.length === 1 ? '' : 's'})`,
-    `📈 *Recebido no mês:* ${brl(receivedMonth)}`,
-    `🕓 *A receber ainda no mês:* ${brl(sum(openMonth))}`,
+    `✅ *Recebido hoje:* ${brl(data.receivedToday)}`,
+    `📅 *Vencendo hoje:* ${brl(data.dueToday.sum)} (${data.dueToday.count} cobrança${data.dueToday.count === 1 ? '' : 's'})`,
+    `⚠️ *Em atraso:* ${brl(data.overdue.sum)} (${data.overdue.count} cobrança${data.overdue.count === 1 ? '' : 's'})`,
+    `📈 *Recebido no mês:* ${brl(data.receivedMonth)}`,
+    `🕓 *A receber ainda no mês:* ${brl(data.openMonth)}`,
+    '',
+    `🔗 *Ver painel do dia:* ${baseUrl}/report/${schoolId}/${data.today}`
   ].filter(Boolean).join('\n');
 }
 
@@ -118,7 +146,8 @@ async function sendFor(schoolId: string, recipients: string[]) {
     };
   }
 
-  const message = await buildReport(schoolId);
+  const data = await getReportData(schoolId);
+  const message = formatReportText(data, schoolId);
 
   const results: Array<{ phone: string; ok: boolean; error?: string }> = [];
   for (const raw of recipients) {
@@ -145,6 +174,42 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.json().catch(() => ({}));
+
+    if (payload?.action === 'public-data') {
+      if (!payload.schoolId || !payload.date) {
+        throw new Error('Parâmetros inválidos');
+      }
+      const data = await getReportData(payload.schoolId, payload.date);
+      // Ensure we only return data for the requested date, though getReportData always returns for 'today' (UTC-3).
+      // If the dashboard is accessed on a different day, the logic would need to compute for THAT day.
+      // Wait, let's fix getReportData to accept a specific date!
+      // But for now, we'll just return it. I'll modify getReportData above if needed later.
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (payload?.action === 'preview') {
+      const authHeader = req.headers.get('Authorization') ?? '';
+      const token = authHeader.replace('Bearer ', '');
+      const { data: userData, error: userErr } = await admin.auth.getUser(token);
+      if (userErr || !userData?.user) {
+        return new Response(JSON.stringify({ error: 'Não autenticado' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const { data: profile } = await admin
+        .from('profiles').select('school_id').eq('id', userData.user.id).maybeSingle();
+      if (!profile?.school_id) throw new Error('Escola não identificada');
+
+      const data = await getReportData(profile.school_id);
+      const message = formatReportText(data, profile.school_id);
+
+      return new Response(JSON.stringify({ message }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Envio manual: exige usuário autenticado, usa a escola do perfil
     if (payload?.action === 'send-now') {

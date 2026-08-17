@@ -131,7 +131,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
       tipo,
       descricao,
       valor: Number(valor),
-      data: new Date(data),
+      data: new Date(data + 'T12:00:00'),
       categoria,
       unidade,
       turmas: turmasSelecionadas.length > 0 ? turmasSelecionadas : undefined,

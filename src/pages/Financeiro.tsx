@@ -43,6 +43,24 @@ const Financeiro = () => {
     setLancamentosStorage(novosLancamentos);
   };
 
+  useEffect(() => {
+    const isFixed = window.localStorage.getItem('fix_lancamento_dates_v1');
+    if (!isFixed && lancamentosStorage.length > 0) {
+      let modified = false;
+      const fixedLancamentos = lancamentosStorage.map((l: any) => {
+        if (typeof l.data === 'string' && l.data.endsWith('T00:00:00.000Z')) {
+          modified = true;
+          return { ...l, data: l.data.replace('T00:00:00.000Z', 'T12:00:00.000Z') };
+        }
+        return l;
+      });
+      if (modified) {
+        setLancamentosStorage(fixedLancamentos);
+      }
+      window.localStorage.setItem('fix_lancamento_dates_v1', 'true');
+    }
+  }, [lancamentosStorage, setLancamentosStorage]);
+
   const handleAddCategoria = (novaCategoria: string) => {
     if (novaCategoria && !categorias.includes(novaCategoria)) {
       setCategorias([...categorias, novaCategoria].sort());

@@ -25,6 +25,7 @@ import SuperAdmin from "./pages/SuperAdmin";
 import NotFound from "./pages/NotFound";
 import Alunos from "./pages/Alunos";
 import PainelVendedor from "./pages/PainelVendedor";
+import PublicDailyReport from "./pages/PublicDailyReport";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
+            <Route path="/report/:schoolId/:date" element={<PublicDailyReport />} />
             
             {/* Protected routes */}
             <Route path="/app" element={<AppLayout />}>

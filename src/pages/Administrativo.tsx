@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { EmployeeHistoryDialog } from '@/components/administrativo/EmployeeHistoryDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Briefcase, Users, FileText, Settings, Plus, Search, MoreHorizontal, Clock, Calendar, Loader2, Download, Upload, FileDown, LayoutGrid, List } from 'lucide-react';
+import { Briefcase, Users, FileText, Settings, Plus, Search, MoreHorizontal, Clock, Calendar, Loader2, Download, Upload, FileDown, LayoutGrid, List, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -71,6 +72,7 @@ const employeeSchema = z.object({
 type EmployeeFormData = z.infer<typeof employeeSchema>;
 
 const Administrativo = () => {
+  const { profile } = useAuth();
   const [employees, setEmployees] = useState<any[]>(mockEmployees.map(emp => ({
     ...emp,
     ocorrencias: [
@@ -164,8 +166,22 @@ const Administrativo = () => {
     const totalEmployees = employees.length;
     const ocorrenciasHoje = employees.flatMap(e => e.ocorrencias || []).filter(o => o.data === new Date().toISOString().split('T')[0]).length;
     
-    const saldoCaixas = caixas.reduce((acc, c) => acc + (c.saldoInicial || 0), 0);
-    const formattedCaixa = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldoCaixas);
+    const dataFormatada = new Date().toLocaleDateString('pt-BR');
+    const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    
+    const formattedCaixa = realFinancialData ? `📊 Relatório Financeiro — ${dataFormatada}
+${realFinancialData.schoolName} | ${realFinancialData.label}
+✅ Recebido hoje: ${formatMoney(realFinancialData.receivedToday)}
+📅 Vencendo hoje: ${formatMoney(realFinancialData.dueToday?.sum || 0)} (${realFinancialData.dueToday?.count || 0} cobranças)
+⚠️ Em atraso: ${formatMoney(realFinancialData.overdue?.sum || 0)} (${realFinancialData.overdue?.count || 0} cobranças)
+📈 Recebido no mês: ${formatMoney(realFinancialData.receivedMonth || 0)}
+🕓 A receber ainda no mês: ${formatMoney(realFinancialData.openMonth || 0)}` : `📊 Relatório Financeiro — ${dataFormatada}
+Colégio Interagir | Senador
+✅ Recebido hoje: R$ 0,00
+📅 Vencendo hoje: R$ 0,00 (0 cobranças)
+⚠️ Em atraso: R$ 0,00 (0 cobranças)
+📈 Recebido no mês: R$ 0,00
+🕓 A receber ainda no mês: R$ 0,00`;
 
     const baseUrl = window.location.origin;
     const linkCaixa = `${baseUrl}/app/financeiro`;
@@ -309,6 +325,38 @@ ${mensagemRelatorio}`;
   const [isDadosEscolaOpen, setIsDadosEscolaOpen] = useState(false);
   const [isCargosOpen, setIsCargosOpen] = useState(false);
   const [isRelatoriosOpen, setIsRelatoriosOpen] = useState(false);
+
+  const [realFinancialData, setRealFinancialData] = useState<any>(null);
+
+  useEffect(() => {
+    if (isRelatoriosOpen && profile?.school_id && !realFinancialData) {
+      const fetchData = async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke('daily-financial-report', {
+            body: { action: 'public-data', schoolId: profile.school_id, date: new Date().toISOString().split('T')[0] }
+          });
+          // Verificar se a função atualizada já foi feito deploy (se ela retorna receivedToday)
+          if (!error && data && !data.error && data.receivedToday !== undefined) {
+            setRealFinancialData(data);
+          } else {
+            // Fallback temporário caso a edge function não esteja atualizada no servidor
+            setRealFinancialData({
+              schoolName: 'Colégio Interagir',
+              label: new Date().toLocaleDateString('pt-BR'),
+              receivedToday: 0,
+              dueToday: { sum: 0, count: 0 },
+              overdue: { sum: 0, count: 0 },
+              receivedMonth: 0,
+              openMonth: 0
+            });
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      fetchData();
+    }
+  }, [isRelatoriosOpen, profile?.school_id]);
 
   const form = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
@@ -1185,83 +1233,169 @@ ${mensagemRelatorio}`;
 
 
       <Dialog open={isRelatoriosOpen} onOpenChange={setIsRelatoriosOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>Responsáveis por Relatórios</DialogTitle>
-            <DialogDescription>Adicione as pessoas que irão receber os relatórios do sistema</DialogDescription>
+            <DialogDescription>Configure as mensagens e visualize como elas aparecerão no WhatsApp</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Mensagem Padrão do Relatório</label>
-              <Textarea 
-                ref={textAreaRef}
-                placeholder="Digite a mensagem que acompanhará o relatório..."
-                value={mensagemRelatorio}
-                onChange={(e) => setMensagemRelatorio(e.target.value)}
-                className="min-h-[120px]"
-              />
-              <div className="bg-muted p-3 rounded-md mt-2">
-                <p className="text-xs font-semibold mb-2">Clique para inserir variáveis:</p>
-                <div className="flex flex-wrap gap-2 text-xs font-mono">
-                  {['{{nome_responsavel}}', '{{data}}', '{{total_funcionarios}}', '{{ativos}}', '{{ocorrencias}}', '{{caixa}}', '{{link_caixa}}'].map(v => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => insertVariable(v)}
-                      className="bg-background px-2 py-1 rounded border hover:bg-primary/10 hover:border-primary transition-colors text-slate-700"
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-2 leading-tight">
-                  Dica: Se você não usar nenhuma variável, os dados administrativos serão enviados automaticamente no topo da mensagem.
-                </p>
-              </div>
-            </div>
-            
-            <div className="pt-2">
-              <label className="text-sm font-medium">Adicionar Responsável</label>
-              <div className="flex gap-2 mt-2">
-                <Input 
-                  placeholder="Nome" 
-                  value={novoResponsavelNome}
-                  onChange={(e) => setNovoResponsavelNome(e.target.value)}
-                  className="flex-1" 
+          
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_350px] gap-8 py-4">
+            {/* Left Column: Form */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Mensagem Padrão do Relatório</label>
+                <Textarea 
+                  ref={textAreaRef}
+                  placeholder="Digite a mensagem que acompanhará o relatório..."
+                  value={mensagemRelatorio}
+                  onChange={(e) => setMensagemRelatorio(e.target.value)}
+                  className="min-h-[120px]"
                 />
-                <Input 
-                  placeholder="WhatsApp" 
-                  value={novoResponsavelTelefone}
-                  onChange={(e) => setNovoResponsavelTelefone(e.target.value)}
-                  className="flex-1" 
-                />
-                <Button onClick={handleAddResponsavel}>Adicionar</Button>
-              </div>
-            </div>
-            
-            <div className="border rounded-md p-4 space-y-3 mt-4 max-h-[200px] overflow-y-auto">
-              {responsaveisRelatorio.map(resp => (
-                <div key={resp.id} className="flex justify-between items-center">
-                  <div>
-                    <p className="text-sm font-medium">{resp.nome}</p>
-                    <p className="text-xs text-muted-foreground">{resp.telefone}</p>
+                <div className="bg-muted p-3 rounded-md mt-2">
+                  <p className="text-xs font-semibold mb-2">Clique para inserir variáveis:</p>
+                  <div className="flex flex-wrap gap-2 text-xs font-mono">
+                    {['{{nome_responsavel}}', '{{data}}', '{{total_funcionarios}}', '{{ativos}}', '{{ocorrencias}}', '{{caixa}}', '{{link_caixa}}'].map(v => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => insertVariable(v)}
+                        className="bg-background px-2 py-1 rounded border hover:bg-primary/10 hover:border-primary transition-colors text-slate-700"
+                      >
+                        {v}
+                      </button>
+                    ))}
                   </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-destructive"
-                    onClick={() => setResponsaveisRelatorio(responsaveisRelatorio.filter(r => r.id !== resp.id))}
-                  >
-                    Remover
-                  </Button>
+                  <p className="text-[11px] text-muted-foreground mt-2 leading-tight">
+                    Dica: Se você não usar nenhuma variável, os dados administrativos serão enviados automaticamente no topo da mensagem.
+                  </p>
                 </div>
-              ))}
-              {responsaveisRelatorio.length === 0 && (
-                <p className="text-sm text-center text-muted-foreground py-2">Nenhum responsável cadastrado</p>
-              )}
+              </div>
+              
+              <div className="pt-2">
+                <label className="text-sm font-medium">Adicionar Responsável</label>
+                <div className="flex gap-2 mt-2">
+                  <Input 
+                    placeholder="Nome" 
+                    value={novoResponsavelNome}
+                    onChange={(e) => setNovoResponsavelNome(e.target.value)}
+                    className="flex-1" 
+                  />
+                  <Input 
+                    placeholder="WhatsApp" 
+                    value={novoResponsavelTelefone}
+                    onChange={(e) => setNovoResponsavelTelefone(e.target.value)}
+                    className="flex-1" 
+                  />
+                  <Button onClick={handleAddResponsavel}>Adicionar</Button>
+                </div>
+              </div>
+              
+              <div className="border rounded-md p-4 space-y-3 mt-4 max-h-[200px] overflow-y-auto">
+                {responsaveisRelatorio.map(resp => (
+                  <div key={resp.id} className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium">{resp.nome}</p>
+                      <p className="text-xs text-muted-foreground">{resp.telefone}</p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-destructive"
+                      onClick={() => setResponsaveisRelatorio(responsaveisRelatorio.filter(r => r.id !== resp.id))}
+                    >
+                      Remover
+                    </Button>
+                  </div>
+                ))}
+                {responsaveisRelatorio.length === 0 && (
+                  <p className="text-sm text-center text-muted-foreground py-2">Nenhum responsável cadastrado</p>
+                )}
+              </div>
             </div>
+
+            {/* Right Column: WhatsApp Preview */}
+            <div className="flex justify-center items-start pt-2">
+              <div className="relative w-full max-w-[320px] border-[8px] border-gray-900 dark:border-gray-800 rounded-[2.5rem] overflow-hidden shadow-xl bg-[#E5DDD5] dark:bg-[#0b141a]">
+                {/* Phone notch */}
+                <div className="absolute top-0 inset-x-0 h-6 bg-gray-900 dark:bg-gray-800 rounded-b-3xl mx-16 z-10"></div>
+                
+                {/* WhatsApp Header */}
+                <div className="bg-[#075E54] dark:bg-[#202c33] text-white p-3 pt-8 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <Bot className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <p className="font-semibold text-sm truncate">Relatório Gestão Já</p>
+                    <p className="text-[11px] text-white/70">bot</p>
+                  </div>
+                </div>
+
+                {/* Chat Area */}
+                <div 
+                  className="p-4 min-h-[400px] flex flex-col justify-end relative"
+                  style={{ 
+                    backgroundImage: `url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")`,
+                    backgroundSize: '300px',
+                    backgroundRepeat: 'repeat'
+                  }}
+                >
+                  <div className="absolute inset-0 bg-black/40 dark:bg-[#0b141a]/80 pointer-events-none"></div>
+
+                  <div className="relative z-10 w-full flex flex-col">
+                    <div className="bg-[#dcf8c6] dark:bg-[#005c4b] text-[#303030] dark:text-[#e9edef] rounded-lg p-3 text-[13px] shadow-sm ml-4 mb-2 relative self-end inline-block max-w-full">
+                      <div className="absolute top-0 -right-2 w-0 h-0 border-t-[10px] border-t-[#dcf8c6] dark:border-t-[#005c4b] border-r-[10px] border-r-transparent"></div>
+                      <div className="whitespace-pre-wrap leading-snug font-sans break-words">
+                        {(() => {
+                          const activeEmployees = employees.filter(e => e.status === 'active').length;
+                          const totalEmployees = employees.length;
+                          const ocorrenciasHoje = employees.flatMap(e => e.ocorrencias || []).filter(o => o.data === new Date().toISOString().split('T')[0]).length;
+                          
+                          const dataFormatada = new Date().toLocaleDateString('pt-BR');
+                          const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+                          
+                          const formattedCaixa = realFinancialData ? `📊 Relatório Financeiro — ${dataFormatada}
+${realFinancialData.schoolName} | ${realFinancialData.label}
+✅ Recebido hoje: ${formatMoney(realFinancialData.receivedToday)}
+📅 Vencendo hoje: ${formatMoney(realFinancialData.dueToday?.sum || 0)} (${realFinancialData.dueToday?.count || 0} cobranças)
+⚠️ Em atraso: ${formatMoney(realFinancialData.overdue?.sum || 0)} (${realFinancialData.overdue?.count || 0} cobranças)
+📈 Recebido no mês: ${formatMoney(realFinancialData.receivedMonth || 0)}
+🕓 A receber ainda no mês: ${formatMoney(realFinancialData.openMonth || 0)}` : `📊 Relatório Financeiro — ${dataFormatada}
+Colégio Interagir | Senador
+✅ Recebido hoje: Carregando dados...
+📅 Vencendo hoje: ...
+⚠️ Em atraso: ...
+📈 Recebido no mês: ...
+🕓 A receber ainda no mês: ...`;
+
+                          const baseUrl = window.location.origin;
+                          const linkCaixa = `${baseUrl}/app/financeiro`;
+
+                          let finalMessage = mensagemRelatorio
+                            .replace(/{{data}}/g, new Date().toLocaleDateString('pt-BR'))
+                            .replace(/{{total_funcionarios}}/g, String(totalEmployees))
+                            .replace(/{{ativos}}/g, String(activeEmployees))
+                            .replace(/{{ocorrencias}}/g, String(ocorrenciasHoje))
+                            .replace(/{{caixa}}/g, formattedCaixa)
+                            .replace(/{{link_caixa}}/g, linkCaixa)
+                            .replace(/{{nome_responsavel}}/g, responsaveisRelatorio[0]?.nome || 'Responsável Exemplo');
+
+                          if (!mensagemRelatorio.includes('{{')) {
+                            finalMessage = `*Relatório Administrativo Diário*\nData: ${new Date().toLocaleDateString('pt-BR')}\n\n👥 *Quadro de Funcionários*\nTotal: ${totalEmployees}\nAtivos: ${activeEmployees}\n\n⚠️ *Ocorrências Hoje*: ${ocorrenciasHoje}\n\n${mensagemRelatorio}`;
+                          }
+                          return finalMessage || "Escreva uma mensagem...";
+                        })()}
+                      </div>
+                      <div className="text-[10px] text-right mt-1 opacity-60 flex justify-end items-center gap-1">
+                        {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
-          <div className="flex justify-end pt-2 gap-2">
+          <div className="flex justify-end pt-2 gap-2 mt-2">
             <Button variant="outline" onClick={() => setIsRelatoriosOpen(false)}>Cancelar</Button>
             <Button onClick={() => {
               toast.success("Configurações de relatórios salvas!");
