@@ -87,15 +87,24 @@ export function DailyReportSettings() {
   };
 
   const handleSendNow = async () => {
+    if (recipients.length === 0) {
+      toast.error('Adicione ao menos um número antes de enviar');
+      return;
+    }
     setSending(true);
     try {
       const { data, error } = await supabase.functions.invoke('daily-financial-report', {
-        body: { action: 'send-now' },
+        body: { action: 'send-now', recipients },
       });
-      if (error) throw error;
+      if (error) throw new Error(data?.error ?? error.message);
       if (data?.error) throw new Error(data.error);
-      const ok = (data?.results ?? []).filter((r: { ok: boolean }) => r.ok).length;
+      const results: Array<{ ok: boolean; error?: string }> = data?.results ?? [];
+      const ok = results.filter((r) => r.ok).length;
+      if (ok === 0) {
+        throw new Error(results[0]?.error ?? 'Nenhuma mensagem foi enviada');
+      }
       toast.success(`Relatório enviado para ${ok} número(s)`);
+      queryClient.invalidateQueries({ queryKey: ['daily-report-settings', schoolId] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao enviar relatório');
     } finally {
