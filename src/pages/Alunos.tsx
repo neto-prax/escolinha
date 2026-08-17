@@ -97,18 +97,33 @@ const Alunos = () => {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json<any>(ws);
+        const currentYear = new Date().getFullYear().toString();
+        let proximoNumero = 1;
+        
+        const matriculasAnoAtual = alunos
+          .map(a => a.matricula)
+          .filter(m => m.startsWith(currentYear))
+          .map(m => parseInt(m.substring(4)))
+          .filter(n => !isNaN(n));
+          
+        if (matriculasAnoAtual.length > 0) {
+          proximoNumero = Math.max(...matriculasAnoAtual) + 1;
+        }
 
-        const novosAlunos: Aluno[] = data.map(row => ({
-          id: crypto.randomUUID(),
-          matricula: String(row.Matrícula || ''),
-          nome: row.Nome || 'Aluno Sem Nome',
-          nomeResponsavel: row.Responsável || '',
-          contatoResponsavel: String(row['Contato Responsável'] || ''),
-          setor: row.Setor,
-          classe: row.Classe,
-          turma: row.Turma,
-          status: row.Status === 'Inativo' ? 'Inativo' : 'Ativo',
-        }));
+        const novosAlunos: Aluno[] = data.map((row, index) => {
+          const matriculaGerada = `${currentYear}${(proximoNumero + index).toString().padStart(3, '0')}`;
+          return {
+            id: crypto.randomUUID(),
+            matricula: matriculaGerada,
+            nome: row.Nome || 'Aluno Sem Nome',
+            nomeResponsavel: row.Responsável || '',
+            contatoResponsavel: String(row['Contato Responsável'] || ''),
+            setor: row.Setor,
+            classe: row.Classe,
+            turma: row.Turma,
+            status: row.Status === 'Inativo' ? 'Inativo' : 'Ativo',
+          };
+        });
 
         setAlunos(prev => [...prev, ...novosAlunos]);
         toast.success(`${novosAlunos.length} alunos importados com sucesso!`);
@@ -289,15 +304,53 @@ const Alunos = () => {
   };
 
   const handleDownloadTemplateMensalidades = () => {
-    const templateData = [{
-      Matrícula: '2024001',
-      'Mês': '2024-08'
-    }];
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const dataToExport: any[] = [];
+    
+    displayedAlunos.forEach(aluno => {
+      const alunoMensalidades = mensalidades
+        .filter(m => {
+          if (m.alunoId !== aluno.id) return false;
+          if (statusFilter === 'Todos') return true;
+          
+          const isAtrasada = m.status === 'Pendente' && new Date(m.dataVencimento) < new Date(new Date().setHours(0,0,0,0));
+          if (statusFilter === 'Pagas' && m.status === 'Pago') return true;
+          if (statusFilter === 'Em Aberto' && m.status === 'Pendente' && !isAtrasada) return true;
+          if (statusFilter === 'Atrasadas' && isAtrasada) return true;
+          return false;
+        })
+        .sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia));
+
+      alunoMensalidades.forEach(m => {
+        const isAtrasada = m.status === 'Pendente' && new Date(m.dataVencimento) < new Date(new Date().setHours(0,0,0,0));
+        const statusText = m.status === 'Pago' ? 'Pago' : (isAtrasada ? 'Vencido' : 'Pendente');
+        
+        dataToExport.push({
+          'Matrícula': aluno.matricula,
+          'Nome': aluno.nome,
+          'Mês': m.mesReferencia,
+          'Valor Final': m.valorFinal,
+          'Data Vencimento': new Date(m.dataVencimento).toLocaleDateString('pt-BR'),
+          'Status': statusText
+        });
+      });
+    });
+
+    if (dataToExport.length === 0) {
+      dataToExport.push({
+        'Matrícula': '2024001',
+        'Nome': 'Aluno Exemplo',
+        'Mês': '2024-08',
+        'Valor Final': 500.00,
+        'Data Vencimento': '05/08/2024',
+        'Status': 'Pendente'
+      });
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
-    XLSX.writeFile(workbook, "modelo_baixa_mensalidades.xlsx");
-    toast.success("Modelo baixado com sucesso!");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Mensalidades");
+    XLSX.writeFile(workbook, "planilha_mensalidades.xlsx");
+    toast.success("Planilha de mensalidades gerada com sucesso!");
   };
 
   const handleImportarMensalidades = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -321,6 +374,7 @@ const Alunos = () => {
         data.forEach(row => {
           const matricula = String(row.Matrícula);
           const mes = String(row['Mês'] || selectedMonth);
+          const statusPlanilha = String(row['Status'] || '').toLowerCase();
           
           const aluno = alunos.find(a => a.matricula === matricula);
           if (aluno) {
@@ -328,7 +382,8 @@ const Alunos = () => {
             
             if (mensalidadeIndex >= 0) {
               const m = novasMensalidades[mensalidadeIndex];
-              if (m.status === 'Pendente') {
+              // Se o status da planilha for 'pago' ou se for a planilha antiga sem status, marca como pago
+              if (m.status === 'Pendente' && (statusPlanilha === 'pago' || !row['Status'])) {
                 const novoLancamento: Lancamento = {
                   id: crypto.randomUUID(),
                   data: new Date(),
@@ -671,10 +726,10 @@ const Alunos = () => {
               <Button 
                 variant="outline"
                 onClick={handleDownloadTemplateMensalidades}
-                title="Baixar modelo"
+                title="Baixar planilha com os dados atuais"
               >
                 <FileDown className="h-4 w-4 mr-2" />
-                Modelo
+                Exportar Planilha
               </Button>
               <Button 
                 variant="outline"
@@ -729,7 +784,7 @@ const Alunos = () => {
                             ) : (
                               alunoMensalidades.map(mensalidade => {
                                 const isAtrasada = mensalidade.status === 'Pendente' && new Date(mensalidade.dataVencimento) < new Date(new Date().setHours(0,0,0,0));
-                                const statusText = mensalidade.status === 'Pago' ? 'Pago' : (isAtrasada ? 'Atrasada' : 'Pendente');
+                                const statusText = mensalidade.status === 'Pago' ? 'Pago' : (isAtrasada ? 'Vencido' : 'Pendente');
                                 
                                 const isSelected = selectedMensalidadesIds.includes(mensalidade.id);
                                 

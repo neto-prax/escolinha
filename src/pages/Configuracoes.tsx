@@ -6,7 +6,8 @@ import { AutomationSettings } from '@/components/settings/AutomationSettings';
 import { FinancialSettings } from '@/components/settings/FinancialSettings';
 import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
-import { Phone, Building2, Bell, Shield, Bot, CreditCard, FileText } from 'lucide-react';
+import { DangerZoneSettings } from '@/components/settings/DangerZoneSettings';
+import { Phone, Building2, Bell, Shield, Bot, CreditCard, FileText, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -76,6 +77,10 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
             <Shield className="h-4 w-4" />
             Segurança
           </TabsTrigger>
+          <TabsTrigger value="danger_zone" className="gap-2 text-destructive data-[state=active]:text-destructive">
+            <Trash2 className="h-4 w-4" />
+            Limpar Dados
+          </TabsTrigger>
         </TabsList>
 
         {isSuperAdmin && (
@@ -128,6 +133,10 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
               Em desenvolvimento
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="danger_zone" className="space-y-6">
+          <DangerZoneSettings />
         </TabsContent>
       </Tabs>
     </div>
