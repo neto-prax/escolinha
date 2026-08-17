@@ -86,39 +86,35 @@ export default function PublicDailyReport() {
           <StatCard
             title="Recebido Hoje"
             value={formatMoney(data.receivedToday)}
-            icon={<CheckCircle className="h-5 w-5" />}
-            trend="up"
-            trendValue="Receitas pagas hoje"
+            icon={CheckCircle}
+            description="Receitas pagas hoje"
           />
           <StatCard
             title="Vencendo Hoje"
             value={formatMoney(data.dueToday.sum)}
-            icon={<CalendarDays className="h-5 w-5" />}
-            trend="neutral"
-            trendValue={`${data.dueToday.count} cobrança(s)`}
+            icon={CalendarDays}
+            description={`${data.dueToday.count} cobrança(s)`}
           />
           <StatCard
             title="Em Atraso"
             value={formatMoney(data.overdue.sum)}
-            icon={<AlertCircle className="h-5 w-5" />}
-            trend="down"
-            trendValue={`${data.overdue.count} cobrança(s) no total`}
+            icon={AlertCircle}
+            description={`${data.overdue.count} cobrança(s) no total`}
           />
           <StatCard
             title="Recebido no Mês"
             value={formatMoney(data.receivedMonth)}
-            icon={<TrendingUp className="h-5 w-5 text-emerald-500" />}
-            trend="up"
-            trendValue="Total arrecadado este mês"
+            icon={TrendingUp}
+            description="Total arrecadado este mês"
           />
           <StatCard
             title="A Receber no Mês"
             value={formatMoney(data.openMonth)}
-            icon={<CalendarDays className="h-5 w-5" />}
-            trend="neutral"
-            trendValue="Total em aberto para o mês"
+            icon={CalendarDays}
+            description="Total em aberto para o mês"
           />
         </div>
+
       </div>
     </div>
   );
