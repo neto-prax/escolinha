@@ -7,10 +7,11 @@ import { Label } from '@/components/ui/label';
 import { FileText, Download, TrendingUp, TrendingDown, Landmark, Users, AlertCircle, PieChart, CheckCircle, Clock, GraduationCap } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { mockExpenses, mockEmployees, mockCaixas } from '@/data/mockData';
+import { mockEmployees, mockCaixas } from '@/data/mockData';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Aluno, Mensalidade } from '@/types/aluno';
+import { Lancamento, Caixa } from '@/types/finance';
 
 const Relatorios = () => {
   const [dataInicio, setDataInicio] = useState('');
@@ -18,13 +19,26 @@ const Relatorios = () => {
   
   const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
+  const [lancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+  const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
+
+  const lancamentos: Lancamento[] = lancamentosStorage.map((l) => ({
+    ...l,
+    data: typeof l.data === 'string' ? new Date(l.data) : l.data,
+  }));
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  const getFilteredData = (data: any[]) => {
-    // Para simplificar no mock, retornamos tudo se não houver datas
-    return data;
+  const getFilteredData = (data: Lancamento[]) => {
+    if (!dataInicio || !dataFim) return data;
+    const inicio = new Date(`${dataInicio}T00:00:00`).getTime();
+    const fim = new Date(`${dataFim}T23:59:59`).getTime();
+    return data.filter((l) => {
+      const t = new Date(l.data).getTime();
+      return t >= inicio && t <= fim;
+    });
   };
+
 
   const generatePDF = (title: string, head: string[][], body: any[][]) => {
     const doc = new jsPDF();
@@ -45,29 +59,45 @@ const Relatorios = () => {
   };
 
   const exportEntradas = () => {
-    const data = getFilteredData(mockExpenses.filter(e => e.tipo === 'Entrada'));
+    const data = getFilteredData(lancamentos.filter(e => e.tipo === 'Entrada'));
     if(data.length === 0) return toast.error("Nenhuma entrada no período.");
     
-    const body = data.map(e => [e.data.toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
+    const body = data.map(e => [new Date(e.data).toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
     generatePDF("Relatório de Entradas por Período", [['Data', 'Descrição', 'Categoria', 'Valor']], body);
   };
 
   const exportSaidas = () => {
-    const data = getFilteredData(mockExpenses.filter(e => e.tipo === 'Saída'));
+    const data = getFilteredData(lancamentos.filter(e => e.tipo === 'Saída'));
     if(data.length === 0) return toast.error("Nenhuma saída no período.");
     
-    const body = data.map(e => [e.data.toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
+    const body = data.map(e => [new Date(e.data).toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
     generatePDF("Relatório de Saídas por Período", [['Data', 'Descrição', 'Categoria', 'Valor']], body);
   };
 
   const exportCaixa = () => {
-    const body = mockCaixas.map(c => {
-      const entradas = mockExpenses.filter(e => e.caixaId === c.id && e.tipo === 'Entrada').reduce((acc, curr) => acc + curr.valor, 0);
-      const saidas = mockExpenses.filter(e => e.caixaId === c.id && e.tipo === 'Saída').reduce((acc, curr) => acc + curr.valor, 0);
-      return [c.nome, formatCurrency(entradas), formatCurrency(saidas), formatCurrency(c.saldoInicial + entradas - saidas)];
+    const periodo = getFilteredData(lancamentos);
+    if (periodo.length === 0) return toast.error("Nenhum lançamento no período.");
+
+    const listaCaixas: Caixa[] = caixas.length ? caixas : mockCaixas;
+    const body = listaCaixas.map(c => {
+      const doCaixa = periodo.filter(e => e.caixaId === c.id);
+      const entradas = doCaixa.filter(e => e.tipo === 'Entrada').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      const saidas = doCaixa.filter(e => e.tipo === 'Saída').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      return [c.nome, formatCurrency(entradas), formatCurrency(saidas), formatCurrency(Number(c.saldoInicial || 0) + entradas - saidas)];
     });
+
+    // Lançamentos sem caixa vinculado
+    const semCaixa = periodo.filter(e => !e.caixaId || !listaCaixas.some(c => c.id === e.caixaId));
+    if (semCaixa.length > 0) {
+      const entradas = semCaixa.filter(e => e.tipo === 'Entrada').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      const saidas = semCaixa.filter(e => e.tipo === 'Saída').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      body.push(['Sem caixa vinculado', formatCurrency(entradas), formatCurrency(saidas), formatCurrency(entradas - saidas)]);
+    }
+
     generatePDF("Caixa Agrupado por Período", [['Caixa', 'Entradas', 'Saídas', 'Saldo Final']], body);
   };
+
+
 
   const exportFuncionarios = () => {
     const body = mockEmployees.map(emp => [
