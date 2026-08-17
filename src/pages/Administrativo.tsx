@@ -167,12 +167,16 @@ const Administrativo = () => {
     const saldoCaixas = caixas.reduce((acc, c) => acc + (c.saldoInicial || 0), 0);
     const formattedCaixa = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldoCaixas);
 
+    const baseUrl = window.location.origin;
+    const linkCaixa = `${baseUrl}/app/financeiro`;
+
     let finalMessage = mensagemRelatorio
       .replace(/{{data}}/g, new Date().toLocaleDateString('pt-BR'))
       .replace(/{{total_funcionarios}}/g, String(totalEmployees))
       .replace(/{{ativos}}/g, String(activeEmployees))
       .replace(/{{ocorrencias}}/g, String(ocorrenciasHoje))
-      .replace(/{{caixa}}/g, formattedCaixa);
+      .replace(/{{caixa}}/g, formattedCaixa)
+      .replace(/{{link_caixa}}/g, linkCaixa);
 
     // Se o usuário não incluiu variáveis, adiciona o bloco padrão de admin ao final da mensagem para não quebrar a lógica anterior
     if (!mensagemRelatorio.includes('{{')) {
@@ -1199,7 +1203,7 @@ ${mensagemRelatorio}`;
               <div className="bg-muted p-3 rounded-md mt-2">
                 <p className="text-xs font-semibold mb-2">Clique para inserir variáveis:</p>
                 <div className="flex flex-wrap gap-2 text-xs font-mono">
-                  {['{{nome_responsavel}}', '{{data}}', '{{total_funcionarios}}', '{{ativos}}', '{{ocorrencias}}', '{{caixa}}'].map(v => (
+                  {['{{nome_responsavel}}', '{{data}}', '{{total_funcionarios}}', '{{ativos}}', '{{ocorrencias}}', '{{caixa}}', '{{link_caixa}}'].map(v => (
                     <button
                       key={v}
                       type="button"
