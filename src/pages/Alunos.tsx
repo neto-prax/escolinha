@@ -32,7 +32,7 @@ const defaultTurmas: TurmaConfig[] = [
 ];
 
 const Alunos = () => {
-  const [turmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', defaultTurmas);
+  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', defaultTurmas);
   const [alunos, setAlunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades, setMensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentos, setLancamentos] = useLocalStorage<Lancamento[]>('escolinha_lancamentos_v2', []);
@@ -126,6 +126,32 @@ const Alunos = () => {
         });
 
         setAlunos(prev => [...prev, ...novosAlunos]);
+
+        // Atualizar as turmas com base nos dados da planilha
+        const novasTurmas = [...turmas];
+        
+        novosAlunos.forEach(aluno => {
+          const setor = aluno.setor;
+          const classe = aluno.classe;
+          const turma = aluno.turma;
+          
+          if (setor && classe) {
+            const index = novasTurmas.findIndex(t => t.nome === classe && t.setor === setor);
+            if (index !== -1) {
+              if (turma && !novasTurmas[index].letras.includes(turma)) {
+                novasTurmas[index].letras = [...novasTurmas[index].letras, turma].sort();
+              }
+            } else {
+              novasTurmas.push({
+                setor,
+                nome: classe,
+                letras: turma ? [turma] : []
+              });
+            }
+          }
+        });
+        
+        setTurmas(novasTurmas);
         toast.success(`${novosAlunos.length} alunos importados com sucesso!`);
       } catch (error) {
         console.error(error);

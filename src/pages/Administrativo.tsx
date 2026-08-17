@@ -890,11 +890,28 @@ ${mensagemRelatorio}`;
                                 <div key={turma.nome} className="flex flex-col gap-2 bg-muted/30 p-3 rounded border border-muted">
                                   <div className="flex justify-between items-center">
                                     <span className="text-sm font-bold text-primary">{turma.nome}</span> 
-                                    <Button variant="ghost" size="sm" className="text-destructive h-8 w-8 p-0 hover:bg-destructive/10" onClick={() => {
-                                      setTurmas(turmas.filter(t => !(t.nome === turma.nome && t.setor === setor)));
-                                    }}>
-                                      X
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                      <Select value={turma.setor} onValueChange={(newSetor) => {
+                                        setTurmas(turmas.map(t => {
+                                          if (t.nome === turma.nome && t.setor === setor) {
+                                            return { ...t, setor: newSetor };
+                                          }
+                                          return t;
+                                        }));
+                                      }}>
+                                        <SelectTrigger className="h-7 text-xs border-0 bg-transparent hover:bg-muted/50 w-36 px-2 shadow-none focus:ring-0">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {setoresOpcoes.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0 hover:bg-destructive/10" onClick={() => {
+                                        setTurmas(turmas.filter(t => !(t.nome === turma.nome && t.setor === setor)));
+                                      }}>
+                                        X
+                                      </Button>
+                                    </div>
                                   </div>
                                   {turma.letras.length > 0 && (
                                     <div className="flex flex-wrap gap-1.5 mt-1 border-t border-muted/50 pt-2">
