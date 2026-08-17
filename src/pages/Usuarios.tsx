@@ -75,17 +75,18 @@ const Usuarios = () => {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
   const handleBulkDelete = async () => {
     if (selectedUserIds.length === 0) return;
     if (!window.confirm(`Tem certeza que deseja deletar ${selectedUserIds.length} usuário(s)?`)) return;
     try {
-      const { error } = await supabase.from('users').delete().in('id', selectedUserIds);
+      const { error } = await supabase.from('profiles').delete().in('id', selectedUserIds);
       if (error) throw error;
       toast.success('Usuários deletados com sucesso');
-      // Refetch users (useUsers hook should refetch automatically on mutation)
-      // Forcing a refresh by calling refreshProfile or invalidating query cache
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao deletar usuários');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao deletar usuários');
     } finally {
       setSelectedUserIds([]);
     }
@@ -94,11 +95,11 @@ const Usuarios = () => {
   const handleDeleteUser = async (userId: string) => {
     if (!window.confirm('Tem certeza que deseja deletar este usuário?')) return;
     try {
-      const { error } = await supabase.from('users').delete().eq('id', userId);
+      const { error } = await supabase.from('profiles').delete().eq('id', userId);
       if (error) throw error;
       toast.success('Usuário deletado com sucesso');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao deletar usuário');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao deletar usuário');
     }
   };
 
