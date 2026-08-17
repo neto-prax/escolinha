@@ -7,10 +7,11 @@ import { Label } from '@/components/ui/label';
 import { FileText, Download, TrendingUp, TrendingDown, Landmark, Users, AlertCircle, PieChart, CheckCircle, Clock, GraduationCap } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { mockExpenses, mockEmployees, mockCaixas } from '@/data/mockData';
+import { mockEmployees, mockCaixas } from '@/data/mockData';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Aluno, Mensalidade } from '@/types/aluno';
+import { Lancamento, Caixa } from '@/types/finance';
 
 const Relatorios = () => {
   const [dataInicio, setDataInicio] = useState('');
@@ -18,13 +19,26 @@ const Relatorios = () => {
   
   const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
+  const [lancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+  const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
+
+  const lancamentos: Lancamento[] = lancamentosStorage.map((l) => ({
+    ...l,
+    data: typeof l.data === 'string' ? new Date(l.data) : l.data,
+  }));
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  const getFilteredData = (data: any[]) => {
-    // Para simplificar no mock, retornamos tudo se não houver datas
-    return data;
+  const getFilteredData = (data: Lancamento[]) => {
+    if (!dataInicio || !dataFim) return data;
+    const inicio = new Date(`${dataInicio}T00:00:00`).getTime();
+    const fim = new Date(`${dataFim}T23:59:59`).getTime();
+    return data.filter((l) => {
+      const t = new Date(l.data).getTime();
+      return t >= inicio && t <= fim;
+    });
   };
+
 
   const generatePDF = (title: string, head: string[][], body: any[][]) => {
     const doc = new jsPDF();
