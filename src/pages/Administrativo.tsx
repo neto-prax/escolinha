@@ -237,6 +237,8 @@ Ativos: ${activeEmployees}
 ${formattedCaixa}
 
 ${mensagemRelatorio}`;
+    } else if (!mensagemRelatorio.includes('{{caixa}}')) {
+      finalMessage = `${finalMessage}\n\n${formattedCaixa}`;
     }
 
     setIsLoading(true);
@@ -1408,6 +1410,8 @@ ${mensagemRelatorio}`;
 
                           if (!mensagemRelatorio.includes('{{')) {
                             finalMessage = `*Relatório Administrativo Diário*\nData: ${new Date().toLocaleDateString('pt-BR')}\n\n👥 *Quadro de Funcionários*\nTotal: ${totalEmployees}\nAtivos: ${activeEmployees}\n\n⚠️ *Ocorrências Hoje*: ${ocorrenciasHoje}\n\n${formattedCaixa}\n\n${mensagemRelatorio}`;
+                          } else if (!mensagemRelatorio.includes('{{caixa}}')) {
+                            finalMessage = `${finalMessage}\n\n${formattedCaixa}`;
                           }
                           return finalMessage || "Escreva uma mensagem...";
                         })()}
