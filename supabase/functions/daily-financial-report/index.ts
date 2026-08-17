@@ -161,13 +161,20 @@ Deno.serve(async (req) => {
         .from('profiles').select('school_id').eq('id', userData.user.id).maybeSingle();
       if (!profile?.school_id) throw new Error('Escola não identificada');
 
-      const { data: settings } = await admin
-        .from('daily_report_settings')
-        .select('recipients')
-        .eq('school_id', profile.school_id)
-        .maybeSingle();
+      let recipients: string[] = Array.isArray(payload?.recipients)
+        ? payload.recipients.map((r: unknown) => String(r)).filter(Boolean)
+        : [];
 
-      const result = await sendFor(profile.school_id, settings?.recipients ?? []);
+      if (!recipients.length) {
+        const { data: settings } = await admin
+          .from('daily_report_settings')
+          .select('recipients')
+          .eq('school_id', profile.school_id)
+          .maybeSingle();
+        recipients = settings?.recipients ?? [];
+      }
+
+      const result = await sendFor(profile.school_id, recipients);
       return new Response(JSON.stringify({ success: true, ...result }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
