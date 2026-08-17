@@ -59,29 +59,45 @@ const Relatorios = () => {
   };
 
   const exportEntradas = () => {
-    const data = getFilteredData(mockExpenses.filter(e => e.tipo === 'Entrada'));
+    const data = getFilteredData(lancamentos.filter(e => e.tipo === 'Entrada'));
     if(data.length === 0) return toast.error("Nenhuma entrada no período.");
     
-    const body = data.map(e => [e.data.toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
+    const body = data.map(e => [new Date(e.data).toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
     generatePDF("Relatório de Entradas por Período", [['Data', 'Descrição', 'Categoria', 'Valor']], body);
   };
 
   const exportSaidas = () => {
-    const data = getFilteredData(mockExpenses.filter(e => e.tipo === 'Saída'));
+    const data = getFilteredData(lancamentos.filter(e => e.tipo === 'Saída'));
     if(data.length === 0) return toast.error("Nenhuma saída no período.");
     
-    const body = data.map(e => [e.data.toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
+    const body = data.map(e => [new Date(e.data).toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
     generatePDF("Relatório de Saídas por Período", [['Data', 'Descrição', 'Categoria', 'Valor']], body);
   };
 
   const exportCaixa = () => {
-    const body = mockCaixas.map(c => {
-      const entradas = mockExpenses.filter(e => e.caixaId === c.id && e.tipo === 'Entrada').reduce((acc, curr) => acc + curr.valor, 0);
-      const saidas = mockExpenses.filter(e => e.caixaId === c.id && e.tipo === 'Saída').reduce((acc, curr) => acc + curr.valor, 0);
-      return [c.nome, formatCurrency(entradas), formatCurrency(saidas), formatCurrency(c.saldoInicial + entradas - saidas)];
+    const periodo = getFilteredData(lancamentos);
+    if (periodo.length === 0) return toast.error("Nenhum lançamento no período.");
+
+    const listaCaixas: Caixa[] = caixas.length ? caixas : mockCaixas;
+    const body = listaCaixas.map(c => {
+      const doCaixa = periodo.filter(e => e.caixaId === c.id);
+      const entradas = doCaixa.filter(e => e.tipo === 'Entrada').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      const saidas = doCaixa.filter(e => e.tipo === 'Saída').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      return [c.nome, formatCurrency(entradas), formatCurrency(saidas), formatCurrency(Number(c.saldoInicial || 0) + entradas - saidas)];
     });
+
+    // Lançamentos sem caixa vinculado
+    const semCaixa = periodo.filter(e => !e.caixaId || !listaCaixas.some(c => c.id === e.caixaId));
+    if (semCaixa.length > 0) {
+      const entradas = semCaixa.filter(e => e.tipo === 'Entrada').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      const saidas = semCaixa.filter(e => e.tipo === 'Saída').reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
+      body.push(['Sem caixa vinculado', formatCurrency(entradas), formatCurrency(saidas), formatCurrency(entradas - saidas)]);
+    }
+
     generatePDF("Caixa Agrupado por Período", [['Caixa', 'Entradas', 'Saídas', 'Saldo Final']], body);
   };
+
+
 
   const exportFuncionarios = () => {
     const body = mockEmployees.map(emp => [
