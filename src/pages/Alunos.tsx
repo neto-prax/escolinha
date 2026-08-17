@@ -118,9 +118,9 @@ const Alunos = () => {
             nome: row.Nome || 'Aluno Sem Nome',
             nomeResponsavel: row.Responsável || '',
             contatoResponsavel: String(row['Contato Responsável'] || ''),
-            setor: row.Setor,
-            classe: row.Classe,
-            turma: row.Turma,
+            setor: row.Setor ? String(row.Setor).trim() : undefined,
+            classe: row.Classe ? String(row.Classe).trim() : undefined,
+            turma: row.Turma ? String(row.Turma).trim() : undefined,
             status: row.Status === 'Inativo' ? 'Inativo' : 'Ativo',
           };
         });
