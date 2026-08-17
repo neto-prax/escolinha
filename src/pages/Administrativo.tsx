@@ -202,7 +202,7 @@ ${mensagemRelatorio}`;
 
         const personalizedMessage = finalMessage.replace(/{{nome_responsavel}}/g, resp.nome);
 
-        const { error } = await supabase.functions.invoke('evolution-api', {
+        const { error } = await supabase.functions.invoke('uazapi', {
           body: {
             action: 'send-text',
             data: {
