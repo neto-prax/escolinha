@@ -42,6 +42,7 @@ import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { supabase } from '@/integrations/supabase/client';
 import { TurmaConfig } from '@/types/finance';
 import * as z from 'zod';
 import { mockEmployees } from '@/data/mockData';
