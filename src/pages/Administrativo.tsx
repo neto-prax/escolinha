@@ -44,7 +44,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { supabase } from '@/integrations/supabase/client';
-import { TurmaConfig } from '@/types/finance';
+import { Lancamento, TurmaConfig } from '@/types/finance';
 import * as z from 'zod';
 import { mockEmployees } from '@/data/mockData';
 import {
@@ -116,6 +116,39 @@ const Administrativo = () => {
 
   // Caixas para o relatório
   const [caixas] = useLocalStorage<any[]>('escolinha_caixas', []);
+  const [lancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+
+  const getLocalFinancialData = () => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const month = today.slice(0, 7);
+    const lancamentos: Lancamento[] = lancamentosStorage.map((item) => ({
+      ...item,
+      data: item.data instanceof Date ? item.data : new Date(item.data),
+    }));
+    const paid = lancamentos.filter((item) => item.status === 'Pago');
+    const open = lancamentos.filter((item) => item.status === 'Em Aberto');
+    const dateKey = (item: Lancamento) => item.data.toISOString().slice(0, 10);
+    const sumEntries = (items: Lancamento[]) => items
+      .filter((item) => item.tipo === 'Entrada')
+      .reduce((total, item) => total + Number(item.valor || 0), 0);
+
+    return {
+      schoolName: realFinancialData?.schoolName || 'Unidade escolar',
+      label: now.toLocaleDateString('pt-BR'),
+      receivedToday: sumEntries(paid.filter((item) => dateKey(item) === today)),
+      dueToday: {
+        sum: sumEntries(open.filter((item) => dateKey(item) === today)),
+        count: open.filter((item) => item.tipo === 'Entrada' && dateKey(item) === today).length,
+      },
+      overdue: {
+        sum: sumEntries(open.filter((item) => dateKey(item) < today)),
+        count: open.filter((item) => item.tipo === 'Entrada' && dateKey(item) < today).length,
+      },
+      receivedMonth: sumEntries(paid.filter((item) => dateKey(item).startsWith(month))),
+      openMonth: sumEntries(open.filter((item) => dateKey(item).startsWith(month))),
+    };
+  };
 
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -169,19 +202,15 @@ const Administrativo = () => {
     const dataFormatada = new Date().toLocaleDateString('pt-BR');
     const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     
-    const formattedCaixa = realFinancialData ? `📊 Relatório Financeiro — ${dataFormatada}
-${realFinancialData.schoolName} | ${realFinancialData.label}
-✅ Recebido hoje: ${formatMoney(realFinancialData.receivedToday)}
-📅 Vencendo hoje: ${formatMoney(realFinancialData.dueToday?.sum || 0)} (${realFinancialData.dueToday?.count || 0} cobranças)
-⚠️ Em atraso: ${formatMoney(realFinancialData.overdue?.sum || 0)} (${realFinancialData.overdue?.count || 0} cobranças)
-📈 Recebido no mês: ${formatMoney(realFinancialData.receivedMonth || 0)}
-🕓 A receber ainda no mês: ${formatMoney(realFinancialData.openMonth || 0)}` : `📊 Relatório Financeiro — ${dataFormatada}
-Colégio Interagir | Senador
-✅ Recebido hoje: R$ 0,00
-📅 Vencendo hoje: R$ 0,00 (0 cobranças)
-⚠️ Em atraso: R$ 0,00 (0 cobranças)
-📈 Recebido no mês: R$ 0,00
-🕓 A receber ainda no mês: R$ 0,00`;
+    const financialData = lancamentosStorage.length > 0 ? getLocalFinancialData() : realFinancialData;
+    const formattedCaixa = financialData ? `📊 Relatório Financeiro — ${dataFormatada}
+${financialData.schoolName} | ${financialData.label}
+✅ Recebido hoje: ${formatMoney(financialData.receivedToday || 0)}
+📅 Vencendo hoje: ${formatMoney(financialData.dueToday?.sum || 0)} (${financialData.dueToday?.count || 0} cobranças)
+⚠️ Em atraso: ${formatMoney(financialData.overdue?.sum || 0)} (${financialData.overdue?.count || 0} cobranças)
+📈 Recebido no mês: ${formatMoney(financialData.receivedMonth || 0)}
+🕓 A receber ainda no mês: ${formatMoney(financialData.openMonth || 0)}` : `📊 Relatório Financeiro — ${dataFormatada}
+Nenhum lançamento financeiro cadastrado.`;
 
     const baseUrl = window.location.origin;
     const linkCaixa = `${baseUrl}/app/financeiro`;
@@ -205,7 +234,11 @@ Ativos: ${activeEmployees}
 
 ⚠️ *Ocorrências Hoje*: ${ocorrenciasHoje}
 
+${formattedCaixa}
+
 ${mensagemRelatorio}`;
+    } else if (!mensagemRelatorio.includes('{{caixa}}')) {
+      finalMessage = `${finalMessage}\n\n${formattedCaixa}`;
     }
 
     setIsLoading(true);
@@ -1353,19 +1386,15 @@ ${mensagemRelatorio}`;
                           const dataFormatada = new Date().toLocaleDateString('pt-BR');
                           const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
                           
-                          const formattedCaixa = realFinancialData ? `📊 Relatório Financeiro — ${dataFormatada}
-${realFinancialData.schoolName} | ${realFinancialData.label}
-✅ Recebido hoje: ${formatMoney(realFinancialData.receivedToday)}
-📅 Vencendo hoje: ${formatMoney(realFinancialData.dueToday?.sum || 0)} (${realFinancialData.dueToday?.count || 0} cobranças)
-⚠️ Em atraso: ${formatMoney(realFinancialData.overdue?.sum || 0)} (${realFinancialData.overdue?.count || 0} cobranças)
-📈 Recebido no mês: ${formatMoney(realFinancialData.receivedMonth || 0)}
-🕓 A receber ainda no mês: ${formatMoney(realFinancialData.openMonth || 0)}` : `📊 Relatório Financeiro — ${dataFormatada}
-Colégio Interagir | Senador
-✅ Recebido hoje: Carregando dados...
-📅 Vencendo hoje: ...
-⚠️ Em atraso: ...
-📈 Recebido no mês: ...
-🕓 A receber ainda no mês: ...`;
+                           const financialData = lancamentosStorage.length > 0 ? getLocalFinancialData() : realFinancialData;
+                           const formattedCaixa = financialData ? `📊 Relatório Financeiro — ${dataFormatada}
+ ${financialData.schoolName} | ${financialData.label}
+ ✅ Recebido hoje: ${formatMoney(financialData.receivedToday || 0)}
+ 📅 Vencendo hoje: ${formatMoney(financialData.dueToday?.sum || 0)} (${financialData.dueToday?.count || 0} cobranças)
+ ⚠️ Em atraso: ${formatMoney(financialData.overdue?.sum || 0)} (${financialData.overdue?.count || 0} cobranças)
+ 📈 Recebido no mês: ${formatMoney(financialData.receivedMonth || 0)}
+ 🕓 A receber ainda no mês: ${formatMoney(financialData.openMonth || 0)}` : `📊 Relatório Financeiro — ${dataFormatada}
+ Nenhum lançamento financeiro cadastrado.`;
 
                           const baseUrl = window.location.origin;
                           const linkCaixa = `${baseUrl}/app/financeiro`;
@@ -1380,7 +1409,9 @@ Colégio Interagir | Senador
                             .replace(/{{nome_responsavel}}/g, responsaveisRelatorio[0]?.nome || 'Responsável Exemplo');
 
                           if (!mensagemRelatorio.includes('{{')) {
-                            finalMessage = `*Relatório Administrativo Diário*\nData: ${new Date().toLocaleDateString('pt-BR')}\n\n👥 *Quadro de Funcionários*\nTotal: ${totalEmployees}\nAtivos: ${activeEmployees}\n\n⚠️ *Ocorrências Hoje*: ${ocorrenciasHoje}\n\n${mensagemRelatorio}`;
+                            finalMessage = `*Relatório Administrativo Diário*\nData: ${new Date().toLocaleDateString('pt-BR')}\n\n👥 *Quadro de Funcionários*\nTotal: ${totalEmployees}\nAtivos: ${activeEmployees}\n\n⚠️ *Ocorrências Hoje*: ${ocorrenciasHoje}\n\n${formattedCaixa}\n\n${mensagemRelatorio}`;
+                          } else if (!mensagemRelatorio.includes('{{caixa}}')) {
+                            finalMessage = `${finalMessage}\n\n${formattedCaixa}`;
                           }
                           return finalMessage || "Escreva uma mensagem...";
                         })()}
