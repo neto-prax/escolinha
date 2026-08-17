@@ -132,11 +132,15 @@ const Administrativo = () => {
     const sumEntries = (items: Lancamento[]) => items
       .filter((item) => item.tipo === 'Entrada')
       .reduce((total, item) => total + Number(item.valor || 0), 0);
+    const sumExits = (items: Lancamento[]) => items
+      .filter((item) => item.tipo === 'Saída')
+      .reduce((total, item) => total + Number(item.valor || 0), 0);
 
     return {
       schoolName: realFinancialData?.schoolName || 'Unidade escolar',
       label: now.toLocaleDateString('pt-BR'),
       receivedToday: sumEntries(paid.filter((item) => dateKey(item) === today)),
+      spentToday: sumExits(paid.filter((item) => dateKey(item) === today)),
       dueToday: {
         sum: sumEntries(open.filter((item) => dateKey(item) === today)),
         count: open.filter((item) => item.tipo === 'Entrada' && dateKey(item) === today).length,
@@ -206,6 +210,7 @@ const Administrativo = () => {
     const formattedCaixa = financialData ? `📊 Relatório Financeiro — ${dataFormatada}
 ${financialData.schoolName} | ${financialData.label}
 ✅ Recebido hoje: ${formatMoney(financialData.receivedToday || 0)}
+🔻 Gastos hoje: ${formatMoney(financialData.spentToday || 0)}
 📅 Vencendo hoje: ${formatMoney(financialData.dueToday?.sum || 0)} (${financialData.dueToday?.count || 0} cobranças)
 ⚠️ Em atraso: ${formatMoney(financialData.overdue?.sum || 0)} (${financialData.overdue?.count || 0} cobranças)
 📈 Recebido no mês: ${formatMoney(financialData.receivedMonth || 0)}
@@ -1390,6 +1395,7 @@ ${mensagemRelatorio}`;
                            const formattedCaixa = financialData ? `📊 Relatório Financeiro — ${dataFormatada}
  ${financialData.schoolName} | ${financialData.label}
  ✅ Recebido hoje: ${formatMoney(financialData.receivedToday || 0)}
+ 🔻 Gastos hoje: ${formatMoney(financialData.spentToday || 0)}
  📅 Vencendo hoje: ${formatMoney(financialData.dueToday?.sum || 0)} (${financialData.dueToday?.count || 0} cobranças)
  ⚠️ Em atraso: ${formatMoney(financialData.overdue?.sum || 0)} (${financialData.overdue?.count || 0} cobranças)
  📈 Recebido no mês: ${formatMoney(financialData.receivedMonth || 0)}

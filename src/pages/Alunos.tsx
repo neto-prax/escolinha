@@ -14,6 +14,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { Aluno, Mensalidade } from '@/types/aluno';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 
 type PaymentDetail = {
   mensalidadeId: string;
@@ -40,7 +41,7 @@ const Alunos = () => {
   
   const [isAlunoFormOpen, setIsAlunoFormOpen] = useState(false);
   const [isEnturmarOpen, setIsEnturmarOpen] = useState(false);
-  const [selectedAlunoId, setSelectedAlunoId] = useState<string>('');
+  const [selectedAlunosIds, setSelectedAlunosIds] = useState<string[]>([]);
   const [selectedMensalidadesIds, setSelectedMensalidadesIds] = useState<string[]>([]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState<Record<string, PaymentDetail>>({});
@@ -415,6 +416,15 @@ const Alunos = () => {
             <CardDescription>Cadastre e gerencie a enturmação dos estudantes.</CardDescription>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 items-center">
+            {selectedAlunosIds.length > 0 && (
+              <Button 
+                variant="default"
+                className="bg-primary hover:bg-primary/90"
+                onClick={() => setIsEnturmarOpen(true)}
+              >
+                Enturmar ({selectedAlunosIds.length})
+              </Button>
+            )}
             <input 
               type="file" 
               accept=".xlsx, .xls" 
@@ -445,6 +455,18 @@ const Alunos = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox 
+                    checked={alunos.length > 0 && selectedAlunosIds.length === alunos.length}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedAlunosIds(alunos.map(a => a.id));
+                      } else {
+                        setSelectedAlunosIds([]);
+                      }
+                    }}
+                  />
+                </TableHead>
                 <TableHead>Matrícula</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Responsável</TableHead>
@@ -456,13 +478,25 @@ const Alunos = () => {
             <TableBody>
               {alunos.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
                     Nenhum aluno cadastrado.
                   </TableCell>
                 </TableRow>
               ) : (
                 alunos.map(aluno => (
                   <TableRow key={aluno.id}>
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedAlunosIds.includes(aluno.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedAlunosIds([...selectedAlunosIds, aluno.id]);
+                          } else {
+                            setSelectedAlunosIds(selectedAlunosIds.filter(id => id !== aluno.id));
+                          }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-muted-foreground">{aluno.matricula}</TableCell>
                     <TableCell className="font-bold">{aluno.nome}</TableCell>
                     <TableCell>{aluno.nomeResponsavel}</TableCell>
@@ -488,7 +522,7 @@ const Alunos = () => {
                         variant="outline" 
                         size="sm" 
                         onClick={() => {
-                          setSelectedAlunoId(aluno.id);
+                          setSelectedAlunosIds([aluno.id]);
                           setIsEnturmarOpen(true);
                         }}
                       >
@@ -794,8 +828,8 @@ const Alunos = () => {
       <Dialog open={isEnturmarOpen} onOpenChange={setIsEnturmarOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Enturmar Aluno</DialogTitle>
-            <DialogDescription>Vincule o aluno a uma classe e configure os pagamentos.</DialogDescription>
+            <DialogTitle>{selectedAlunosIds.length > 1 ? `Enturmar ${selectedAlunosIds.length} Alunos` : 'Enturmar Aluno'}</DialogTitle>
+            <DialogDescription>Vincule {selectedAlunosIds.length > 1 ? 'os alunos' : 'o aluno'} a uma classe e configure os pagamentos.</DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => {
             e.preventDefault();
@@ -812,7 +846,7 @@ const Alunos = () => {
             const diaVencimento = formData.get('vencimento') as string;
             
             setAlunos(alunos.map(a => {
-              if (a.id === selectedAlunoId) {
+              if (selectedAlunosIds.includes(a.id)) {
                 return { 
                   ...a, 
                   setor, 
@@ -835,26 +869,29 @@ const Alunos = () => {
 
             const novasMensalidades = [...mensalidades];
             
-            for (let i = 1; i <= 11; i++) {
-              const mesRef = `${currentYear}-${String(i).padStart(2, '0')}`;
-              const dataVenc = new Date(currentYear, i - 1, parseInt(venc)).toISOString();
-              
-              const jaExiste = novasMensalidades.some(m => m.alunoId === selectedAlunoId && m.mesReferencia === mesRef);
-              if (!jaExiste) {
-                novasMensalidades.push({
-                  id: crypto.randomUUID(),
-                  alunoId: selectedAlunoId,
-                  mesReferencia: mesRef,
-                  valorFinal: vFinal,
-                  dataVencimento: dataVenc,
-                  status: 'Pendente'
-                });
+            selectedAlunosIds.forEach(id => {
+              for (let i = 1; i <= 11; i++) {
+                const mesRef = `${currentYear}-${String(i).padStart(2, '0')}`;
+                const dataVenc = new Date(currentYear, i - 1, parseInt(venc)).toISOString();
+                
+                const jaExiste = novasMensalidades.some(m => m.alunoId === id && m.mesReferencia === mesRef);
+                if (!jaExiste) {
+                  novasMensalidades.push({
+                    id: crypto.randomUUID(),
+                    alunoId: id,
+                    mesReferencia: mesRef,
+                    valorFinal: vFinal,
+                    dataVencimento: dataVenc,
+                    status: 'Pendente'
+                  });
+                }
               }
-            }
+            });
             setMensalidades(novasMensalidades);
             
-            toast.success('Aluno enturmado e 11 parcelas geradas com sucesso!');
+            toast.success(`${selectedAlunosIds.length} aluno(s) enturmado(s) e parcelas geradas com sucesso!`);
             setIsEnturmarOpen(false);
+            setSelectedAlunosIds([]);
           }} className="space-y-4 py-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">Selecione a Turma *</label>

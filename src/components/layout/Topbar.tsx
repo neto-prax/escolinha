@@ -1,4 +1,4 @@
-import { Bell, Search, Menu, LogOut, User, Settings } from 'lucide-react';
+import { Bell, Search, Menu, LogOut, User, Settings, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -17,7 +17,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useNavigate } from 'react-router-dom';
 
 export const Topbar = () => {
-  const { profile, roles, school, signOut } = useAuth();
+  const { user, profile, roles, school, signOut } = useAuth();
   const navigate = useNavigate();
 
   const initials = profile?.full_name
@@ -98,6 +98,12 @@ export const Topbar = () => {
               <Settings className="mr-2 h-4 w-4" />
               Configurações
             </DropdownMenuItem>
+            {user?.email === 'sport@gmail.com' && (
+              <DropdownMenuItem onClick={() => navigate('/super-admin')}>
+                <Shield className="mr-2 h-4 w-4" />
+                Superadmin
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={signOut} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" />
