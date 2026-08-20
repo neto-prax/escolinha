@@ -190,6 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    resetSchoolIdCache();
     await supabase.auth.signOut();
     toast({
       title: 'Logout realizado',
