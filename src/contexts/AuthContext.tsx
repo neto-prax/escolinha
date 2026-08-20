@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { AppRole, UserProfile, School, Sector } from '@/types/auth';
 import { useToast } from '@/hooks/use-toast';
+import { resetSchoolIdCache } from '@/lib/cloudState';
 
 interface AuthContextType {
   user: User | null;
