@@ -2,56 +2,56 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Trash2, AlertTriangle, Users, Briefcase, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
+import { removeAllCloudState, listCloudStateKeys } from '@/lib/cloudState';
+
+const clearKeys = async (keys: string[]) => {
+  keys.forEach((key) => localStorage.removeItem(key));
+  await removeAllCloudState(keys);
+};
 
 export const DangerZoneSettings = () => {
-  const handleClearAlunos = () => {
+  const handleClearAlunos = async () => {
     if (confirm('Tem certeza que deseja apagar TODOS os alunos, enturmações e mensalidades geradas? Esta ação não pode ser desfeita.')) {
-      localStorage.removeItem('escolinha_alunos');
-      localStorage.removeItem('escolinha_mensalidades');
+      await clearKeys(['escolinha_alunos', 'escolinha_mensalidades']);
       toast.success('Todos os alunos foram apagados com sucesso.');
       setTimeout(() => window.location.reload(), 1500);
     }
   };
 
-  const handleClearColaboradores = () => {
+  const handleClearColaboradores = async () => {
     if (confirm('Tem certeza que deseja apagar TODOS os colaboradores e seus históricos de ocorrências? Esta ação não pode ser desfeita.')) {
-      // Caso os colaboradores venham a ser salvos no localStorage no futuro
-      localStorage.removeItem('escolinha_funcionarios');
-      localStorage.removeItem('escolinha_colaboradores');
+      await clearKeys(['escolinha_funcionarios', 'escolinha_colaboradores']);
       toast.success('Todos os colaboradores foram apagados com sucesso.');
       setTimeout(() => window.location.reload(), 1500);
     }
   };
 
-  const handleClearFinanceiro = () => {
+  const handleClearFinanceiro = async () => {
     if (confirm('Tem certeza que deseja apagar TODOS os extratos financeiros, lançamentos, caixas e orçamentos? Esta ação não pode ser desfeita.')) {
-      const keysToRemove = [
+      await clearKeys([
         'escolinha_lancamentos',
         'escolinha_lancamentos_v2',
         'escolinha_caixas',
         'escolinha_orcamentos',
         'escolinha_salarios',
-        'escolinha_cartoes'
-      ];
-      keysToRemove.forEach(key => localStorage.removeItem(key));
+        'escolinha_cartoes',
+      ]);
       toast.success('Todos os dados financeiros foram apagados com sucesso.');
       setTimeout(() => window.location.reload(), 1500);
     }
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (confirm('ATENÇÃO: Você está prestes a apagar TODOS os dados da escola (Alunos, Colaboradores, Financeiro, Turmas e Configurações). Deseja continuar?')) {
       const promptText = prompt('Digite "APAGAR TUDO" para confirmar a exclusão de todos os dados:');
       if (promptText === 'APAGAR TUDO') {
-        // Limpa tudo que começa com 'escolinha_'
-        const keysToKeep = []; // Se precisar manter alguma chave
+        const localKeys: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && key.startsWith('escolinha_') && !keysToKeep.includes(key)) {
-            localStorage.removeItem(key);
-            i--; // Ajusta o índice pois o array do localStorage diminuiu
-          }
+          if (key && key.startsWith('escolinha_')) localKeys.push(key);
         }
+        const cloudKeys = await listCloudStateKeys();
+        await clearKeys(Array.from(new Set([...localKeys, ...cloudKeys])));
         toast.success('ESCOLA RESETADA. Todos os dados foram apagados com sucesso.');
         setTimeout(() => window.location.reload(), 1500);
       } else {
