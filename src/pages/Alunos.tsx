@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Users, FileDown, Upload, Download } from 'lucide-react';
+import { Plus, Users, FileDown, Upload, Download, MoreHorizontal, UserCog, FileText, UserPlus } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -33,18 +35,22 @@ const defaultTurmas: TurmaConfig[] = [
 
 const Alunos = () => {
   const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', defaultTurmas);
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [alunos, setAlunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades, setMensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentos, setLancamentos] = useLocalStorage<Lancamento[]>('escolinha_lancamentos_v2', []);
-  
   const [activeTab, setActiveTab] = useState('gestao');
   
   const [isAlunoFormOpen, setIsAlunoFormOpen] = useState(false);
+  const [editingAlunoId, setEditingAlunoId] = useState<string | null>(null);
   const [isEnturmarOpen, setIsEnturmarOpen] = useState(false);
   const [selectedAlunosIds, setSelectedAlunosIds] = useState<string[]>([]);
   const [selectedMensalidadesIds, setSelectedMensalidadesIds] = useState<string[]>([]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState<Record<string, PaymentDetail>>({});
+  
+  const [enturmarValorBase, setEnturmarValorBase] = useState('');
+  const [enturmarTurmaInfo, setEnturmarTurmaInfo] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileInputMensalidadesRef = useRef<HTMLInputElement>(null);
@@ -112,15 +118,21 @@ const Alunos = () => {
 
         const novosAlunos: Aluno[] = data.map((row, index) => {
           const matriculaGerada = `${currentYear}${(proximoNumero + index).toString().padStart(3, '0')}`;
+          
+          // Fallbacks mais resilientes caso o usuário não use o modelo exato
+          const rawSetor = row.Setor ?? row.Segmento ?? row.Categoria;
+          const rawClasse = row.Classe ?? (row.Turma && !row.Classe ? row.Turma : null);
+          const rawTurma = row.Classe ? row.Turma : (row.Letra ?? null);
+
           return {
             id: crypto.randomUUID(),
             matricula: matriculaGerada,
             nome: row.Nome || 'Aluno Sem Nome',
             nomeResponsavel: row.Responsável || '',
             contatoResponsavel: String(row['Contato Responsável'] || ''),
-            setor: row.Setor ? String(row.Setor).trim() : undefined,
-            classe: row.Classe ? String(row.Classe).trim() : undefined,
-            turma: row.Turma ? String(row.Turma).trim() : undefined,
+            setor: rawSetor ? String(rawSetor).trim() : 'Sem Setor',
+            classe: rawClasse ? String(rawClasse).trim() : 'Geral',
+            turma: rawTurma ? String(rawTurma).trim() : '',
             status: row.Status === 'Inativo' ? 'Inativo' : 'Ativo',
           };
         });
@@ -128,27 +140,34 @@ const Alunos = () => {
         setAlunos(prev => [...prev, ...novosAlunos]);
 
         // Atualizar as turmas com base nos dados da planilha
-        const novasTurmas = [...turmas];
+        const novasTurmas: TurmaConfig[] = JSON.parse(JSON.stringify(turmas));
         
         novosAlunos.forEach(aluno => {
-          const setor = aluno.setor;
-          const classe = aluno.classe;
-          const turma = aluno.turma;
+          // Dividir por vírgula ou por hífen (com espaços ao redor no caso de classe/setor para não quebrar "Sub-15")
+          const setores = aluno.setor ? aluno.setor.split(/\s*,\s*|\s+-\s+/).map(s => s.trim()).filter(Boolean) : ['Sem Setor'];
+          const classes = aluno.classe ? aluno.classe.split(/\s*,\s*|\s+-\s+/).map(c => c.trim()).filter(Boolean) : ['Geral'];
+          // Para a letra da turma, podemos ser mais diretos com hífen (ex: "A-B")
+          const turmasLetras = aluno.turma ? aluno.turma.split(/\s*,\s*|\s*-\s*/).map(t => t.trim()).filter(Boolean) : [''];
           
-          if (setor && classe) {
-            const index = novasTurmas.findIndex(t => t.nome === classe && t.setor === setor);
-            if (index !== -1) {
-              if (turma && !novasTurmas[index].letras.includes(turma)) {
-                novasTurmas[index].letras = [...novasTurmas[index].letras, turma].sort();
+          setores.forEach(setor => {
+            classes.forEach(classe => {
+              const index = novasTurmas.findIndex(t => t.nome === classe && t.setor === setor);
+              if (index !== -1) {
+                turmasLetras.forEach(turmaLetra => {
+                  if (turmaLetra && !novasTurmas[index].letras.includes(turmaLetra)) {
+                    novasTurmas[index].letras.push(turmaLetra);
+                  }
+                });
+                novasTurmas[index].letras.sort();
+              } else {
+                novasTurmas.push({
+                  setor,
+                  nome: classe,
+                  letras: turmasLetras.filter(t => t !== '')
+                });
               }
-            } else {
-              novasTurmas.push({
-                setor,
-                nome: classe,
-                letras: turma ? [turma] : []
-              });
-            }
-          }
+            });
+          });
         });
         
         setTurmas(novasTurmas);
@@ -210,6 +229,42 @@ const Alunos = () => {
     
     return true;
   });
+
+  if (sortConfig) {
+    displayedAlunos.sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      
+      if (sortConfig.key === 'matricula') {
+        valA = String(a.matricula || '').toLowerCase();
+        valB = String(b.matricula || '').toLowerCase();
+      } else if (sortConfig.key === 'nome') {
+        valA = String(a.nome || '').toLowerCase();
+        valB = String(b.nome || '').toLowerCase();
+      } else if (sortConfig.key === 'responsavel') {
+        valA = String(a.nomeResponsavel || '').toLowerCase();
+        valB = String(b.nomeResponsavel || '').toLowerCase();
+      } else if (sortConfig.key === 'enturmacao') {
+        valA = `${a.setor} ${a.classe} ${a.turma}`.toLowerCase();
+        valB = `${b.setor} ${b.classe} ${b.turma}`.toLowerCase();
+      } else if (sortConfig.key === 'status') {
+        valA = String(a.status || '').toLowerCase();
+        valB = String(b.status || '').toLowerCase();
+      }
+
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   const handleGerarMensalidades = () => {
     const novasMensalidades: Mensalidade[] = [];
@@ -501,7 +556,12 @@ const Alunos = () => {
               <Button 
                 variant="default"
                 className="bg-primary hover:bg-primary/90"
-                onClick={() => setIsEnturmarOpen(true)}
+                onClick={() => {
+                  const alunoEdit = selectedAlunosIds.length === 1 ? alunos.find(a => a.id === selectedAlunosIds[0]) : null;
+                  setEnturmarValorBase(alunoEdit?.valorBase || '');
+                  setEnturmarTurmaInfo(alunoEdit?.setor ? `${alunoEdit.setor}|${alunoEdit.classe}|${alunoEdit.turma || 'Geral'}` : '');
+                  setIsEnturmarOpen(true);
+                }}
               >
                 Enturmar ({selectedAlunosIds.length})
               </Button>
@@ -533,43 +593,63 @@ const Alunos = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">
-                  <Checkbox 
-                    checked={alunos.length > 0 && selectedAlunosIds.length === alunos.length}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setSelectedAlunosIds(alunos.map(a => a.id));
-                      } else {
-                        setSelectedAlunosIds([]);
-                      }
-                    }}
-                  />
-                </TableHead>
-                <TableHead>Matrícula</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Responsável</TableHead>
-                <TableHead>Enturmação (Setor / Classe / Turma)</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {alunos.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
-                    Nenhum aluno cadastrado.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                alunos.map(aluno => (
-                  <TableRow key={aluno.id}>
-                    <TableCell>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
                       <Checkbox 
-                        checked={selectedAlunosIds.includes(aluno.id)}
+                        checked={alunos.length > 0 && selectedAlunosIds.length === alunos.length}
                         onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedAlunosIds(alunos.map(a => a.id));
+                          } else {
+                            setSelectedAlunosIds([]);
+                          }
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => handleSort('matricula')} title="Clique para ordenar">
+                        Matrícula {sortConfig?.key === 'matricula' ? (sortConfig.direction === 'asc' ? "↑" : "↓") : "↕"}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => handleSort('nome')} title="Clique para ordenar">
+                        Nome {sortConfig?.key === 'nome' ? (sortConfig.direction === 'asc' ? "↑" : "↓") : "↕"}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => handleSort('responsavel')} title="Clique para ordenar">
+                        Responsável {sortConfig?.key === 'responsavel' ? (sortConfig.direction === 'asc' ? "↑" : "↓") : "↕"}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => handleSort('enturmacao')} title="Clique para ordenar">
+                        Enturmação (Setor / Classe / Turma) {sortConfig?.key === 'enturmacao' ? (sortConfig.direction === 'asc' ? "↑" : "↓") : "↕"}
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => handleSort('status')} title="Clique para ordenar">
+                        Status {sortConfig?.key === 'status' ? (sortConfig.direction === 'asc' ? "↑" : "↓") : "↕"}
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayedAlunos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                        Nenhum aluno encontrado ou cadastrado.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    displayedAlunos.map(aluno => (
+                      <TableRow key={aluno.id}>
+                        <TableCell>
+                          <Checkbox 
+                            checked={selectedAlunosIds.includes(aluno.id)}
+                            onCheckedChange={(checked) => {
                           if (checked) {
                             setSelectedAlunosIds([...selectedAlunosIds, aluno.id]);
                           } else {
@@ -599,16 +679,42 @@ const Alunos = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => {
-                          setSelectedAlunosIds([aluno.id]);
-                          setIsEnturmarOpen(true);
-                        }}
-                      >
-                        Enturmar
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Abrir menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => {
+                            setSelectedAlunosIds([aluno.id]);
+                            setEnturmarValorBase(aluno.valorBase || '');
+                            setEnturmarTurmaInfo(aluno.setor ? `${aluno.setor}|${aluno.classe}|${aluno.turma || 'Geral'}` : '');
+                            setIsEnturmarOpen(true);
+                          }}>
+                            <Users className="mr-2 h-4 w-4" />
+                            Enturmar
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => {
+                            setEditingAlunoId(aluno.id);
+                            setIsAlunoFormOpen(true);
+                          }}>
+                            <UserCog className="mr-2 h-4 w-4" />
+                            Editar Aluno
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => {
+                            setSelectedAlunosIds([aluno.id]);
+                            setEnturmarValorBase(aluno.valorBase || '');
+                            setEnturmarTurmaInfo(aluno.setor ? `${aluno.setor}|${aluno.classe}|${aluno.turma || 'Geral'}` : '');
+                            setIsEnturmarOpen(true);
+                          }}>
+                            <FileText className="mr-2 h-4 w-4" />
+                            Editar Contrato
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
@@ -848,59 +954,342 @@ const Alunos = () => {
       </TabsContent>
       </Tabs>
 
-      <Dialog open={isAlunoFormOpen} onOpenChange={setIsAlunoFormOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog open={isAlunoFormOpen} onOpenChange={(open) => {
+        setIsAlunoFormOpen(open);
+        if (!open) setEditingAlunoId(null);
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Novo Aluno</DialogTitle>
-            <DialogDescription>Cadastre um novo aluno no sistema.</DialogDescription>
+            <DialogTitle>{editingAlunoId ? 'Editar Aluno' : 'Novo Aluno'}</DialogTitle>
+            <DialogDescription>{editingAlunoId ? 'Atualize os dados do aluno no sistema.' : 'Cadastre um novo aluno no sistema.'}</DialogDescription>
           </DialogHeader>
           <form onSubmit={(e) => {
             e.preventDefault();
             const formData = new FormData(e.currentTarget);
             
-            // Gerar matrícula automática
-            const currentYear = new Date().getFullYear().toString();
-            let proximoNumero = 1;
-            
-            const matriculasAnoAtual = alunos
-              .map(a => a.matricula)
-              .filter(m => m.startsWith(currentYear))
-              .map(m => parseInt(m.substring(4)))
-              .filter(n => !isNaN(n));
-              
-            if (matriculasAnoAtual.length > 0) {
-              proximoNumero = Math.max(...matriculasAnoAtual) + 1;
-            }
-            
-            const matriculaGerada = `${currentYear}${proximoNumero.toString().padStart(3, '0')}`;
-            
-            const novoAluno: Aluno = {
-              id: crypto.randomUUID(),
+            // Extract all fields
+            const extractedData = {
               nome: formData.get('nome') as string,
-              matricula: matriculaGerada,
-              nomeResponsavel: formData.get('responsavel') as string,
-              contatoResponsavel: formData.get('contato') as string,
-              status: 'Ativo'
+              dataNascimento: formData.get('dataNascimento') as string,
+              estadoCivil: formData.get('estadoCivil') as string,
+              cidadeNatal: formData.get('cidadeNatal') as string,
+              nacionalidade: formData.get('nacionalidade') as string,
+              estrangeiro: formData.get('estrangeiro') === 'on',
+              bloquearRematricula: formData.get('bloquearRematricula') === 'on',
+              profissao: formData.get('profissao') as string,
+              empresaTrabalho: formData.get('empresaTrabalho') as string,
+              classificacao: formData.get('classificacao') as string,
+              rg: formData.get('rg') as string,
+              rgOrgao: formData.get('rgOrgao') as string,
+              rgDataExpedicao: formData.get('rgDataExpedicao') as string,
+              tituloEleitor: formData.get('tituloEleitor') as string,
+              tituloZona: formData.get('tituloZona') as string,
+              tituloSecao: formData.get('tituloSecao') as string,
+              tituloDataEmissao: formData.get('tituloDataEmissao') as string,
+              cpf: formData.get('cpf') as string,
+              passaporte: formData.get('passaporte') as string,
+              docMilitar: formData.get('docMilitar') as string,
+              docMilitarNum: formData.get('docMilitarNum') as string,
+              certidaoNascimento: formData.get('certidaoNascimento') as string,
+              
+              cep: formData.get('cep') as string,
+              rua: formData.get('rua') as string,
+              numero: formData.get('numero') as string,
+              complemento: formData.get('complemento') as string,
+              cidade: formData.get('cidade') as string,
+              uf: formData.get('uf') as string,
+              bairro: formData.get('bairro') as string,
+              
+              telefone: formData.get('telefone') as string,
+              telefoneComercial: formData.get('telefoneComercial') as string,
+              celularAluno: formData.get('celularAluno') as string,
+              operadora: formData.get('operadora') as string,
+              contatoWhatsapp: formData.get('contatoWhatsapp') as string,
+              email: formData.get('email') as string,
+              naoReceberEmail: formData.get('naoReceberEmail') === 'on',
+              naoReceberSms: formData.get('naoReceberSms') === 'on',
+              correspondencia: formData.get('correspondencia') as string,
+              
+              nomeResponsavel: formData.get('nomeResponsavel') as string,
+              contatoResponsavel: formData.get('contatoResponsavel') as string,
+              cpfResponsavel: formData.get('cpfResponsavel') as string,
+              rgResponsavel: formData.get('rgResponsavel') as string,
+              emailResponsavel: formData.get('emailResponsavel') as string,
+              parentescoResponsavel: formData.get('parentescoResponsavel') as string,
+              responsavelFinanceiro: formData.get('responsavelFinanceiro') === 'on',
+              responsavelOpcional: formData.get('responsavelOpcional') as string,
+              responsavelDidatico: formData.get('responsavelDidatico') === 'on',
+              condutorIda: formData.get('condutorIda') as string,
+              condutorVolta: formData.get('condutorVolta') as string,
             };
-            setAlunos([...alunos, novoAluno]);
-            toast.success(`Aluno cadastrado! Matrícula: ${matriculaGerada}`);
+
+            if (editingAlunoId) {
+              setAlunos(alunos.map(a => {
+                if (a.id === editingAlunoId) {
+                  return { ...a, ...extractedData };
+                }
+                return a;
+              }));
+              toast.success('Aluno atualizado com sucesso!');
+            } else {
+              const currentYear = new Date().getFullYear().toString();
+              let proximoNumero = 1;
+              const matriculasAnoAtual = alunos
+                .map(a => a.matricula)
+                .filter(m => m.startsWith(currentYear))
+                .map(m => parseInt(m.substring(4)))
+                .filter(n => !isNaN(n));
+                
+              if (matriculasAnoAtual.length > 0) {
+                proximoNumero = Math.max(...matriculasAnoAtual) + 1;
+              }
+              const matriculaGerada = `${currentYear}${proximoNumero.toString().padStart(3, '0')}`;
+              
+              const novoAluno: Aluno = {
+                id: crypto.randomUUID(),
+                matricula: matriculaGerada,
+                status: 'Ativo',
+                ...extractedData
+              };
+              setAlunos([...alunos, novoAluno]);
+              toast.success(`Aluno cadastrado! Matrícula: ${matriculaGerada}`);
+            }
             setIsAlunoFormOpen(false);
+            setEditingAlunoId(null);
           }} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nome do Aluno *</label>
-              <Input name="nome" required placeholder="Nome completo" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Nome do Responsável *</label>
-              <Input name="responsavel" required placeholder="Nome do pai, mãe ou tutor" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Contato do Responsável *</label>
-              <Input name="contato" required placeholder="(00) 00000-0000" />
-            </div>
+            {(() => {
+              const a = editingAlunoId ? alunos.find(al => al.id === editingAlunoId) : null;
+              return (
+                <Tabs defaultValue="dados" className="w-full mt-4">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="dados">Dados Pessoais & Docs</TabsTrigger>
+                    <TabsTrigger value="endereco">Endereço & Contato</TabsTrigger>
+                    <TabsTrigger value="responsaveis">Responsáveis</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="dados" className="space-y-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Nome do Aluno *</label>
+                        <Input name="nome" required placeholder="Nome completo" defaultValue={a?.nome} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Data de Nasc. *</label>
+                        <Input name="dataNascimento" type="date" required defaultValue={a?.dataNascimento} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Estado Civil</label>
+                        <Select name="estadoCivil" defaultValue={a?.estadoCivil || "Solteiro"}>
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Solteiro">Solteiro(a)</SelectItem>
+                            <SelectItem value="Casado">Casado(a)</SelectItem>
+                            <SelectItem value="Outro">Outro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Cidade Natal</label>
+                        <Input name="cidadeNatal" defaultValue={a?.cidadeNatal} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Nacionalidade</label>
+                        <Input name="nacionalidade" defaultValue={a?.nacionalidade || 'Brasileiro(a)'} />
+                      </div>
+                      <div className="flex items-center space-x-4 pt-6">
+                        <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
+                          <input type="checkbox" name="estrangeiro" defaultChecked={a?.estrangeiro} className="rounded border-gray-300" />
+                          <span>Estrangeiro(a)</span>
+                        </label>
+                        <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
+                          <input type="checkbox" name="bloquearRematricula" defaultChecked={a?.bloquearRematricula} className="rounded border-gray-300" />
+                          <span>Bloquear Rematrícula</span>
+                        </label>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Profissão / Formação</label>
+                        <Input name="profissao" defaultValue={a?.profissao} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Empresa / Local de Trabalho</label>
+                        <Input name="empresaTrabalho" defaultValue={a?.empresaTrabalho} />
+                      </div>
+                    </div>
+                    
+                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Documentos</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">RG</label>
+                        <Input name="rg" defaultValue={a?.rg} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Órgão Exp.</label>
+                        <Input name="rgOrgao" defaultValue={a?.rgOrgao} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Data Exp. RG</label>
+                        <Input name="rgDataExpedicao" type="date" defaultValue={a?.rgDataExpedicao} />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">CPF *</label>
+                        <Input name="cpf" required defaultValue={a?.cpf} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Passaporte</label>
+                        <Input name="passaporte" defaultValue={a?.passaporte} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Certidão Nascimento/Casamento</label>
+                        <Input name="certidaoNascimento" defaultValue={a?.certidaoNascimento} />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="endereco" className="space-y-4 mt-4">
+                    <h4 className="text-sm font-bold border-b pb-1">Endereço</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="space-y-2 md:col-span-1">
+                        <label className="text-xs font-medium">CEP</label>
+                        <Input name="cep" defaultValue={a?.cep} />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-xs font-medium">Rua/Avenida</label>
+                        <Input name="rua" defaultValue={a?.rua} />
+                      </div>
+                      <div className="space-y-2 md:col-span-1">
+                        <label className="text-xs font-medium">Nº</label>
+                        <Input name="numero" defaultValue={a?.numero} />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-xs font-medium">Complemento</label>
+                        <Input name="complemento" defaultValue={a?.complemento} />
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-xs font-medium">Bairro</label>
+                        <Input name="bairro" defaultValue={a?.bairro} />
+                      </div>
+                      <div className="space-y-2 md:col-span-3">
+                        <label className="text-xs font-medium">Cidade</label>
+                        <Input name="cidade" defaultValue={a?.cidade} />
+                      </div>
+                      <div className="space-y-2 md:col-span-1">
+                        <label className="text-xs font-medium">UF</label>
+                        <Input name="uf" maxLength={2} defaultValue={a?.uf} />
+                      </div>
+                    </div>
+
+                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Comunicação</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Telefone Fixo</label>
+                        <Input name="telefone" defaultValue={a?.telefone} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Celular (Aluno)</label>
+                        <Input name="celularAluno" defaultValue={a?.celularAluno} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Contato WhatsApp</label>
+                        <Select name="contatoWhatsapp" defaultValue={a?.contatoWhatsapp || 'Celular (Aluno)'}>
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Celular (Aluno)">Celular (Aluno)</SelectItem>
+                            <SelectItem value="Celular (Responsável)">Celular (Responsável)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2 md:col-span-3">
+                        <label className="text-xs font-medium">E-mail</label>
+                        <Input name="email" type="email" defaultValue={a?.email} />
+                      </div>
+                      <div className="flex items-center space-x-4 md:col-span-3 pt-2">
+                        <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
+                          <input type="checkbox" name="naoReceberEmail" defaultChecked={a?.naoReceberEmail} className="rounded border-gray-300" />
+                          <span>Não quero receber e-mail</span>
+                        </label>
+                        <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
+                          <input type="checkbox" name="naoReceberSms" defaultChecked={a?.naoReceberSms} className="rounded border-gray-300" />
+                          <span>Não quero receber SMS</span>
+                        </label>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="responsaveis" className="space-y-4 mt-4">
+                    <h4 className="text-sm font-bold border-b pb-1">Dados do Responsável Principal</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Nome do Responsável *</label>
+                        <Input name="nomeResponsavel" required placeholder="Nome completo do principal responsável" defaultValue={a?.nomeResponsavel} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Contato (Telefone/Celular) *</label>
+                        <Input name="contatoResponsavel" required placeholder="(00) 00000-0000" defaultValue={a?.contatoResponsavel} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Parentesco</label>
+                        <Select name="parentescoResponsavel" defaultValue={a?.parentescoResponsavel || "Mãe"}>
+                          <SelectTrigger><SelectValue placeholder="Selecione o parentesco" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Mãe">Mãe</SelectItem>
+                            <SelectItem value="Pai">Pai</SelectItem>
+                            <SelectItem value="Tutor">Tutor(a)</SelectItem>
+                            <SelectItem value="Avô">Avô/Avó</SelectItem>
+                            <SelectItem value="Tio">Tio/Tia</SelectItem>
+                            <SelectItem value="Outro">Outro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">CPF do Responsável</label>
+                        <Input name="cpfResponsavel" placeholder="000.000.000-00" defaultValue={a?.cpfResponsavel} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">RG do Responsável</label>
+                        <Input name="rgResponsavel" placeholder="Número do RG" defaultValue={a?.rgResponsavel} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">E-mail do Responsável</label>
+                        <Input name="emailResponsavel" type="email" placeholder="email@exemplo.com" defaultValue={a?.emailResponsavel} />
+                      </div>
+                    </div>
+                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Atribuições do Responsável Principal</h4>
+                    <div className="grid grid-cols-1 gap-4 mt-2">
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="space-y-0.5">
+                          <label className="text-sm font-medium">Responsável Financeiro</label>
+                          <p className="text-xs text-muted-foreground">Este é o responsável pelos pagamentos e contratos.</p>
+                        </div>
+                        <Switch name="responsavelFinanceiro" defaultChecked={a?.responsavelFinanceiro} />
+                      </div>
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="space-y-0.5">
+                          <label className="text-sm font-medium">Responsável Didático</label>
+                          <p className="text-xs text-muted-foreground">Este é o responsável pelo acompanhamento escolar e notas.</p>
+                        </div>
+                        <Switch name="responsavelDidatico" defaultChecked={a?.responsavelDidatico} />
+                      </div>
+                    </div>
+                    
+                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Logística / Transporte</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Condutor Ida</label>
+                        <Input name="condutorIda" placeholder="Nome do responsável por trazer o aluno" defaultValue={a?.condutorIda} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Condutor Volta</label>
+                        <Input name="condutorVolta" placeholder="Nome do responsável por buscar o aluno" defaultValue={a?.condutorVolta} />
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              );
+            })()}
             <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setIsAlunoFormOpen(false)}>Cancelar</Button>
-              <Button type="submit">Cadastrar</Button>
+              <Button type="button" variant="outline" onClick={() => { setIsAlunoFormOpen(false); setEditingAlunoId(null); }}>Cancelar</Button>
+              <Button type="submit">{editingAlunoId ? 'Salvar Alterações' : 'Cadastrar Aluno'}</Button>
             </div>
           </form>
         </DialogContent>
@@ -915,19 +1304,22 @@ const Alunos = () => {
           <form onSubmit={(e) => {
             e.preventDefault();
             const formData = new FormData(e.currentTarget);
-            const turmaInfo = formData.get('turmaInfo') as string;
+            const turmaInfo = enturmarTurmaInfo;
             if (!turmaInfo) {
               toast.error('Selecione uma turma válida.');
               return;
             }
             
             const [setor, classe, turmaStr] = turmaInfo.split('|');
-            const valorBase = formData.get('valorBase') as string;
-            const descontoMensalidade = formData.get('desconto') as string;
-            const diaVencimento = formData.get('vencimento') as string;
+            const valorBase = enturmarValorBase;
+            
+            const isGroup = selectedAlunosIds.length > 1;
             
             setAlunos(alunos.map(a => {
               if (selectedAlunosIds.includes(a.id)) {
+                const descontoMensalidade = isGroup ? (formData.get(`desconto_${a.id}`) as string) : (formData.get('desconto') as string);
+                const diaVencimento = isGroup ? (formData.get(`vencimento_${a.id}`) as string) : (formData.get('vencimento') as string);
+                
                 return { 
                   ...a, 
                   setor, 
@@ -944,19 +1336,23 @@ const Alunos = () => {
             // Gerar 11 parcelas automaticamente (Janeiro a Novembro)
             const currentYear = new Date().getFullYear();
             const vBase = parseFloat(valorBase);
-            const desc = parseFloat(descontoMensalidade || '0');
-            const vFinal = Math.max(0, vBase - desc);
-            const venc = diaVencimento || '5';
 
             const novasMensalidades = [...mensalidades];
             
             selectedAlunosIds.forEach(id => {
+              const descStr = isGroup ? (formData.get(`desconto_${id}`) as string) : (formData.get('desconto') as string);
+              const vencStr = isGroup ? (formData.get(`vencimento_${id}`) as string) : (formData.get('vencimento') as string);
+              
+              const desc = parseFloat(descStr || '0');
+              const vFinal = Math.max(0, vBase - desc);
+              const venc = vencStr || '5';
+              
               for (let i = 1; i <= 11; i++) {
                 const mesRef = `${currentYear}-${String(i).padStart(2, '0')}`;
                 const dataVenc = new Date(currentYear, i - 1, parseInt(venc)).toISOString();
                 
-                const jaExiste = novasMensalidades.some(m => m.alunoId === id && m.mesReferencia === mesRef);
-                if (!jaExiste) {
+                const mIndex = novasMensalidades.findIndex(m => m.alunoId === id && m.mesReferencia === mesRef);
+                if (mIndex === -1) {
                   novasMensalidades.push({
                     id: crypto.randomUUID(),
                     alunoId: id,
@@ -965,52 +1361,104 @@ const Alunos = () => {
                     dataVencimento: dataVenc,
                     status: 'Pendente'
                   });
+                } else if (novasMensalidades[mIndex].status === 'Pendente') {
+                  novasMensalidades[mIndex] = {
+                    ...novasMensalidades[mIndex],
+                    valorFinal: vFinal,
+                    dataVencimento: dataVenc
+                  };
                 }
               }
             });
             setMensalidades(novasMensalidades);
             
-            toast.success(`${selectedAlunosIds.length} aluno(s) enturmado(s) e parcelas geradas com sucesso!`);
+            toast.success(`${selectedAlunosIds.length} contrato(s) atualizado(s) e parcelas sincronizadas com sucesso!`);
             setIsEnturmarOpen(false);
             setSelectedAlunosIds([]);
           }} className="space-y-4 py-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Selecione a Turma *</label>
-              <Select name="turmaInfo" required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Escolha a turma" />
-                </SelectTrigger>
-                <SelectContent>
-                  {turmas.map(t => {
-                    if (t.letras.length === 0) {
-                      return <SelectItem key={`${t.setor}|${t.nome}|Geral`} value={`${t.setor}|${t.nome}|Geral`}>{t.setor} - {t.nome} (Geral)</SelectItem>;
-                    }
-                    return t.letras.map(l => (
-                      <SelectItem key={`${t.setor}|${t.nome}|${l}`} value={`${t.setor}|${t.nome}|${l}`}>
-                        {t.setor} - {t.nome} (Turma {l})
-                      </SelectItem>
-                    ));
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Valor Base da Mensalidade (R$) *</label>
-              <Input name="valorBase" type="number" min="0" step="0.01" required placeholder="Ex: 500.00" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Desconto Mensalidade (R$)</label>
-                <Input name="desconto" type="number" min="0" step="0.01" placeholder="Ex: 50.00" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Dia de Vencimento</label>
-                <Input name="vencimento" type="number" min="1" max="31" defaultValue="5" />
-              </div>
-            </div>
+            {(() => {
+              const alunoEdit = selectedAlunosIds.length === 1 ? alunos.find(a => a.id === selectedAlunosIds[0]) : null;
+              const isGroup = selectedAlunosIds.length > 1;
+              const selectedAlunosObj = alunos.filter(a => selectedAlunosIds.includes(a.id));
+              
+              return (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Selecione a Turma *</label>
+                    <Select 
+                      name="turmaInfo" 
+                      required 
+                      value={enturmarTurmaInfo}
+                      onValueChange={(val) => {
+                        setEnturmarTurmaInfo(val);
+                        const [setor, classe] = val.split('|');
+                        const turmaObj = turmas.find(t => t.setor === setor && t.nome === classe);
+                        if (turmaObj && turmaObj.valorPadrao !== undefined) {
+                          setEnturmarValorBase(String(turmaObj.valorPadrao));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Escolha a turma" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {turmas.map(t => {
+                          if (t.letras.length === 0) {
+                            return <SelectItem key={`${t.setor}|${t.nome}|Geral`} value={`${t.setor}|${t.nome}|Geral`}>{t.setor} - {t.nome} (Geral)</SelectItem>;
+                          }
+                          return t.letras.map(l => (
+                            <SelectItem key={`${t.setor}|${t.nome}|${l}`} value={`${t.setor}|${t.nome}|${l}`}>
+                              {t.setor} - {t.nome} (Turma {l})
+                            </SelectItem>
+                          ));
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Valor Base da Mensalidade (R$) *</label>
+                    <Input name="valorBase" type="number" min="0" step="0.01" required placeholder="Ex: 500.00" value={enturmarValorBase} onChange={(e) => setEnturmarValorBase(e.target.value)} />
+                  </div>
+                  
+                  {!isGroup ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Desconto Mensalidade (R$)</label>
+                        <Input name="desconto" type="number" min="0" step="0.01" placeholder="Ex: 50.00" defaultValue={alunoEdit?.descontoMensalidade} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Dia de Vencimento</label>
+                        <Input name="vencimento" type="number" min="1" max="31" defaultValue={alunoEdit?.diaVencimento || "5"} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-4">
+                      <label className="text-sm font-medium border-b pb-2 block">Personalização Individualizada</label>
+                      <div className="max-h-60 overflow-y-auto pr-2 space-y-4">
+                        {selectedAlunosObj.map(aluno => (
+                          <div key={aluno.id} className="p-3 border rounded-md bg-muted/30">
+                            <div className="font-semibold text-sm mb-2 truncate" title={aluno.nome}>{aluno.nome}</div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Desconto (R$)</label>
+                                <Input name={`desconto_${aluno.id}`} type="number" min="0" step="0.01" placeholder="Ex: 50.00" defaultValue={aluno.descontoMensalidade} className="h-8 text-sm" />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-muted-foreground">Dia Vencimento</label>
+                                <Input name={`vencimento_${aluno.id}`} type="number" min="1" max="31" defaultValue={aluno.diaVencimento || "5"} className="h-8 text-sm" />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             <div className="flex justify-end gap-3 pt-4 border-t">
               <Button type="button" variant="outline" onClick={() => setIsEnturmarOpen(false)}>Cancelar</Button>
-              <Button type="submit">Salvar Enturmação</Button>
+              <Button type="submit">Salvar Contrato</Button>
             </div>
           </form>
         </DialogContent>

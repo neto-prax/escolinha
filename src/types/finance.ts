@@ -12,6 +12,7 @@ export interface TurmaConfig {
   setor: string;
   nome: string;
   letras: string[];
+  valorPadrao?: number;
 }
 
 export interface Lancamento {
