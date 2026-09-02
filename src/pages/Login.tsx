@@ -71,8 +71,7 @@ const Login = () => {
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    navigate('/app/dashboard', { replace: true });
-    return null;
+    return <Navigate to="/app/dashboard" replace />;
   }
 
   const handleLogin = async (data: LoginFormData) => {
