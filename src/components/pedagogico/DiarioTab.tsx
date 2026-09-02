@@ -1099,11 +1099,16 @@ export const DiarioTab: React.FC = () => {
                   a.data === selectedDateFilter &&
                   a.turma === (selectedTurmaFilter !== 'todas' ? selectedTurmaFilter : 'Sub-11 A')
               );
-              const slotFormData = slotsState[slotTime] || {
+              const slotFormData: SlotFormData = slotsState[slotTime] || {
                 nomeAula: '',
                 disciplina: 'Futebol Tático',
                 conteudo: '',
                 atividadesAnexadas: [],
+                campoExperiencia: '',
+                competenciaBncc: '',
+                tipoAtividade: '',
+                materialObrigatorio: '',
+                materialOpcional: '',
               };
 
               return (
