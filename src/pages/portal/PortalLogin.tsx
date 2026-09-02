@@ -18,8 +18,7 @@ const PortalLogin = () => {
   const { isAuthenticated } = useAuth();
 
   if (isAuthenticated) {
-    navigate('/portal/dashboard', { replace: true });
-    return null;
+    return <Navigate to="/portal/dashboard" replace />;
   }
 
   const handleLogin = async (e: React.FormEvent) => {
