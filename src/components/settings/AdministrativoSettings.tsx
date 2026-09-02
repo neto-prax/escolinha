@@ -9,7 +9,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { FileText, Users, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { useAuth } from '@/contexts/AuthContext';
@@ -92,53 +91,20 @@ _Acesse o painel para mais detalhes: {{link_caixa}}_`;
     setSelectedLetters([]);
   };
 
-  const { data: realFinancialData } = useQuery({
-    queryKey: ['financial-data-today-settings'],
-    queryFn: async () => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const startOfDay = today.toISOString();
-      const endOfDay = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1).toISOString();
-
-      const { data: receivedData } = await supabase
-        .from('financial_records')
-        .select('amount')
-        .eq('type', 'income')
-        .eq('status', 'paid')
-        .gte('created_at', startOfDay)
-        .lte('created_at', endOfDay);
-        
-      const { data: spentData } = await supabase
-        .from('financial_records')
-        .select('amount')
-        .eq('type', 'expense')
-        .eq('status', 'paid')
-        .gte('created_at', startOfDay)
-        .lte('created_at', endOfDay);
-
-      return {
-        schoolName: profile?.name || 'Escola',
-        label: 'Caixa Real',
-        receivedToday: receivedData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0,
-        spentToday: spentData?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0,
-      };
-    },
-    enabled: lancamentosStorage.length === 0,
-  });
-
   const getLocalFinancialData = () => {
     const today = new Date().toISOString().split('T')[0];
     const month = today.substring(0, 7);
-    
-    const receivedToday = lancamentosStorage.filter(l => l.data === today && l.tipo === 'Receita' && l.status === 'Pago').reduce((acc, curr) => acc + curr.valor, 0);
-    const spentToday = lancamentosStorage.filter(l => l.data === today && l.tipo === 'Despesa' && l.status === 'Pago').reduce((acc, curr) => acc + curr.valor, 0);
-    const dueToday = lancamentosStorage.filter(l => l.data === today && l.status === 'Pendente');
-    const overdue = lancamentosStorage.filter(l => l.data < today && l.status === 'Pendente');
-    const receivedMonth = lancamentosStorage.filter(l => l.data.startsWith(month) && l.tipo === 'Receita' && l.status === 'Pago').reduce((acc, curr) => acc + curr.valor, 0);
-    const openMonth = lancamentosStorage.filter(l => l.data.startsWith(month) && l.tipo === 'Receita' && l.status === 'Pendente').reduce((acc, curr) => acc + curr.valor, 0);
+    const dia = (l: Lancamento) => new Date(l.data).toISOString().split('T')[0];
+
+    const receivedToday = lancamentosStorage.filter(l => dia(l) === today && l.tipo === 'Entrada' && l.status === 'Pago').reduce((acc, curr) => acc + curr.valor, 0);
+    const spentToday = lancamentosStorage.filter(l => dia(l) === today && l.tipo === 'Saída' && l.status === 'Pago').reduce((acc, curr) => acc + curr.valor, 0);
+    const dueToday = lancamentosStorage.filter(l => dia(l) === today && l.status === 'Em Aberto');
+    const overdue = lancamentosStorage.filter(l => dia(l) < today && l.status === 'Em Aberto');
+    const receivedMonth = lancamentosStorage.filter(l => dia(l).startsWith(month) && l.tipo === 'Entrada' && l.status === 'Pago').reduce((acc, curr) => acc + curr.valor, 0);
+    const openMonth = lancamentosStorage.filter(l => dia(l).startsWith(month) && l.tipo === 'Entrada' && l.status === 'Em Aberto').reduce((acc, curr) => acc + curr.valor, 0);
 
     return {
-      schoolName: profile?.name || 'Sua Escola',
+      schoolName: profile?.full_name || 'Sua Escola',
       label: 'Caixa Local',
       receivedToday,
       spentToday,
@@ -162,7 +128,7 @@ _Acesse o painel para mais detalhes: {{link_caixa}}_`;
     const dataFormatada = new Date().toLocaleDateString('pt-BR');
     const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     
-    const financialData = lancamentosStorage.length > 0 ? getLocalFinancialData() : realFinancialData;
+    const financialData = getLocalFinancialData();
     const formattedCaixa = financialData ? `📊 Relatório Financeiro — ${dataFormatada}
 ${financialData.schoolName} | ${financialData.label}
 ✅ Recebido hoje: ${formatMoney(financialData.receivedToday || 0)}

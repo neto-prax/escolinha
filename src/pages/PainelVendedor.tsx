@@ -23,7 +23,7 @@ export default function PainelVendedor() {
   
   const totalAlunos = indicacoes.filter(i => i.status === 'Ativo').reduce((acc, curr) => acc + (curr.alunos || 0), 0);
   
-  const baseName = school?.name ? school.name : (profile?.name ? profile.name : 'ESCOLA');
+  const baseName = school?.name ? school.name : (profile?.full_name ? profile.full_name : 'ESCOLA');
   const words = baseName.trim().split(' ');
   const couponName = words.length > 1 ? words.slice(1).join('') : words[0];
   const couponCode = `${couponName.toUpperCase()}10`;
