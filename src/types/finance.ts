@@ -29,6 +29,7 @@ export interface Lancamento {
   caixaId?: string;
   cartaoId?: string;
   orcamentoId?: string; // Para vincular saídas a um orçamento
+  alunoId?: string; // Para vincular entradas a um aluno
   observacoes?: string;
   turmas?: TurmaConfig[];
   fechado?: boolean;

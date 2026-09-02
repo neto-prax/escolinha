@@ -60,6 +60,7 @@ const navigationGroups: NavGroup[] = [
     items: [
       { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, module: 'dashboard' },
       { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
+      { title: 'Pedagógico', url: '/app/pedagogico', icon: BookOpen, module: 'pedagogico' },
       { title: 'Comissão', url: '/app/vendas', icon: Briefcase, module: 'vendas' },
     ],
   },
@@ -128,13 +129,13 @@ export const AppSidebar = () => {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className={cn('flex items-center gap-3', isCollapsed && 'justify-center')}>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-xl">
-            I
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-600 text-white font-bold text-xl shadow-sm">
+            P
           </div>
           {!isCollapsed && (
             <div className="flex flex-col overflow-hidden">
               <span className="font-semibold text-sidebar-foreground truncate">
-                Escolinha
+                Purple Edu
               </span>
               {school && (
                 <span className="text-xs text-sidebar-muted truncate">
@@ -188,7 +189,7 @@ export const AppSidebar = () => {
       <SidebarFooter className="border-t border-sidebar-border p-4">
         {!isCollapsed && (
           <div className="text-xs text-sidebar-muted text-center">
-            © 2025 Escolinha
+            © 2025 Purple Edu
           </div>
         )}
       </SidebarFooter>

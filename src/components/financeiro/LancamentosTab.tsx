@@ -1,8 +1,12 @@
 import React, { useState, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Lancamento, TipoLancamento, Categoria, Unidade, FormaPagamento, Orcamento, Caixa, Cartao, TurmaConfig } from '../../types/finance';
-import { Calculator, X, DollarSign, CreditCard, Landmark, Banknote, QrCode, CheckCircle2, Download, Upload, FileDown } from 'lucide-react';
+import { Calculator, X, DollarSign, CreditCard, Landmark, Banknote, QrCode, CheckCircle2, Download, Upload, FileDown, ChevronsUpDown, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 
 interface LancamentosTabProps {
   lancamentos: Lancamento[];
@@ -32,6 +36,9 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
   const [orcamentoId, setOrcamentoId] = useState<string>('');
   const [caixaId, setCaixaId] = useState<string>(caixas[0]?.id || '');
   const [cartaoId, setCartaoId] = useState<string>(cartoes[0]?.id || '');
+  const [alunoId, setAlunoId] = useState<string>('');
+  const [openAluno, setOpenAluno] = useState(false);
+  const [alunos] = useLocalStorage<any[]>('escolinha_alunos', []);
 
   const [isFecharCaixaOpen, setIsFecharCaixaOpen] = useState(false);
   const [caixaFechamentoId, setCaixaFechamentoId] = useState<string>(caixas[0]?.id || '');
@@ -141,11 +148,13 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
       cartaoId: formaPagamento === 'Cartão' ? cartaoId : undefined,
       tipoCusto: 'Variável',
       orcamentoId: tipo === 'Saída' && orcamentoId ? orcamentoId : undefined,
+      alunoId: tipo === 'Entrada' && alunoId ? alunoId : undefined,
     });
 
     setDescricao('');
     setValor('');
     setOrcamentoId('');
+    setAlunoId('');
     setTurmasSelecionadas([]);
   };
 
@@ -281,7 +290,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
             />
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col lg:col-span-2">
             <label className="text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
             <input 
               type="number" 
@@ -294,7 +303,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
             />
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex flex-col lg:col-span-2">
             <div className="flex justify-between items-center mb-1">
               <label className="text-sm font-medium text-gray-700">Categoria</label>
               <button 
@@ -321,6 +330,65 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
               ))}
             </select>
           </div>
+
+          {tipo === 'Entrada' && (
+            <div className="flex flex-col lg:col-span-2">
+              <label className="text-sm font-medium text-gray-700 mb-1">Aluno (Opcional)</label>
+              <Popover open={openAluno} onOpenChange={setOpenAluno}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white p-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <span className="truncate">
+                      {alunoId 
+                        ? alunos.find((a) => a.id === alunoId)?.nome 
+                        : 'Pesquisar aluno...'}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] lg:w-[400px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Pesquisar aluno..." />
+                    <CommandList>
+                      <CommandEmpty>Nenhum aluno encontrado.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                           value="nenhum-limpar"
+                           onSelect={() => {
+                             setAlunoId('');
+                             setOpenAluno(false);
+                           }}
+                        >
+                           <Check className={cn("mr-2 h-4 w-4", !alunoId ? "opacity-100" : "opacity-0")} />
+                           Nenhum (Limpar)
+                        </CommandItem>
+                        {alunos.map((aluno) => (
+                          <CommandItem
+                            key={aluno.id}
+                            value={aluno.nome}
+                            onSelect={() => {
+                              setAlunoId(aluno.id);
+                              setOpenAluno(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                alunoId === aluno.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {aluno.nome}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
 
           <div className="flex flex-col lg:col-span-2">
             <label className="text-sm font-medium text-gray-700 mb-1">Classes e Turmas (Opcional)</label>
@@ -526,6 +594,11 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
                       {lanc.orcamentoId && (
                         <span className="ml-2 text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">
                           {orcamentos.find(o => o.id === lanc.orcamentoId)?.nome}
+                        </span>
+                      )}
+                      {lanc.alunoId && (
+                        <span className="ml-2 text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                          {alunos.find((a: any) => a.id === lanc.alunoId)?.nome || 'Aluno Removido'}
                         </span>
                       )}
                       {lanc.turmas && lanc.turmas.map(t => (

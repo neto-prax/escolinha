@@ -30,16 +30,16 @@ export const Topbar = () => {
   const primaryRole = roles[0];
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-topbar px-4 lg:px-6">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-topbar px-4 lg:px-6 print:hidden">
       <SidebarTrigger />
 
       {/* Logo e nome da escola */}
       <div className="hidden lg:flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
-          E
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-600 text-white font-bold text-lg shadow-sm">
+          P
         </div>
         <div className="flex flex-col">
-          <span className="font-semibold text-sm">Escolinha</span>
+          <span className="font-semibold text-sm font-bold text-purple-950">Purple Edu</span>
           {school && (
             <span className="text-xs text-muted-foreground">{school.name}</span>
           )}

@@ -1,193 +1,205 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Image, Upload, Trash2, Plus } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Image, Upload, Save, Sparkles, Megaphone, Link as LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface Banner {
-  id: string;
+export interface SystemBanner {
   title: string;
-  url: string;
-  type: 'banner' | 'flyer';
+  subtitle: string;
+  imageUrl: string;
+  buttonText: string;
+  buttonUrl: string;
+  enabled: boolean;
 }
 
+const DEFAULT_BANNER: SystemBanner = {
+  title: 'Comunicado Oficial Purple Edu 🚀',
+  subtitle: 'Confira as diretrizes pedagógicas e mantenha os diários de classe atualizados para as turmas de 2026.',
+  imageUrl: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=600&auto=format&fit=crop',
+  buttonText: 'Ver Planejamento',
+  buttonUrl: '/app/pedagogico',
+  enabled: true,
+};
+
 export function MarketingTab() {
-  const [items, setItems] = useState<Banner[]>([
-    {
-      id: '1',
-      title: 'Banner Promocional Verão',
-      url: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=300&auto=format&fit=crop',
-      type: 'banner',
-    },
-  ]);
+  const [banner, setBanner] = useState<SystemBanner>(() => {
+    try {
+      const saved = localStorage.getItem('purple_edu_banner');
+      return saved ? JSON.parse(saved) : DEFAULT_BANNER;
+    } catch {
+      return DEFAULT_BANNER;
+    }
+  });
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [newType, setNewType] = useState<'banner' | 'flyer'>('banner');
-  const [newImage, setNewImage] = useState<string | null>(null);
-
-  const handleUpload = () => {
-    setIsDialogOpen(true);
+  const handleSave = () => {
+    try {
+      localStorage.setItem('purple_edu_banner', JSON.stringify(banner));
+      toast.success('Banner do sistema atualizado com sucesso!');
+    } catch (e) {
+      toast.error('Erro ao salvar configurações do banner.');
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
-    toast.success('Item removido com sucesso!');
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setNewImage(reader.result as string);
+        setBanner((prev) => ({ ...prev, imageUrl: reader.result as string }));
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleAddMaterial = () => {
-    if (!newTitle || !newImage) {
-      toast.error('Preencha todos os campos e selecione uma imagem.');
-      return;
-    }
-    
-    const newItem: Banner = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: newTitle,
-      type: newType,
-      url: newImage
-    };
-    
-    setItems(prev => [newItem, ...prev]);
-    toast.success('Material adicionado com sucesso!');
-    setIsDialogOpen(false);
-    setNewTitle('');
-    setNewImage(null);
-    setNewType('banner');
-  };
-
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Marketing e Banners</CardTitle>
-            <CardDescription>Gerencie os banners e flyers exibidos no sistema</CardDescription>
-          </div>
-          <Button onClick={handleUpload}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Material
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-6">
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Banners Ativos</h3>
-            {items.filter(i => i.type === 'banner').length === 0 && (
-              <p className="text-sm text-muted-foreground">Nenhum banner cadastrado.</p>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.filter(i => i.type === 'banner').map((item) => (
-                <Card key={item.id} className="overflow-hidden">
-                  <div className="aspect-video w-full bg-muted relative">
-                    <img 
-                      src={item.url} 
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="p-3 flex items-center justify-between">
-                    <span className="font-medium text-sm truncate">{item.title}</span>
-                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(item.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+    <div className="space-y-6">
+      <Card className="border-purple-200 shadow-sm">
+        <CardHeader className="bg-purple-50/50 border-b border-purple-100">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-lg font-bold text-purple-950 flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-purple-600" /> Banner Promocional do Perfil & Sistema
+              </CardTitle>
+              <CardDescription className="text-xs text-purple-700/80">
+                Configure o banner informativo exibido na coluna da direita da página de perfil de todos os usuários.
+              </CardDescription>
             </div>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Flyers Ativos</h3>
-            {items.filter(i => i.type === 'flyer').length === 0 && (
-              <p className="text-sm text-muted-foreground">Nenhum flyer cadastrado.</p>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.filter(i => i.type === 'flyer').map((item) => (
-                <Card key={item.id} className="overflow-hidden">
-                  <div className="aspect-[3/4] w-full bg-muted relative">
-                    <img 
-                      src={item.url} 
-                      alt={item.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="p-3 flex items-center justify-between">
-                    <span className="font-medium text-sm truncate">{item.title}</span>
-                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(item.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Adicionar Novo Material</DialogTitle>
-            <DialogDescription>
-              Faça o upload de um novo banner ou flyer para o sistema.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Tipo de Material</Label>
-              <select 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={newType} 
-                onChange={(e) => setNewType(e.target.value as 'banner' | 'flyer')}
-              >
-                <option value="banner">Banner (Horizontal)</option>
-                <option value="flyer">Flyer (Vertical)</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label>Título</Label>
-              <Input 
-                placeholder="Ex: Campanha de Inverno" 
-                value={newTitle} 
-                onChange={(e) => setNewTitle(e.target.value)} 
+            <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-lg border border-purple-200 shadow-sm">
+              <Label className="text-xs font-semibold text-purple-900">Exibir Banner</Label>
+              <Switch
+                checked={banner.enabled}
+                onCheckedChange={(checked) => setBanner((prev) => ({ ...prev, enabled: checked }))}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Imagem</Label>
-              <Input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleImageChange} 
-              />
-              {newImage && (
-                <div className="mt-2 relative rounded-md overflow-hidden bg-muted border" style={{ maxHeight: '200px' }}>
-                  <img src={newImage} alt="Preview" className="w-full h-full object-contain" />
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* FORMULÁRIO DE EDIÇÃO */}
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-semibold text-slate-700">Título do Banner</Label>
+                <Input
+                  value={banner.title}
+                  onChange={(e) => setBanner((prev) => ({ ...prev, title: e.target.value }))}
+                  placeholder="Ex: Novo Ano Letivo 2026"
+                  className="mt-1 text-xs focus-visible:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold text-slate-700">Texto / Subtítulo</Label>
+                <Textarea
+                  value={banner.subtitle}
+                  onChange={(e) => setBanner((prev) => ({ ...prev, subtitle: e.target.value }))}
+                  placeholder="Descreva o comunicado..."
+                  className="mt-1 text-xs h-20 focus-visible:ring-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold text-slate-700">Texto do Botão</Label>
+                  <Input
+                    value={banner.buttonText}
+                    onChange={(e) => setBanner((prev) => ({ ...prev, buttonText: e.target.value }))}
+                    placeholder="Ex: Saiba Mais"
+                    className="mt-1 text-xs focus-visible:ring-purple-500"
+                  />
                 </div>
-              )}
+                <div>
+                  <Label className="text-xs font-semibold text-slate-700">Link do Botão (URL)</Label>
+                  <Input
+                    value={banner.buttonUrl}
+                    onChange={(e) => setBanner((prev) => ({ ...prev, buttonUrl: e.target.value }))}
+                    placeholder="Ex: /app/pedagogico"
+                    className="mt-1 text-xs focus-visible:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold text-slate-700">Upload de Imagem de Fundo</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="text-xs"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Ou cole um link direto de imagem abaixo:
+                </p>
+                <Input
+                  value={banner.imageUrl}
+                  onChange={(e) => setBanner((prev) => ({ ...prev, imageUrl: e.target.value }))}
+                  placeholder="https://..."
+                  className="mt-1 text-xs focus-visible:ring-purple-500"
+                />
+              </div>
+
+              <Button
+                onClick={handleSave}
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs gap-2 mt-2"
+              >
+                <Save className="h-4 w-4" /> Salvar Banner do SuperAdmin
+              </Button>
+            </div>
+
+            {/* PREVIEW DO BANNER */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-purple-900 block">Pré-visualização (Perfil)</Label>
+              <div className="border border-purple-200 rounded-xl overflow-hidden shadow-sm bg-white p-2">
+                <Card className="border-0 shadow-md rounded-lg overflow-hidden bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-950 text-white relative">
+                  {banner.imageUrl && (
+                    <div className="absolute inset-0 opacity-25 mix-blend-overlay">
+                      <img
+                        src={banner.imageUrl}
+                        alt="Banner Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <CardHeader className="p-4 relative z-10 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Badge className="bg-purple-500/40 text-purple-100 border-purple-300/40 text-[10px] px-2 py-0.5">
+                        <Sparkles className="h-3 w-3 mr-1" /> Informativo SuperAdmin
+                      </Badge>
+                      <Badge variant={banner.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                        {banner.enabled ? 'Ativo' : 'Oculto'}
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-base font-bold text-white leading-tight mt-1">
+                      {banner.title || 'Título do Banner'}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4 relative z-10 space-y-3 text-xs">
+                    <p className="text-purple-100/90 text-xs leading-relaxed">
+                      {banner.subtitle || 'Subtítulo do informativo exibido no perfil...'}
+                    </p>
+                    {banner.buttonText && (
+                      <Button
+                        size="sm"
+                        className="w-full bg-white hover:bg-purple-50 text-purple-950 font-bold text-xs shadow-sm"
+                      >
+                        {banner.buttonText}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAddMaterial}>Salvar Material</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

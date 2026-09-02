@@ -26,6 +26,8 @@ import NotFound from "./pages/NotFound";
 import Alunos from "./pages/Alunos";
 import PainelVendedor from "./pages/PainelVendedor";
 import PublicDailyReport from "./pages/PublicDailyReport";
+import Pedagogico from "./pages/Pedagogico";
+import Perfil from "./pages/Perfil";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +48,7 @@ const App = () => (
             {/* Protected routes */}
             <Route path="/app" element={<AppLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
+              <Route path="pedagogico" element={<Pedagogico />} />
               <Route path="financeiro" element={<Financeiro />} />
               <Route path="administrativo" element={<Administrativo />} />
               <Route path="relatorios" element={<Relatorios />} />
@@ -53,6 +56,7 @@ const App = () => (
               <Route path="usuarios" element={<Usuarios />} />
               <Route path="alunos" element={<Alunos />} />
               <Route path="vendas" element={<PainelVendedor />} />
+              <Route path="perfil" element={<Perfil />} />
             </Route>
             
             {/* Portal do Responsável */}
