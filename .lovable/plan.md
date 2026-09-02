@@ -1,59 +1,42 @@
+# Corrigir tela branca no cadastro (site publicado)
 
+## O que já foi verificado
 
-## Reestruturação do Portal do Responsável
+No site publicado (`purpleedu.lovable.app`) a tela de login e **as duas etapas do formulário de cadastro** carregam normalmente: passo 1 (Dados da Escola) e passo 2 (Seus Dados) renderizam sem erro de JavaScript no console. O build atual também está OK.
 
-### Objetivo
-Simplificar o portal para exibir apenas: **Atividades a fazer**, **Ocorrências**, **Boletos**, e no **Dashboard** mostrar **eventos e datas** do calendário escolar.
+Ou seja, a tela branca não está no formulário em si — ela aparece **depois de clicar em "Criar conta"**, quando o app faz login automático e navega para `/app/dashboard`. Isso ainda não foi reproduzido de ponta a ponta, então a causa exata está **não confirmada**.
 
-### Estrutura atual vs. nova
+## Passo 1 — Reproduzir e identificar a causa
 
-```text
-ATUAL:                           NOVO:
-/portal/dashboard (cards alunos) /portal/dashboard (eventos + datas do calendário)
-/portal/aluno/:id (4 abas)      /portal/atividades (lição de casa dos alunos)
-/portal/calendario               /portal/ocorrencias (registros de ocorrência)
-                                 /portal/boletos (cobranças financeiras)
-```
+Executar o cadastro real (com uma escola/usuário de teste descartável) num navegador controlado, capturando console e erros de tela, para ver exatamente em que ponto a tela fica branca:
 
-### Mudanças
+- a função de cadastro retorna erro?
+- o login automático ocorre?
+- a página `/app/dashboard` (ou a barra lateral) quebra em tempo de execução para um usuário recém-criado?
 
-**1. Migration: RLS para `psychology_records`**
-- Adicionar política SELECT para responsáveis verem ocorrências dos seus alunos (tipo `ocorrencia`)
-- Expressão: `student_id IN (SELECT get_guardian_student_ids(...))`
+Ao final, os dados de teste criados serão removidos.
 
-**2. Hook: novos queries em `useGuardianPortal.ts`**
-- `useStudentHomework`: busca `daily_entries` (campo `homework`) das turmas dos alunos vinculados
-- `useStudentOccurrences`: busca `psychology_records` onde `record_type = 'ocorrencia'` e `student_id` nos alunos do responsável
+## Passo 2 — Rede de segurança contra tela branca
 
-**3. Dashboard (`PortalDashboard.tsx`)**
-- Remover cards de alunos
-- Exibir próximos eventos do calendário escolar (feriados, reuniões, provas) em formato de lista/timeline
-- Mostrar cards dos alunos vinculados de forma resumida no topo
+Independente da causa raiz, hoje qualquer erro de renderização derruba o app inteiro e deixa a tela 100% branca, sem mensagem. Adicionar uma proteção global:
 
-**4. Nova página: Atividades (`PortalAtividades.tsx`)**
-- Lista de atividades/lição de casa dos `daily_entries.homework` filtrados pelas turmas dos alunos
-- Mostra data, turma, conteúdo da atividade
+- um limite de erro (Error Boundary) em volta das rotas, mostrando uma mensagem amigável com botões "Tentar novamente" e "Voltar ao login" e registrando o erro no console;
+- assim, mesmo que algo falhe no futuro, o usuário vê uma explicação em vez de tela branca.
 
-**5. Nova página: Ocorrências (`PortalOcorrencias.tsx`)**
-- Lista de ocorrências do `psychology_records` (tipo `ocorrencia`)
-- Mostra data, título, descrição, status
+## Passo 3 — Corrigir a causa raiz
 
-**6. Nova página: Boletos (`PortalBoletos.tsx`)**
-- Migrar conteúdo financeiro do `PortalStudentDetail` para página própria
-- Lista todas as cobranças de todos os alunos vinculados
-- Filtro por status (pendente, pago, atrasado)
+Aplicar a correção pontual conforme o que o passo 1 mostrar. Os pontos mais prováveis a ajustar:
 
-**7. Layout: atualizar navegação (`PortalLayout.tsx`)**
-- Itens: Início, Atividades, Ocorrências, Boletos
-- Ícones: Home, BookOpen, AlertTriangle, DollarSign
+- limpar o cache de escola em memória logo após o cadastro/login, para o novo usuário carregar a escola correta;
+- tornar o Dashboard tolerante a dados ainda vazios (usuário novo sem lançamentos, turmas, papéis ou escola carregada);
+- garantir que o cadastro só navegue para o painel depois que a sessão estiver realmente ativa.
 
-**8. Rotas (`App.tsx`)**
-- Remover `/portal/aluno/:id` e `/portal/calendario`
-- Adicionar `/portal/atividades`, `/portal/ocorrencias`, `/portal/boletos`
+## Passo 4 — Validar
 
-### Detalhes técnicos
-- 1 migration (RLS para `psychology_records`)
-- 3 novas páginas, 2 novos hooks
-- Remover `PortalStudentDetail.tsx` e `PortalCalendario.tsx`
-- Atualizar `PortalDashboard.tsx` e `PortalLayout.tsx`
+Repetir o cadastro de teste até chegar ao painel funcionando, conferir o console sem erros e depois publicar para o site ao vivo receber a correção.
 
+## Detalhes técnicos
+
+- Arquivos envolvidos: `src/pages/Login.tsx` (`handleSignup`), `src/pages/Dashboard.tsx`, `src/components/layout/AppLayout.tsx`, `src/contexts/AuthContext.tsx`, `src/lib/cloudState.ts` (`resetSchoolIdCache`), novo `src/components/ErrorBoundary.tsx` montado em `src/App.tsx`.
+- A função `signup-with-school` cria usuário (email já confirmado), escola, atualiza o perfil com `school_id` e insere o papel `director` — a lógica está coerente; a verificação de runtime dirá se algum desses passos falha em produção.
+- Nenhuma mudança de schema é prevista.
