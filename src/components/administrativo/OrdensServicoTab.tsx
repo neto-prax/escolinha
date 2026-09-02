@@ -145,7 +145,7 @@ export function OrdensServicoTab() {
               status: isCompleted ? 'Concluída' : 'Pendente',
               dataConclusaoReal: isCompleted ? new Date().toISOString().split('T')[0] : undefined,
               statusPagamento: isCompleted ? (et.statusPagamento === 'Aguardando' ? 'Em Aberto' : et.statusPagamento) : 'Aguardando'
-            };
+            } as OSEtapa;
           }
           return et;
         });
