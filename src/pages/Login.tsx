@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { resetSchoolIdCache } from '@/lib/cloudState';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -71,8 +72,7 @@ const Login = () => {
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    navigate('/app/dashboard', { replace: true });
-    return null;
+    return <Navigate to="/app/dashboard" replace />;
   }
 
   const handleLogin = async (data: LoginFormData) => {
@@ -100,7 +100,7 @@ const Login = () => {
 
   const handleSignup = async (data: SignupFormData) => {
     setIsLoading(true);
-    
+
     try {
       const { data: result, error } = await supabase.functions.invoke('signup-with-school', {
         body: {
@@ -115,25 +115,44 @@ const Login = () => {
         },
       });
 
-      if (error) throw error;
-      
+      if (error) {
+        // Extrai a mensagem real retornada pela função (status 400 etc.)
+        let message = error.message;
+        const response = (error as { context?: Response }).context;
+        if (response && typeof response.text === 'function') {
+          try {
+            const body = await response.clone().text();
+            const parsed = JSON.parse(body) as { error?: string };
+            if (parsed?.error) message = parsed.error;
+          } catch { /* mantém a mensagem original */ }
+        }
+        throw new Error(message);
+      }
+
       if (result?.error) {
         throw new Error(result.error);
       }
 
       toast({
         title: 'Conta criada com sucesso!',
-        description: 'Sua escola foi cadastrada. Faça login para começar.',
+        description: 'Sua escola foi cadastrada. Entrando...',
       });
-      
+
+      // Garante que a escola do novo usuário seja resolvida do zero
+      resetSchoolIdCache();
+
       // Auto-login after signup
       const { error: loginError } = await signIn(data.email, data.password);
-      if (!loginError) {
-        navigate('/app/dashboard');
-      } else {
-        // If auto-login fails, just switch to login tab
+      if (loginError) {
+        // Se o login automático falhar, volta ao início do cadastro
         setSignupStep('school');
+        toast({
+          variant: 'destructive',
+          title: 'Conta criada, mas não foi possível entrar',
+          description: 'Use a aba "Entrar" com seu email e senha.',
+        });
       }
+      // Autenticado: o próprio redirecionamento da tela leva ao painel
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro ao criar conta';
       toast({

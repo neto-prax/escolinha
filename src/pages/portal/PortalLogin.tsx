@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,7 @@ const PortalLogin = () => {
   const { isAuthenticated } = useAuth();
 
   if (isAuthenticated) {
-    navigate('/portal/dashboard', { replace: true });
-    return null;
+    return <Navigate to="/portal/dashboard" replace />;
   }
 
   const handleLogin = async (e: React.FormEvent) => {
