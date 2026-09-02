@@ -9,7 +9,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { FileText, Users, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { useAuth } from '@/contexts/AuthContext';
@@ -129,7 +128,7 @@ _Acesse o painel para mais detalhes: {{link_caixa}}_`;
     const dataFormatada = new Date().toLocaleDateString('pt-BR');
     const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     
-    const financialData = lancamentosStorage.length > 0 ? getLocalFinancialData() : realFinancialData;
+    const financialData = getLocalFinancialData();
     const formattedCaixa = financialData ? `📊 Relatório Financeiro — ${dataFormatada}
 ${financialData.schoolName} | ${financialData.label}
 ✅ Recebido hoje: ${formatMoney(financialData.receivedToday || 0)}
