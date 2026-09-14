@@ -80,9 +80,8 @@ const Alunos = () => {
       Setor: a.setor || '',
       Classe: a.classe || '',
       Turma: a.turma || '',
-      'Valor da Mensalidade': a.valorBase ? parseFloat(a.valorBase) : '',
+      Valor: a.valorBase ? parseFloat(a.valorBase) : '',
       Desconto: a.descontoMensalidade ? parseFloat(a.descontoMensalidade) : '',
-      'Dia de Vencimento': a.diaVencimento || '',
       Status: a.status
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -101,9 +100,8 @@ const Alunos = () => {
       Setor: 'Educação Infantil',
       Classe: 'Maternal',
       Turma: 'A',
-      'Valor da Mensalidade': 450.00,
+      Valor: 450.00,
       Desconto: 50.00,
-      'Dia de Vencimento': 10,
       Status: 'Ativo'
     }];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -159,9 +157,9 @@ const Alunos = () => {
           const rawTurma = row.Classe ? row.Turma : (row.Letra ?? null);
 
           // Extração de valor e desconto com suporte a variações de cabeçalho
-          const rawValor = row['Valor da Mensalidade'] ?? row['Valor Mensalidade'] ?? row['Valor Base'] ?? row['Valor'] ?? row['Mensalidade'];
-          const rawDesconto = row['Desconto'] ?? row['Desconto Mensalidade'] ?? row['Desconto (R$)'];
-          const rawVencimento = row['Dia de Vencimento'] ?? row['Dia Vencimento'] ?? row['Vencimento'];
+          const rawValor = row['Valor'] ?? row['valor'] ?? row['VALOR'] ?? row['Valor da Mensalidade'] ?? row['Valor Mensalidade'] ?? row['Valor Base'] ?? row['Mensalidade'];
+          const rawDesconto = row['Desconto'] ?? row['desconto'] ?? row['DESCONTO'] ?? row['Desconto Mensalidade'] ?? row['Desconto (R$)'];
+          const rawVencimento = row['Dia de Vencimento'] ?? row['Dia Vencimento'] ?? row['Vencimento'] ?? row['vencimento'];
 
           const valorBase = parseCurrencyNumber(rawValor);
           const descontoMensalidade = parseCurrencyNumber(rawDesconto);
