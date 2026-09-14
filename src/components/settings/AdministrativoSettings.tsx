@@ -12,14 +12,12 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { supabase } from '@/integrations/supabase/client';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockEmployees } from '@/data/mockData';
-
 export function AdministrativoSettings() {
   const { profile } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   // States moved from Administrativo.tsx
-  const [employees] = useLocalStorage<any[]>('escolinha_employees_v2', mockEmployees.map(emp => ({ ...emp, ocorrencias: [] })));
+  const [employees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
   const [alunos, setAlunos] = useLocalStorage<any[]>('escolinha_alunos', []);
   const [lancamentosStorage] = useLocalStorage<Lancamento[]>('escolinha_lancamentos', []);
   

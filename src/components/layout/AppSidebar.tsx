@@ -22,6 +22,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   Sidebar,
   SidebarContent,
@@ -100,18 +101,15 @@ export const AppSidebar = () => {
     enabled: !!user?.id,
   });
 
+  const { canAccessScreen } = usePermissions();
+
   // Filter navigation items based on user permissions
-  // Se não há roles definidas, mostra tudo (modo desenvolvimento/setup inicial)
-  const hasAnyRoles = roles.length > 0;
-  
   const filteredGroups = navigationGroups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
         if (item.module === 'dashboard') return true;
-        // Mostra todos os itens se não há roles definidas
-        if (!hasAnyRoles) return true;
-        return hasPermission(item.module);
+        return canAccessScreen(item.module);
       }),
     }))
     .filter((group) => group.items.length > 0);

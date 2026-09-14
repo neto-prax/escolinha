@@ -17,6 +17,7 @@ import { TurmaConfig, Lancamento } from '@/types/finance';
 import { Aluno, Mensalidade } from '@/types/aluno';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type PaymentDetail = {
   mensalidadeId: string;
@@ -40,6 +41,21 @@ const Alunos = () => {
   const [mensalidades, setMensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentos, setLancamentos] = useLocalStorage<Lancamento[]>('escolinha_lancamentos_v2', []);
   const [activeTab, setActiveTab] = useState('gestao');
+
+  const { canAccessTab } = usePermissions();
+  const canAccessGestao = canAccessTab('alunos', 'gestao');
+  const canAccessTurmas = canAccessTab('alunos', 'turmas');
+  const canAccessMensalidades = canAccessTab('alunos', 'mensalidades');
+
+  const availableAlunosTabs = [
+    canAccessGestao && 'gestao',
+    canAccessTurmas && 'turmas',
+    canAccessMensalidades && 'mensalidades',
+  ].filter(Boolean) as string[];
+
+  const effectiveActiveTab = availableAlunosTabs.includes(activeTab)
+    ? activeTab
+    : availableAlunosTabs[0] || 'gestao';
   
   const [isAlunoFormOpen, setIsAlunoFormOpen] = useState(false);
   const [editingAlunoId, setEditingAlunoId] = useState<string | null>(null);
@@ -537,11 +553,11 @@ const Alunos = () => {
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={effectiveActiveTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
-          <TabsTrigger value="gestao">Gestão de Alunos</TabsTrigger>
-          <TabsTrigger value="turmas">Turmas e Contratos</TabsTrigger>
-          <TabsTrigger value="mensalidades">Mensalidades</TabsTrigger>
+          {canAccessGestao && <TabsTrigger value="gestao">Gestão de Alunos</TabsTrigger>}
+          {canAccessTurmas && <TabsTrigger value="turmas">Turmas e Contratos</TabsTrigger>}
+          {canAccessMensalidades && <TabsTrigger value="mensalidades">Mensalidades</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="gestao" className="space-y-4">

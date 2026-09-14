@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Salario, SalarioItem, Lancamento, Caixa, Cartao, FormaPagamento } from '../../types/finance';
-import { mockEmployees } from '@/data/mockData';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Plus, Trash2 } from 'lucide-react';
 
 interface SalariosTabProps {
@@ -12,6 +12,7 @@ interface SalariosTabProps {
 }
 
 export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLancamento }: SalariosTabProps) {
+  const [employees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
   const [colaborador, setColaborador] = useState('');
   const [dataPagamento, setDataPagamento] = useState('');
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('Transferência Bancária');
@@ -119,9 +120,13 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
                 required
                 className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-white"
               >
-                <option value="" disabled>Selecione um funcionário</option>
-                {mockEmployees.map((emp) => (
-                  <option key={emp.id} value={emp.name}>{emp.name}</option>
+                <option value="" disabled>
+                  {employees.length === 0 ? 'Nenhum funcionário cadastrado no Administrativo' : 'Selecione um funcionário'}
+                </option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.name}>
+                    {emp.name} ({emp.role})
+                  </option>
                 ))}
               </select>
             </div>

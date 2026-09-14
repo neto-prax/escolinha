@@ -4,12 +4,13 @@ import { Tabs } from '@/components/financeiro/Tabs';
 import { DiarioTab } from '@/components/pedagogico/DiarioTab';
 import { AvaliacoesTab } from '@/components/pedagogico/AvaliacoesTab';
 import { NotasTab } from '@/components/pedagogico/NotasTab';
-import { TrilhasEstudosTab } from '@/components/pedagogico/TrilhasEstudosTab';
-import { BookOpen, GraduationCap } from 'lucide-react';
 import { BookOpen, ClipboardCheck, GraduationCap } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const Pedagogico = () => {
-  const tabs = [
+  const { canAccessTab } = usePermissions();
+
+  const allTabs = [
     {
       id: 'diario',
       label: (
@@ -32,7 +33,6 @@ const Pedagogico = () => {
       id: 'notas',
       label: (
         <span className="flex items-center gap-2">
-          <GraduationCap size={16} /> Notas & Avaliações
           <GraduationCap size={16} /> Notas
         </span>
       ),
@@ -40,16 +40,17 @@ const Pedagogico = () => {
     },
   ];
 
+  const visibleTabs = allTabs.filter((t) => canAccessTab('pedagogico', t.id));
+
   return (
     <div className="space-y-6">
       <div className="print:hidden">
         <PageHeader
           title="Pedagógico"
-          description="Gestão de diários de classe, planejamento de aulas e acompanhamento de notas"
           description="Gestão de diários de classe, planejamento de avaliações e acompanhamento de notas"
         />
       </div>
-      <Tabs tabs={tabs} />
+      <Tabs tabs={visibleTabs} />
     </div>
   );
 };

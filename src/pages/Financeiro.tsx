@@ -9,8 +9,10 @@ import { Lancamento, Orcamento, Salario, Caixa, Cartao, TurmaConfig } from '@/ty
 import { mockExpenses, mockCaixas, mockCartoes } from '@/data/mockData';
 import { Wallet, Calculator, Users, LayoutDashboard, CreditCard } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { usePermissions } from '@/hooks/usePermissions';
 
 const Financeiro = () => {
+  const { canAccessTab } = usePermissions();
   const [lancamentosStorage, setLancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
   const [orcamentos, setOrcamentos] = useLocalStorage<Orcamento[]>('escolinha_orcamentos', []);
   const [salarios, setSalarios] = useLocalStorage<Salario[]>('escolinha_salarios', []);
@@ -201,10 +203,12 @@ const Financeiro = () => {
     }
   ];
 
+  const visibleTabs = tabs.filter((t) => canAccessTab('financeiro', t.id));
+
   return (
     <div className="space-y-6">
       <PageHeader title="Financeiro" description="Gestão financeira da escola" />
-      <Tabs tabs={tabs} />
+      <Tabs tabs={visibleTabs} />
     </div>
   );
 };

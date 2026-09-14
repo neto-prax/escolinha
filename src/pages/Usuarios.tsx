@@ -32,7 +32,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound, Trash2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound, Trash2, Layers, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppRole } from '@/types/auth';
@@ -45,6 +46,12 @@ import {
   UserWithRoles,
 } from '@/hooks/useUsers';
 import { UserDetailsModal } from '@/components/users/UserDetailsModal';
+import {
+  usePermissions,
+  APP_SCREENS,
+  UserVisibilityConfig,
+  getDefaultPermissionsForRoles,
+} from '@/hooks/usePermissions';
 
 const ROLE_LABELS: Record<AppRole, string> = {
   director: 'Diretor(a)',
@@ -115,6 +122,22 @@ const Usuarios = () => {
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // Hook de permissões de visibilidade de telas e abas
+  const {
+    saveUserPermissions,
+    resetUserPermissions,
+    getUserPermissions,
+    permissionsStore,
+    APP_SCREENS,
+  } = usePermissions();
+
+  const [permissionsTab, setPermissionsTab] = useState<'roles' | 'screens'>('roles');
+  const [customVisibility, setCustomVisibility] = useState(false);
+  const [visibilityForm, setVisibilityForm] = useState<UserVisibilityConfig>({
+    screens: [],
+    tabs: {},
+  });
+
   const handleDetailsOpen = (userToView: UserWithRoles) => {
     setSelectedUser(userToView);
     setIsDetailsOpen(true);
@@ -133,6 +156,10 @@ const Usuarios = () => {
   const handleRolesOpen = (userToEdit: UserWithRoles) => {
     setSelectedUser(userToEdit);
     setRolesForm([...userToEdit.roles]);
+    const isCustom = !!permissionsStore[userToEdit.id];
+    setCustomVisibility(isCustom);
+    setVisibilityForm(getUserPermissions(userToEdit.id, userToEdit.roles));
+    setPermissionsTab('roles');
     setIsRolesOpen(true);
   };
 
@@ -212,9 +239,16 @@ const Usuarios = () => {
         userId: selectedUser.id,
         roles: rolesForm,
       });
-      toast.success('Permissões atualizadas!');
+
+      if (customVisibility) {
+        saveUserPermissions(selectedUser.id, visibilityForm);
+      } else {
+        resetUserPermissions(selectedUser.id);
+      }
+
+      toast.success('Permissões e visibilidade de telas/abas salvas!');
       setIsRolesOpen(false);
-      
+
       if (selectedUser.id === user?.id) {
         await refreshProfile();
       }
@@ -229,28 +263,45 @@ const Usuarios = () => {
         id: userToToggle.id,
         is_active: !userToToggle.is_active,
       });
-      toast.success(userToToggle.is_active ? 'Usuário desativado' : 'Usuário ativado');
+      toast.success(
+        userToToggle.is_active ? 'Usuário desativado' : 'Usuário ativado'
+      );
     } catch (error) {
-      toast.error('Erro ao alterar status');
+      toast.error('Erro ao alterar status do usuário');
     }
   };
 
   const handleCreateUser = async () => {
+    if (!createForm.email || !createForm.password || !createForm.full_name) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+
     try {
       await createUser.mutateAsync(createForm);
       toast.success('Usuário criado com sucesso!');
       setIsCreateOpen(false);
-      setCreateForm({ email: '', password: '', full_name: '', phone: '', roles: [] });
-    } catch (error: any) {
-      toast.error(error?.message || 'Erro ao criar usuário');
+      setCreateForm({
+        email: '',
+        password: '',
+        full_name: '',
+        phone: '',
+        roles: [],
+      });
+    } catch (error) {
+      toast.error('Erro ao criar usuário');
     }
   };
 
-  const toggleRole = (role: AppRole, form: AppRole[], setForm: (roles: AppRole[]) => void) => {
-    if (form.includes(role)) {
-      setForm(form.filter((r) => r !== role));
+  const toggleRole = (
+    role: AppRole,
+    currentRoles: AppRole[],
+    setRoles: (roles: AppRole[]) => void
+  ) => {
+    if (currentRoles.includes(role)) {
+      setRoles(currentRoles.filter((r) => r !== role));
     } else {
-      setForm([...form, role]);
+      setRoles([...currentRoles, role]);
     }
   };
 
@@ -265,85 +316,114 @@ const Usuarios = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Usuários" description="Gerencie os usuários e permissões da escola" />
+      <PageHeader
+        title="Usuários"
+        description="Gerencie os usuários e suas permissões de acesso"
+      >
+        <div className="flex gap-2">
+          {selectedUserIds.length > 0 && (
+            <Button variant="destructive" onClick={handleBulkDelete}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Excluir ({selectedUserIds.length})
+            </Button>
+          )}
+          <Button onClick={() => setIsCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Usuário
+          </Button>
+        </div>
+      </PageHeader>
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <UserCog className="h-5 w-5" />
-                Equipe
-              </CardTitle>
-              <CardDescription>
-                {users.length} usuário(s) cadastrado(s)
-              </CardDescription>
-            </div>
-            <div className="flex gap-2 items-center">
-              <Button onClick={() => setIsCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Usuário
-              </Button>
-              {selectedUserIds.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
-                    {selectedUserIds.length} selecionado(s)
-                  </span>
-                  <Button variant="destructive" onClick={handleBulkDelete} size="sm">
-                    Deletar
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
+          <CardTitle>Lista de Usuários</CardTitle>
+          <CardDescription>
+            Total de {users.length} usuário(s) cadastrado(s)
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+            <div className="py-8 text-center text-muted-foreground">
+              Carregando usuários...
+            </div>
           ) : users.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhum usuário encontrado
+            <div className="py-8 text-center text-muted-foreground">
+              Nenhum usuário cadastrado.
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedUserIds.length === users.length && users.length > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedUserIds(users.map((u) => u.id));
+                        } else {
+                          setSelectedUserIds([]);
+                        }
+                      }}
+                    />
+                  </TableHead>
                   <TableHead>Usuário</TableHead>
+                  <TableHead>E-mail</TableHead>
                   <TableHead>Telefone</TableHead>
-                  <TableHead>Permissões</TableHead>
+                  <TableHead>Cargos</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.map((u) => (
-                  <TableRow key={u.id} className={!u.is_active ? 'opacity-50' : ''}>
+                  <TableRow key={u.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedUserIds.includes(u.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedUserIds([...selectedUserIds, u.id]);
+                          } else {
+                            setSelectedUserIds(selectedUserIds.filter((id) => id !== u.id));
+                          }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
                           <AvatarImage src={u.avatar_url || undefined} />
-                          <AvatarFallback>{getInitials(u.full_name)}</AvatarFallback>
+                          <AvatarFallback>
+                            {u.full_name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .slice(0, 2)
+                              .join('')
+                              .toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                         <div>
-                          <div className="font-medium">{u.full_name}</div>
+                          <p className="font-medium leading-none">{u.full_name}</p>
                           {u.id === user?.id && (
-                            <span className="text-xs text-muted-foreground">(você)</span>
+                            <Badge variant="outline" className="mt-1 text-xs">
+                              Você
+                            </Badge>
                           )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {u.phone || '-'}
-                    </TableCell>
+                    <TableCell>{u.email || '-'}</TableCell>
+                    <TableCell>{u.phone || '-'}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {u.roles.length === 0 ? (
-                          <span className="text-muted-foreground text-sm">Sem permissões</span>
+                          <span className="text-muted-foreground text-sm">
+                            Sem cargo
+                          </span>
                         ) : (
                           u.roles.map((role) => (
                             <Badge
                               key={role}
-                              variant="secondary"
                               className={`${ROLE_COLORS[role]} text-white`}
                             >
                               {ROLE_LABELS[role]}
@@ -353,7 +433,10 @@ const Usuarios = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={u.is_active ? 'default' : 'secondary'}>
+                      <Badge
+                        variant={u.is_active ? 'default' : 'secondary'}
+                        className={u.is_active ? 'bg-green-500' : ''}
+                      >
                         {u.is_active ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </TableCell>
@@ -376,7 +459,7 @@ const Usuarios = () => {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleRolesOpen(u)}>
                             <Shield className="h-4 w-4 mr-2" />
-                            Permissões
+                            Permissões & Telas
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handlePasswordOpen(u)}>
                             <KeyRound className="h-4 w-4 mr-2" />
@@ -458,39 +541,228 @@ const Usuarios = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Roles Dialog */}
+      {/* Roles & Visibilidade Dialog */}
       <Dialog open={isRolesOpen} onOpenChange={setIsRolesOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Permissões</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-purple-600" />
+              Permissões e Visibilidade
+            </DialogTitle>
             <DialogDescription>
-              Configure as permissões de {selectedUser?.full_name}
+              Configure o cargo no sistema e personalize quais telas e abas {selectedUser?.full_name} poderá acessar.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => (
-              <div key={role} className="flex items-center space-x-3">
-                <Checkbox
-                  id={role}
-                  checked={rolesForm.includes(role)}
-                  onCheckedChange={() => toggleRole(role, rolesForm, setRolesForm)}
-                />
-                <Label htmlFor={role} className="flex items-center gap-2 cursor-pointer">
-                  <Badge className={`${ROLE_COLORS[role]} text-white`}>
-                    {ROLE_LABELS[role]}
-                  </Badge>
-                </Label>
-              </div>
-            ))}
-          </div>
+          <Tabs value={permissionsTab} onValueChange={(v) => setPermissionsTab(v as 'roles' | 'screens')} className="flex-1 flex flex-col overflow-hidden mt-1">
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="roles" className="flex items-center gap-2 text-xs">
+                <Shield className="h-3.5 w-3.5" /> Cargos no Sistema
+              </TabsTrigger>
+              <TabsTrigger value="screens" className="flex items-center gap-2 text-xs">
+                <Layers className="h-3.5 w-3.5" /> Telas e Abas ({visibilityForm.screens.length} ativas)
+              </TabsTrigger>
+            </TabsList>
 
-          <DialogFooter>
+            {/* ABA 1: CARGOS */}
+            <TabsContent value="roles" className="space-y-4 py-4 overflow-y-auto">
+              <p className="text-xs text-muted-foreground">
+                Selecione os cargos atribuídos a este usuário na escola:
+              </p>
+              <div className="space-y-3">
+                {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => (
+                  <div key={role} className="flex items-center justify-between p-2.5 rounded-lg border hover:bg-slate-50">
+                    <div className="flex items-center space-x-3">
+                      <Checkbox
+                        id={role}
+                        checked={rolesForm.includes(role)}
+                        onCheckedChange={() => {
+                          const nextRoles = rolesForm.includes(role)
+                            ? rolesForm.filter((r) => r !== role)
+                            : [...rolesForm, role];
+                          setRolesForm(nextRoles);
+                          if (!customVisibility) {
+                            setVisibilityForm(getDefaultPermissionsForRoles(nextRoles));
+                          }
+                        }}
+                      />
+                      <Label htmlFor={role} className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                        <Badge className={`${ROLE_COLORS[role]} text-white`}>
+                          {ROLE_LABELS[role]}
+                        </Badge>
+                      </Label>
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      {role === 'director' ? 'Acesso Total Padrão' : 'Acesso Setorial'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            {/* ABA 2: TELAS E ABAS */}
+            <TabsContent value="screens" className="space-y-3 py-3 flex-1 overflow-hidden flex flex-col">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 bg-purple-50/70 border border-purple-200 rounded-lg shrink-0">
+                <div>
+                  <span className="text-xs font-semibold text-purple-900 block">Modo de Visibilidade:</span>
+                  <span className="text-[11px] text-purple-700">
+                    {customVisibility
+                      ? 'Personalizado: apenas as telas e abas marcadas abaixo estarão visíveis.'
+                      : 'Automático: seguindo as permissões padrão dos cargos selecionados.'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={customVisibility ? 'outline' : 'secondary'}
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => {
+                      if (!customVisibility) {
+                        setCustomVisibility(true);
+                      } else {
+                        setCustomVisibility(false);
+                        setVisibilityForm(getDefaultPermissionsForRoles(rolesForm));
+                      }
+                    }}
+                  >
+                    {customVisibility ? 'Voltar ao Padrão' : 'Ativar Personalização'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Botões de Ação Rápida */}
+              <div className="flex items-center justify-between gap-2 shrink-0 py-1">
+                <span className="text-xs text-slate-500 font-medium">Selecione as telas e suas abas:</span>
+                <div className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-[11px] h-6 px-2 text-purple-700 hover:bg-purple-50"
+                    onClick={() => {
+                      setCustomVisibility(true);
+                      const allScreens = APP_SCREENS.map((s) => s.id);
+                      const allTabs: Record<string, string[]> = {};
+                      APP_SCREENS.forEach((s) => {
+                        if (s.tabs) allTabs[s.id] = s.tabs.map((t) => t.id);
+                      });
+                      setVisibilityForm({ screens: allScreens, tabs: allTabs });
+                    }}
+                  >
+                    Liberar Tudo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-[11px] h-6 px-2 text-slate-500 hover:bg-slate-100"
+                    onClick={() => {
+                      setCustomVisibility(true);
+                      setVisibilityForm({ screens: ['dashboard'], tabs: {} });
+                    }}
+                  >
+                    Desmarcar Tudo
+                  </Button>
+                </div>
+              </div>
+
+              {/* Lista de Telas e Abas */}
+              <div className="space-y-2.5 overflow-y-auto pr-1 flex-1 max-h-[380px]">
+                {APP_SCREENS.map((screen) => {
+                  const isScreenChecked = visibilityForm.screens.includes(screen.id);
+                  const screenTabs = screen.tabs || [];
+                  const currentTabs = visibilityForm.tabs[screen.id] || [];
+
+                  return (
+                    <div
+                      key={screen.id}
+                      className={`border rounded-lg p-3 transition-all ${
+                        isScreenChecked ? 'bg-white border-slate-300 shadow-sm' : 'bg-slate-50/60 border-slate-200 opacity-80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center space-x-2.5 cursor-pointer select-none">
+                          <Checkbox
+                            checked={isScreenChecked}
+                            onCheckedChange={(checked) => {
+                              setCustomVisibility(true);
+                              const isChecked = !!checked;
+                              const newScreens = isChecked
+                                ? [...visibilityForm.screens.filter((s) => s !== screen.id), screen.id]
+                                : visibilityForm.screens.filter((s) => s !== screen.id);
+
+                              const newTabs = { ...visibilityForm.tabs };
+                              if (isChecked) {
+                                newTabs[screen.id] = screenTabs.map((t) => t.id);
+                              } else {
+                                delete newTabs[screen.id];
+                              }
+
+                              setVisibilityForm({ screens: newScreens, tabs: newTabs });
+                            }}
+                          />
+                          <span className="font-semibold text-sm text-slate-800">{screen.label}</span>
+                        </label>
+                        {screenTabs.length > 0 && (
+                          <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                            {isScreenChecked ? `${currentTabs.length} de ${screenTabs.length} abas` : 'Tela Oculta'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Abas da Tela */}
+                      {screenTabs.length > 0 && isScreenChecked && (
+                        <div className="mt-2.5 pt-2.5 border-t border-slate-100 pl-4 bg-slate-50/70 p-2 rounded-md">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1.5 tracking-wider">
+                            Abas Visíveis nesta Tela:
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {screenTabs.map((tab) => {
+                              const isTabChecked = currentTabs.includes(tab.id);
+                              return (
+                                <label
+                                  key={tab.id}
+                                  className="flex items-center space-x-2 cursor-pointer text-xs text-slate-700 hover:text-slate-900 select-none py-0.5"
+                                >
+                                  <Checkbox
+                                    checked={isTabChecked}
+                                    onCheckedChange={(checked) => {
+                                      setCustomVisibility(true);
+                                      const isChecked = !!checked;
+                                      const nextTabsForScreen = isChecked
+                                        ? [...currentTabs.filter((t) => t !== tab.id), tab.id]
+                                        : currentTabs.filter((t) => t !== tab.id);
+
+                                      setVisibilityForm({
+                                        ...visibilityForm,
+                                        tabs: {
+                                          ...visibilityForm.tabs,
+                                          [screen.id]: nextTabsForScreen,
+                                        },
+                                      });
+                                    }}
+                                  />
+                                  <span>{tab.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter className="pt-3 border-t mt-2">
             <Button variant="outline" onClick={() => setIsRolesOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleRolesSave} disabled={updateRoles.isPending}>
-              {updateRoles.isPending ? 'Salvando...' : 'Salvar'}
+            <Button onClick={handleRolesSave} disabled={updateRoles.isPending} className="bg-purple-600 hover:bg-purple-700 text-white">
+              {updateRoles.isPending ? 'Salvando...' : 'Salvar Permissões'}
             </Button>
           </DialogFooter>
         </DialogContent>
