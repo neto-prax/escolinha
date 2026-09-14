@@ -7,10 +7,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { User, Wallet, FileWarning, Calendar, Mail, Phone, Briefcase } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 // Interfaces baseadas no que já existe na tela
 interface Employee {
@@ -20,6 +21,7 @@ interface Employee {
   department: string;
   phone: string;
   email?: string;
+  photoUrl?: string;
   hire_date: string;
   status: string;
   ocorrencias?: any[];
@@ -35,11 +37,18 @@ interface EmployeeHistoryDialogProps {
 export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOcorrencia }: EmployeeHistoryDialogProps) {
   if (!employee) return null;
 
-  const mockFinanceiro = [
-    { id: '1', data: '2026-07-05', descricao: 'Salário Julho/2026', liquido: 3500 },
-    { id: '2', data: '2026-06-05', descricao: 'Salário Junho/2026', liquido: 3500 },
-    { id: '3', data: '2026-05-05', descricao: 'Salário Maio/2026', liquido: 3500 },
-  ];
+  const [salarios] = useLocalStorage<any[]>('escolinha_salarios', []);
+  const [lancamentos] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+
+  // Filtra lançamentos e salários reais deste colaborador
+  const empNameLower = employee.name.toLowerCase().trim();
+  const lancamentosDoFuncionario = lancamentos.filter((l: any) => 
+    l.descricao && l.descricao.toLowerCase().includes(empNameLower)
+  );
+
+  const salariosDoFuncionario = salarios.filter((s: any) => 
+    s.colaborador && s.colaborador.toLowerCase().trim() === empNameLower
+  );
 
   // Ocorrências agora vêm do funcionário
   const ocorrencias = employee.ocorrencias || [];
@@ -88,6 +97,7 @@ export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOco
         <DialogHeader className="p-6 pb-2">
           <div className="flex items-start gap-4">
             <Avatar className="h-16 w-16">
+              {employee.photoUrl && <AvatarImage src={employee.photoUrl} alt={employee.name} className="object-cover" />}
               <AvatarFallback className="bg-primary/10 text-primary text-xl font-bold">
                 {employee.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
               </AvatarFallback>
@@ -156,20 +166,45 @@ export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOco
               <TabsContent value="financeiro" className="mt-0">
                 <div className="flex justify-between items-end border-b pb-2 mb-4">
                   <h3 className="font-semibold text-lg text-gray-800">Histórico de Pagamentos</h3>
-                  <span className="text-xs text-muted-foreground bg-gray-100 px-2 py-1 rounded">Mock Data</span>
+                  <Badge variant="outline" className="text-xs">Registros Reais</Badge>
                 </div>
                 
-                <div className="space-y-3">
-                  {mockFinanceiro.map(item => (
-                    <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-gray-900">{item.descricao}</span>
-                        <span className="text-xs text-gray-500">{new Date(item.data).toLocaleDateString('pt-BR')}</span>
+                {lancamentosDoFuncionario.length === 0 && salariosDoFuncionario.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    Nenhum lançamento financeiro ou pagamento registrado para este colaborador até o momento.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {lancamentosDoFuncionario.map((item: any) => (
+                      <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-900">{item.descricao}</span>
+                          <span className="text-xs text-gray-500">
+                            {item.data ? new Date(item.data).toLocaleDateString('pt-BR') : 'Data não informada'} • {item.formaPagamento || 'Forma não especificada'}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-green-700 block">{formatCurrency(item.valor || 0)}</span>
+                          <Badge variant={item.status === 'Pago' ? 'secondary' : 'outline'} className="text-[10px] mt-0.5">
+                            {item.status || 'Registrado'}
+                          </Badge>
+                        </div>
                       </div>
-                      <span className="font-bold text-green-700">{formatCurrency(item.liquido)}</span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                    {salariosDoFuncionario.filter((s: any) => !lancamentosDoFuncionario.some((l: any) => l.descricao?.includes(s.colaborador))).map((sal: any) => {
+                      const total = (sal.itens || []).reduce((acc: number, cur: any) => cur.tipo === 'Provento' ? acc + Number(cur.valor || 0) : acc - Number(cur.valor || 0), 0);
+                      return (
+                        <div key={sal.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-gray-900">Folha Salarial Registrada</span>
+                            <span className="text-xs text-gray-500">{sal.itens?.length || 0} verbas cadastradas</span>
+                          </div>
+                          <span className="font-bold text-green-700">{formatCurrency(total)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="ocorrencias" className="mt-0">

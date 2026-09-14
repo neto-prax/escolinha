@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { FileText, Download, TrendingUp, TrendingDown, Landmark, Users, AlertCircle, PieChart, CheckCircle, Clock, GraduationCap } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { mockEmployees, mockCaixas } from '@/data/mockData';
+import { mockCaixas } from '@/data/mockData';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Aluno, Mensalidade } from '@/types/aluno';
@@ -21,6 +21,7 @@ const Relatorios = () => {
   const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
   const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
+  const [employees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
 
   const lancamentos: Lancamento[] = lancamentosStorage.map((l) => ({
     ...l,
@@ -100,23 +101,32 @@ const Relatorios = () => {
 
 
   const exportFuncionarios = () => {
-    const body = mockEmployees.map(emp => [
+    if (employees.length === 0) {
+      return toast.error("Nenhum funcionário cadastrado no sistema.");
+    }
+    const body = employees.map(emp => [
       emp.name,
       emp.role,
       emp.department,
-      formatCurrency(Math.random() * 2000 + 1500), // Salário mockado
-      'A Receber'
+      emp.phone || '-',
+      emp.status === 'active' ? 'Ativo' : emp.status === 'vacation' ? 'Férias' : 'Afastado'
     ]);
-    generatePDF("Funcionários a Receber Pagamentos", [['Nome', 'Cargo', 'Departamento', 'Valor a Receber', 'Status']], body);
+    generatePDF("Quadro de Colaboradores e Funcionários", [['Nome', 'Cargo', 'Departamento', 'Telefone', 'Status']], body);
   };
 
   const exportOcorrencias = () => {
-    const body = [
-      ['05/08/2026', 'Carlos Lima', 'Atraso', 'Atraso de 30 minutos na entrada.'],
-      ['10/08/2026', 'João Santos', 'Falta Injustificada', 'Não compareceu ao turno da manhã.'],
-      ['12/08/2026', 'Maria Silva', 'Atestado Médico', 'Atestado de 2 dias.'],
-    ];
-    generatePDF("Ocorrências por Período", [['Data', 'Funcionário', 'Tipo', 'Descrição']], body);
+    const allOcorrencias = employees.flatMap(emp => 
+      (emp.ocorrencias || []).map((oco: any) => [
+        oco.data ? new Date(oco.data).toLocaleDateString('pt-BR') : '-',
+        emp.name,
+        oco.tipo || 'Ocorrência',
+        oco.descricao || ''
+      ])
+    );
+    if (allOcorrencias.length === 0) {
+      return toast.error("Nenhuma ocorrência registrada no sistema.");
+    }
+    generatePDF("Ocorrências de Funcionários", [['Data', 'Funcionário', 'Tipo', 'Descrição']], allOcorrencias);
   };
 
   const exportOrcamentos = () => {

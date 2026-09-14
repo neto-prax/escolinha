@@ -207,22 +207,20 @@ export const NotasTab: React.FC = () => {
       </div>
 
       {/* Filter and Search Bar */}
+      {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             placeholder="Buscar por nome do aluno ou disciplina..."
-            placeholder="Buscar aluno ou disciplina..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
             className="pl-9 text-xs"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <Select value={selectedTurma} onValueChange={setSelectedTurma}>
-            <SelectTrigger className="w-[160px]">
             <SelectTrigger className="w-[160px] text-xs">
               <SelectValue placeholder="Turma" />
             </SelectTrigger>
@@ -237,7 +235,6 @@ export const NotasTab: React.FC = () => {
           </Select>
 
           <Select value={selectedBimestre} onValueChange={setSelectedBimestre}>
-            <SelectTrigger className="w-[160px]">
             <SelectTrigger className="w-[160px] text-xs">
               <SelectValue placeholder="Bimestre" />
             </SelectTrigger>
@@ -258,11 +255,8 @@ export const NotasTab: React.FC = () => {
           <TableHeader className="bg-slate-50">
             <TableRow>
               <TableHead className="font-semibold text-slate-700">Aluno</TableHead>
-              <TableHead className="font-semibold text-slate-700">Turma / Periodo</TableHead>
               <TableHead className="font-semibold text-slate-700">Turma / Período</TableHead>
               <TableHead className="font-semibold text-slate-700">Disciplina</TableHead>
-              <TableHead className="text-center font-semibold text-slate-700">Av. 1</TableHead>
-              <TableHead className="text-center font-semibold text-slate-700">Av. 2</TableHead>
               <TableHead className="text-center font-semibold text-slate-700">Nota 1 (N1)</TableHead>
               <TableHead className="text-center font-semibold text-slate-700">Nota 2 (N2)</TableHead>
               <TableHead className="text-center font-semibold text-slate-700">Exame</TableHead>
@@ -274,8 +268,6 @@ export const NotasTab: React.FC = () => {
           <TableBody>
             {filteredNotas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-slate-500">
-                  Nenhuma avaliação registrada com os filtros aplicados.
                 <TableCell colSpan={9} className="text-center py-8 text-slate-500 text-sm">
                   Nenhum registro de notas encontrado com os filtros aplicados.
                 </TableCell>
@@ -298,9 +290,6 @@ export const NotasTab: React.FC = () => {
                       <div className="text-xs text-slate-500">{item.bimestre}</div>
                     </TableCell>
                     <TableCell className="text-sm text-slate-700">{item.disciplina}</TableCell>
-                    <TableCell className="text-center font-mono">{item.notaAvaliacao1.toFixed(1)}</TableCell>
-                    <TableCell className="text-center font-mono">{item.notaAvaliacao2.toFixed(1)}</TableCell>
-                    <TableCell className="text-center font-mono">{item.notaExame.toFixed(1)}</TableCell>
                     <TableCell className="text-center font-mono text-xs">{item.notaAvaliacao1.toFixed(1)}</TableCell>
                     <TableCell className="text-center font-mono text-xs">{item.notaAvaliacao2.toFixed(1)}</TableCell>
                     <TableCell className="text-center font-mono text-xs">{item.notaExame.toFixed(1)}</TableCell>
@@ -386,7 +375,6 @@ export const NotasTab: React.FC = () => {
 
             <div>
               <label className="text-xs font-medium text-slate-700 block mb-1">Disciplina / Módulo</label>
-              <Input value={disciplina} onChange={(e) => setDisciplina(e.target.value)} placeholder="Ex: Futebol Tático, Preparação..." required />
               <Input
                 value={disciplina}
                 onChange={(e) => setDisciplina(e.target.value)}
@@ -395,18 +383,6 @@ export const NotasTab: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Avaliação 1 (0-10)</label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={notaAvaliacao1}
-                  onChange={(e) => setNotaAvaliacao1(Number(e.target.value))}
-                  required
-                />
             {/* Seção 2: Notas das Atividades / Avaliações */}
             <div className="p-3 bg-slate-50/80 rounded-lg border border-slate-200 space-y-3">
               <span className="text-xs font-semibold text-slate-700 block">
@@ -455,30 +431,9 @@ export const NotasTab: React.FC = () => {
             {/* Média Prevista */}
             <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-200 text-sm flex items-center justify-between">
               <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Avaliação 2 (0-10)</label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={notaAvaliacao2}
-                  onChange={(e) => setNotaAvaliacao2(Number(e.target.value))}
-                  required
-                />
                 <span className="text-xs font-semibold text-emerald-800 block">Média Final Prevista:</span>
                 <span className="text-[11px] text-emerald-600">Calculada automaticamente</span>
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Exame (0-10)</label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={notaExame}
-                  onChange={(e) => setNotaExame(Number(e.target.value))}
-                  required
-                />
               <div className="flex items-center gap-3">
                 <span className="text-xl font-bold text-emerald-900 font-mono">
                   {calculateMedia(notaAvaliacao1, notaAvaliacao2, notaExame).toFixed(1)}
@@ -487,20 +442,11 @@ export const NotasTab: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-slate-50 p-3 rounded-lg border text-sm flex items-center justify-between">
-              <span className="text-slate-600 font-medium">Média Prevista:</span>
-              <span className="text-lg font-bold text-slate-900">
-                {calculateMedia(notaAvaliacao1, notaAvaliacao2, notaExame).toFixed(1)}
-              </span>
-            </div>
-
             <div>
-              <label className="text-xs font-medium text-slate-700 block mb-1">Parecer Pedagógico / Observações</label>
               <label className="text-xs font-medium text-slate-700 block mb-1">Anotações / Observações da Nota</label>
               <Input
                 value={parecerPedagogico}
                 onChange={(e) => setParecerPedagogico(e.target.value)}
-                placeholder="Observações sobre o desempenho do aluno..."
                 placeholder="Observações complementares sobre a pontuação..."
               />
             </div>
@@ -510,7 +456,6 @@ export const NotasTab: React.FC = () => {
                 Cancelar
               </Button>
               <Button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                Salvar Avaliação
                 Salvar Notas
               </Button>
             </DialogFooter>

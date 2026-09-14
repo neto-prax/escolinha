@@ -80,6 +80,9 @@ const Alunos = () => {
       Setor: a.setor || '',
       Classe: a.classe || '',
       Turma: a.turma || '',
+      'Valor da Mensalidade': a.valorBase ? parseFloat(a.valorBase) : '',
+      Desconto: a.descontoMensalidade ? parseFloat(a.descontoMensalidade) : '',
+      'Dia de Vencimento': a.diaVencimento || '',
       Status: a.status
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -98,6 +101,9 @@ const Alunos = () => {
       Setor: 'Educação Infantil',
       Classe: 'Maternal',
       Turma: 'A',
+      'Valor da Mensalidade': 450.00,
+      Desconto: 50.00,
+      'Dia de Vencimento': 10,
       Status: 'Ativo'
     }];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -120,6 +126,7 @@ const Alunos = () => {
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json<any>(ws);
         const currentYear = new Date().getFullYear().toString();
+        const currentYearNum = new Date().getFullYear();
         let proximoNumero = 1;
         
         const matriculasAnoAtual = alunos
@@ -132,7 +139,18 @@ const Alunos = () => {
           proximoNumero = Math.max(...matriculasAnoAtual) + 1;
         }
 
-        const novosAlunos: Aluno[] = data.map((row, index) => {
+        const parseCurrencyNumber = (val: any): string => {
+          if (val === undefined || val === null || val === '') return '';
+          if (typeof val === 'number') return String(val);
+          const str = String(val).replace('R$', '').replace(/\s/g, '').replace(',', '.');
+          const num = parseFloat(str);
+          return isNaN(num) ? '' : String(num);
+        };
+
+        const novosAlunos: Aluno[] = [];
+        const novasMensalidadesGeradas: Mensalidade[] = [];
+
+        data.forEach((row: any, index: number) => {
           const matriculaGerada = `${currentYear}${(proximoNumero + index).toString().padStart(3, '0')}`;
           
           // Fallbacks mais resilientes caso o usuário não use o modelo exato
@@ -140,8 +158,19 @@ const Alunos = () => {
           const rawClasse = row.Classe ?? (row.Turma && !row.Classe ? row.Turma : null);
           const rawTurma = row.Classe ? row.Turma : (row.Letra ?? null);
 
-          return {
-            id: crypto.randomUUID(),
+          // Extração de valor e desconto com suporte a variações de cabeçalho
+          const rawValor = row['Valor da Mensalidade'] ?? row['Valor Mensalidade'] ?? row['Valor Base'] ?? row['Valor'] ?? row['Mensalidade'];
+          const rawDesconto = row['Desconto'] ?? row['Desconto Mensalidade'] ?? row['Desconto (R$)'];
+          const rawVencimento = row['Dia de Vencimento'] ?? row['Dia Vencimento'] ?? row['Vencimento'];
+
+          const valorBase = parseCurrencyNumber(rawValor);
+          const descontoMensalidade = parseCurrencyNumber(rawDesconto);
+          const diaVencimento = rawVencimento ? String(parseInt(String(rawVencimento))) : '10';
+
+          const alunoId = crypto.randomUUID();
+
+          const alunoObj: Aluno = {
+            id: alunoId,
             matricula: matriculaGerada,
             nome: row.Nome || 'Aluno Sem Nome',
             nomeResponsavel: row.Responsável || '',
@@ -150,10 +179,40 @@ const Alunos = () => {
             classe: rawClasse ? String(rawClasse).trim() : 'Geral',
             turma: rawTurma ? String(rawTurma).trim() : '',
             status: row.Status === 'Inativo' ? 'Inativo' : 'Ativo',
+            valorBase: valorBase || undefined,
+            descontoMensalidade: descontoMensalidade || undefined,
+            diaVencimento: diaVencimento && !isNaN(Number(diaVencimento)) ? diaVencimento : '10',
           };
+
+          novosAlunos.push(alunoObj);
+
+          // Se tiver valor definido e status ativo, gerar as mensalidades do ano letivo
+          if (valorBase && parseFloat(valorBase) > 0 && alunoObj.status === 'Ativo') {
+            const vBase = parseFloat(valorBase);
+            const desc = parseFloat(descontoMensalidade || '0');
+            const vFinal = Math.max(0, vBase - desc);
+            const venc = parseInt(diaVencimento) || 10;
+
+            for (let i = 1; i <= 11; i++) {
+              const mesRef = `${currentYearNum}-${String(i).padStart(2, '0')}`;
+              const dataVenc = new Date(currentYearNum, i - 1, venc).toISOString();
+
+              novasMensalidadesGeradas.push({
+                id: crypto.randomUUID(),
+                alunoId,
+                mesReferencia: mesRef,
+                valorFinal: vFinal,
+                dataVencimento: dataVenc,
+                status: 'Pendente'
+              });
+            }
+          }
         });
 
         setAlunos(prev => [...prev, ...novosAlunos]);
+        if (novasMensalidadesGeradas.length > 0) {
+          setMensalidades(prev => [...prev, ...novasMensalidadesGeradas]);
+        }
 
         // Atualizar as turmas com base nos dados da planilha
         const novasTurmas: TurmaConfig[] = JSON.parse(JSON.stringify(turmas));
@@ -187,7 +246,10 @@ const Alunos = () => {
         });
         
         setTurmas(novasTurmas);
-        toast.success(`${novosAlunos.length} alunos importados com sucesso!`);
+        const mensalidadesMsg = novasMensalidadesGeradas.length > 0 
+          ? ` e ${novasMensalidadesGeradas.length} mensalidades geradas` 
+          : '';
+        toast.success(`${novosAlunos.length} alunos importados com sucesso${mensalidadesMsg}!`);
       } catch (error) {
         console.error(error);
         toast.error("Erro ao importar planilha. Verifique o formato.");
@@ -678,16 +740,28 @@ const Alunos = () => {
                     <TableCell className="font-bold">{aluno.nome}</TableCell>
                     <TableCell>{aluno.nomeResponsavel}</TableCell>
                     <TableCell>
-                      {aluno.setor && aluno.classe && aluno.turma ? (
-                        <div className="flex flex-col gap-1">
-                          <span className="text-xs text-muted-foreground uppercase">{aluno.setor}</span>
-                          <span className="inline-flex items-center gap-1 text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full w-fit">
-                            {aluno.classe} - {aluno.turma}
+                      <div className="flex flex-col gap-1">
+                        {aluno.setor && aluno.classe && aluno.turma ? (
+                          <>
+                            <span className="text-xs text-muted-foreground uppercase">{aluno.setor}</span>
+                            <span className="inline-flex items-center gap-1 text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full w-fit">
+                              {aluno.classe} - {aluno.turma}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Não enturmado</span>
+                        )}
+                        {aluno.valorBase && parseFloat(aluno.valorBase) > 0 && (
+                          <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded w-fit">
+                            {parseFloat(aluno.valorBase).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            {aluno.descontoMensalidade && parseFloat(aluno.descontoMensalidade) > 0 && (
+                              <span className="text-destructive font-normal ml-1">
+                                (-{parseFloat(aluno.descontoMensalidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+                              </span>
+                            )}
                           </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">Não enturmado</span>
-                      )}
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={aluno.status === 'Ativo' ? 'secondary' : 'destructive'} className={aluno.status === 'Ativo' ? 'badge-success' : ''}>

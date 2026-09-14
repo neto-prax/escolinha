@@ -210,3 +210,4 @@ export function usePermissions() {
     APP_SCREENS,
   };
 }
+

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Table,
   TableBody,
@@ -29,6 +29,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -38,15 +39,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Briefcase, Users, FileText, Plus, Search, MoreHorizontal, Clock, Calendar, Loader2, Download, Upload, FileDown, LayoutGrid, List, Bot, Wrench } from 'lucide-react';
+import { 
+  Briefcase, Users, FileText, Plus, Search, MoreHorizontal, Clock, Calendar, 
+  Loader2, Download, Upload, FileDown, LayoutGrid, List, Wrench, Eye, Pencil, 
+  Trash2, Mail, Phone, Camera, UserCheck, ShieldAlert 
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
 
 import * as z from 'zod';
-import { mockEmployees } from '@/data/mockData';
 import {
   Form,
   FormControl,
@@ -57,10 +62,6 @@ import {
 } from '@/components/ui/form';
 
 import { OrdensServicoTab } from '@/components/administrativo/OrdensServicoTab';
-
-// Mock data
-
-// Mock data
 
 const employeeSchema = z.object({
   name: z.string().min(3, 'Nome é obrigatório'),
@@ -73,16 +74,49 @@ const employeeSchema = z.object({
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
 
+const MOCK_IDS = ['1', '2', '3', '4', '5'];
+const MOCK_NAMES = ['Maria Silva', 'João Santos', 'Ana Costa', 'Carlos Lima', 'Paula Oliveira'];
+
 const Administrativo = () => {
   const { profile } = useAuth();
-  const [employees, setEmployees] = useLocalStorage<any[]>('escolinha_employees_v2', mockEmployees.map(emp => ({
-    ...emp,
-    ocorrencias: []
-  })));
-  const [activeTab, setActiveTab] = useState('employees');
+  const { canAccessTab } = usePermissions();
+
+  const [employees, setEmployees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
+
+  // Purge automático de colaboradores fictícios/mockup caso existam no armazenamento
+  useEffect(() => {
+    if (employees.some(emp => MOCK_IDS.includes(String(emp.id)) || MOCK_NAMES.includes(emp.name))) {
+      setEmployees(prev => prev.filter(emp => !MOCK_IDS.includes(String(emp.id)) && !MOCK_NAMES.includes(emp.name)));
+    }
+  }, []);
+
+  const availableTabs = [
+    { id: 'employees', label: 'Funcionários', icon: Users },
+    { id: 'os', label: 'Ordens de Serviço', icon: Wrench },
+  ].filter(tab => canAccessTab('administrativo', tab.id));
+
+  const [activeTab, setActiveTab] = useState<string>(availableTabs[0]?.id || 'employees');
+
+  useEffect(() => {
+    if (availableTabs.length > 0 && !availableTabs.some(t => t.id === activeTab)) {
+      setActiveTab(availableTabs[0].id);
+    }
+  }, [availableTabs, activeTab]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
+  
+  // Dialogs e estados
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [editPhoto, setEditPhoto] = useState<string | null>(null);
+
+  const [isViewFichaOpen, setIsViewFichaOpen] = useState(false);
+  const [viewingEmployee, setViewingEmployee] = useState<any | null>(null);
+
   const [isOcorrenciaFormOpen, setIsOcorrenciaFormOpen] = useState(false);
   const [selectedEmpForOcorrencia, setSelectedEmpForOcorrencia] = useState('');
 
@@ -181,6 +215,67 @@ const Administrativo = () => {
     emp.department.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("A foto deve ter no máximo 2MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedPhoto(reader.result as string);
+      toast.success("Foto carregada com sucesso!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleEditPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("A foto deve ter no máximo 2MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setEditPhoto(reader.result as string);
+      toast.success("Nova foto carregada!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleOpenEdit = (emp: any) => {
+    setEditingEmployee(emp);
+    setEditPhoto(emp.photoUrl || null);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+    const formData = new FormData(e.currentTarget);
+    const updated = {
+      ...editingEmployee,
+      name: formData.get('name') as string,
+      role: formData.get('role') as string,
+      department: formData.get('department') as string,
+      phone: formData.get('phone') as string,
+      email: (formData.get('email') as string) || '',
+      hire_date: formData.get('hire_date') as string,
+      photoUrl: editPhoto || '',
+    };
+    setEmployees(employees.map(emp => emp.id === updated.id ? updated : emp));
+    setIsEditDialogOpen(false);
+    setEditingEmployee(null);
+    toast.success("Dados do colaborador atualizados com sucesso!");
+  };
+
+  const handleOpenViewFicha = (emp: any) => {
+    setViewingEmployee(emp);
+    setIsViewFichaOpen(true);
+  };
+
   const handleCreateEmployee = async (data: EmployeeFormData) => {
     setIsLoading(true);
     try {
@@ -190,12 +285,15 @@ const Administrativo = () => {
         role: data.role,
         department: data.department,
         phone: data.phone,
+        email: data.email || '',
+        photoUrl: selectedPhoto || '',
         status: 'active',
         hire_date: data.hire_date,
         ocorrencias: []
       };
       setEmployees([...employees, newEmployee]);
       form.reset();
+      setSelectedPhoto(null);
       setIsEmployeeFormOpen(false);
       toast.success('Funcionário cadastrado com sucesso!');
     } catch (error) {
@@ -316,212 +414,259 @@ const Administrativo = () => {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="employees" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Funcionários
-          </TabsTrigger>
+      {availableTabs.length === 0 ? (
+        <Card className="p-8 text-center text-muted-foreground">
+          <ShieldAlert className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
+          <p className="font-medium">Você não possui permissão para visualizar as abas deste módulo.</p>
+        </Card>
+      ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            {availableTabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <TabsTrigger key={tab.id} value={tab.id} className="flex items-center gap-2">
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
 
-          <TabsTrigger value="os" className="flex items-center gap-2">
-            <Wrench className="h-4 w-4" />
-            Ordens de Serviço
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="employees" className="mt-6">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar funcionário..."
-                    className="pl-9"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 items-center">
-                  <div className="flex border rounded-md mr-2 bg-background">
-                    <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('list')} className="h-9 w-9 rounded-r-none">
-                      <List className="h-4 w-4" />
-                    </Button>
-                    <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('grid')} className="h-9 w-9 rounded-l-none border-l">
-                      <LayoutGrid className="h-4 w-4" />
-                    </Button>
+          {availableTabs.some(t => t.id === 'employees') && (
+            <TabsContent value="employees" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar por nome, cargo ou setor..."
+                        className="pl-9"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-1 items-center">
+                      <div className="flex border rounded-md mr-2 bg-background">
+                        <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('list')} className="h-9 w-9 rounded-r-none">
+                          <List className="h-4 w-4" />
+                        </Button>
+                        <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('grid')} className="h-9 w-9 rounded-l-none border-l">
+                          <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <input 
+                        type="file" 
+                        accept=".xlsx, .xls" 
+                        ref={fileInputRef} 
+                        onChange={handleImport} 
+                        className="hidden" 
+                      />
+                      <Button 
+                        variant="outline"
+                        onClick={handleDownloadTemplate}
+                        title="Baixar planilha de exemplo para importação"
+                        className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                      >
+                        <FileDown className="mr-2 h-4 w-4" />
+                        Modelo
+                      </Button>
+                      <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Importar
+                      </Button>
+                      <Button variant="outline" onClick={handleExport}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Exportar
+                      </Button>
+                    </div>
                   </div>
-                  <input 
-                    type="file" 
-                    accept=".xlsx, .xls" 
-                    ref={fileInputRef} 
-                    onChange={handleImport} 
-                    className="hidden" 
-                  />
-                  <Button 
-                    variant="outline"
-                    onClick={handleDownloadTemplate}
-                    title="Baixar planilha de exemplo para importação"
-                    className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                  >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Modelo
-                  </Button>
-                  <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Importar
-                  </Button>
-                  <Button variant="outline" onClick={handleExport}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Exportar
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {viewMode === 'list' ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead>Cargo</TableHead>
-                      <TableHead>Departamento</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Admissão</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredEmployees.map((employee) => (
-                      <TableRow key={employee.id} className="table-row-interactive">
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                {employee.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                </CardHeader>
+                <CardContent>
+                  {employees.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <div className="rounded-full bg-primary/10 p-5 mb-4">
+                        <Users className="h-10 w-10 text-primary" />
+                      </div>
+                      <h3 className="text-lg font-semibold mb-1">Nenhum colaborador cadastrado</h3>
+                      <p className="text-sm text-muted-foreground max-w-md mb-6">
+                        Adicione os colaboradores reais da instituição ou importe uma planilha para iniciar a gestão do departamento administrativo.
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-3">
+                        <Button onClick={() => {
+                          setSelectedPhoto(null);
+                          form.reset();
+                          setIsEmployeeFormOpen(true);
+                        }}>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Novo Colaborador
+                        </Button>
+                        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                          <Upload className="mr-2 h-4 w-4" />
+                          Importar Planilha
+                        </Button>
+                      </div>
+                    </div>
+                  ) : filteredEmployees.length === 0 ? (
+                    <div className="text-center py-12 text-muted-foreground">
+                      Nenhum colaborador encontrado para o termo pesquisado.
+                    </div>
+                  ) : viewMode === 'list' ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Funcionário</TableHead>
+                          <TableHead>Cargo</TableHead>
+                          <TableHead>Departamento</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead>Admissão</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredEmployees.map((employee) => (
+                          <TableRow key={employee.id} className="table-row-interactive">
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-9 w-9 border border-border">
+                                  {employee.photoUrl && <AvatarImage src={employee.photoUrl} alt={employee.name} className="object-cover" />}
+                                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                                    {employee.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <span className="font-medium block leading-tight">{employee.name}</span>
+                                  {employee.email && (
+                                    <span className="text-xs text-muted-foreground">{employee.email}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{employee.role}</TableCell>
+                            <TableCell>{employee.department}</TableCell>
+                            <TableCell>{employee.phone}</TableCell>
+                            <TableCell>{new Date(employee.hire_date).toLocaleDateString('pt-BR')}</TableCell>
+                            <TableCell>{getStatusBadge(employee.status)}</TableCell>
+                            <TableCell>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleOpenViewFicha(employee)}>
+                                    <Eye className="mr-2 h-4 w-4" /> Ver ficha
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleOpenEdit(employee)}>
+                                    <Pencil className="mr-2 h-4 w-4" /> Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleToggleVacation(employee.id, employee.status)}>
+                                    {employee.status === 'vacation' ? 'Retirar férias' : 'Registrar férias'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleToggleLeave(employee.id, employee.status)}>
+                                    {employee.status === 'leave' ? 'Retirar licença' : 'Registrar licença'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => {
+                                    setSelectedEmployeeHistory(employee);
+                                    setIsHistoryOpen(true);
+                                  }}>
+                                    Histórico & Ocorrências
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+                                    onClick={() => handleDemitir(employee.id, employee.name)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Desligar (Demitir)
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {filteredEmployees.map(employee => (
+                        <Card key={employee.id} className="card-interactive overflow-hidden flex flex-col justify-between">
+                          <CardHeader className="p-4 pb-2 text-center">
+                            <div className="flex justify-end mb-[-2rem] relative z-10">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleOpenViewFicha(employee)}>
+                                    <Eye className="mr-2 h-4 w-4" /> Ver ficha
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleOpenEdit(employee)}>
+                                    <Pencil className="mr-2 h-4 w-4" /> Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleToggleVacation(employee.id, employee.status)}>
+                                    {employee.status === 'vacation' ? 'Retirar férias' : 'Registrar férias'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleToggleLeave(employee.id, employee.status)}>
+                                    {employee.status === 'leave' ? 'Retirar licença' : 'Registrar licença'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => {
+                                    setSelectedEmployeeHistory(employee);
+                                    setIsHistoryOpen(true);
+                                  }}>
+                                    Histórico & Ocorrências
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+                                    onClick={() => handleDemitir(employee.id, employee.name)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" /> Desligar (Demitir)
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                            <Avatar className="h-20 w-20 mx-auto mb-2 border-2 border-primary/20 shadow-sm">
+                              {employee.photoUrl && <AvatarImage src={employee.photoUrl} alt={employee.name} className="object-cover" />}
+                              <AvatarFallback className="bg-primary/10 text-primary text-2xl font-bold">
+                                {employee.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="font-medium">{employee.name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{employee.role}</TableCell>
-                        <TableCell>{employee.department}</TableCell>
-                        <TableCell>{employee.phone}</TableCell>
-                        <TableCell>{new Date(employee.hire_date).toLocaleDateString('pt-BR')}</TableCell>
-                        <TableCell>{getStatusBadge(employee.status)}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>Ver ficha</DropdownMenuItem>
-                              <DropdownMenuItem>Editar</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleToggleVacation(employee.id, employee.status)}>
-                                {employee.status === 'vacation' ? 'Retirar férias' : 'Registrar férias'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleToggleLeave(employee.id, employee.status)}>
-                                {employee.status === 'leave' ? 'Retirar licença' : 'Registrar licença'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedEmployeeHistory(employee);
-                                setIsHistoryOpen(true);
-                              }}>
-                                Histórico
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
-                                onClick={() => handleDemitir(employee.id, employee.name)}
-                              >
-                                Desligar (Demitir)
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {filteredEmployees.map(employee => (
-                    <Card key={employee.id} className="card-interactive overflow-hidden">
-                      <CardHeader className="p-4 pb-2 text-center">
-                        <div className="flex justify-end mb-[-2rem] relative z-10">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>Ver ficha</DropdownMenuItem>
-                              <DropdownMenuItem>Editar</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleToggleVacation(employee.id, employee.status)}>
-                                {employee.status === 'vacation' ? 'Retirar férias' : 'Registrar férias'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleToggleLeave(employee.id, employee.status)}>
-                                {employee.status === 'leave' ? 'Retirar licença' : 'Registrar licença'}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedEmployeeHistory(employee);
-                                setIsHistoryOpen(true);
-                              }}>
-                                Histórico
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
-                                onClick={() => handleDemitir(employee.id, employee.name)}
-                              >
-                                Desligar (Demitir)
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                        <Avatar className="h-16 w-16 mx-auto mb-2 border-2 border-primary/10">
-                          <AvatarFallback className="bg-primary/10 text-primary text-xl font-medium">
-                            {employee.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <CardTitle className="text-base truncate">{employee.name}</CardTitle>
-                        <CardDescription className="text-xs truncate">{employee.role}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-2 text-sm space-y-2">
-                        <div className="flex justify-between items-center text-muted-foreground border-b pb-1 border-border/50">
-                          <span>Departamento:</span>
-                          <span className="font-medium text-foreground truncate ml-2">{employee.department}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-muted-foreground border-b pb-1 border-border/50">
-                          <span>Telefone:</span>
-                          <span className="font-medium text-foreground ml-2">{employee.phone}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-muted-foreground pt-1">
-                          <span>Status:</span>
-                          <span>{getStatusBadge(employee.status)}</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  {filteredEmployees.length === 0 && (
-                    <div className="col-span-full text-center py-8 text-muted-foreground">
-                      Nenhum colaborador encontrado.
+                            <CardTitle className="text-base truncate">{employee.name}</CardTitle>
+                            <CardDescription className="text-xs truncate">{employee.role}</CardDescription>
+                          </CardHeader>
+                          <CardContent className="p-4 pt-2 text-sm space-y-2">
+                            <div className="flex justify-between items-center text-muted-foreground border-b pb-1 border-border/50">
+                              <span>Departamento:</span>
+                              <span className="font-medium text-foreground truncate ml-2">{employee.department}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-muted-foreground border-b pb-1 border-border/50">
+                              <span>Telefone:</span>
+                              <span className="font-medium text-foreground ml-2">{employee.phone}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-muted-foreground pt-1">
+                              <span>Status:</span>
+                              <span>{getStatusBadge(employee.status)}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
 
-
-        
-        <TabsContent value="os" className="mt-6">
-          <OrdensServicoTab />
-        </TabsContent>
-      </Tabs>
+          {availableTabs.some(t => t.id === 'os') && (
+            <TabsContent value="os" className="mt-6">
+              <OrdensServicoTab />
+            </TabsContent>
+          )}
+        </Tabs>
+      )}
       {/* Employee Form Dialog */}
       <Dialog open={isEmployeeFormOpen} onOpenChange={setIsEmployeeFormOpen}>
         <DialogContent className="max-w-3xl">
@@ -536,20 +681,37 @@ const Administrativo = () => {
               {/* Coluna da Foto (Esquerda) - 3x4 */}
               <div className="flex flex-col items-center gap-3 w-full md:w-1/3">
                 <div className="w-40 h-56 bg-muted border-2 border-dashed border-primary/20 rounded-md flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/80 transition-all relative overflow-hidden group shadow-sm">
-                  <Users className="h-12 w-12 text-primary/40 group-hover:scale-110 transition-transform" />
-                  <span className="text-xs text-primary/60 font-medium mt-3 uppercase tracking-wider">Foto 3x4</span>
+                  {selectedPhoto ? (
+                    <>
+                      <img src={selectedPhoto} alt="Foto 3x4" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium">
+                        Trocar foto
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-10 w-10 text-primary/40 group-hover:scale-110 transition-transform mb-2" />
+                      <span className="text-xs text-primary/60 font-medium uppercase tracking-wider">Foto 3x4</span>
+                    </>
+                  )}
                   
                   <input 
                     id="photo-upload" 
                     type="file" 
                     accept="image/*" 
                     className="absolute inset-0 opacity-0 cursor-pointer" 
-                    onChange={() => toast.success("Foto selecionada!")} 
+                    onChange={handlePhotoChange} 
                   />
                 </div>
-                <label htmlFor="photo-upload" className="text-sm text-primary hover:underline font-medium cursor-pointer">
-                  Adicionar Foto
-                </label>
+                {selectedPhoto ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedPhoto(null)} className="text-xs text-destructive hover:text-destructive">
+                    Remover Foto
+                  </Button>
+                ) : (
+                  <label htmlFor="photo-upload" className="text-sm text-primary hover:underline font-medium cursor-pointer flex items-center gap-1">
+                    <Upload className="h-3.5 w-3.5" /> Adicionar Foto
+                  </label>
+                )}
               </div>
 
               {/* Coluna do Formulário (Direita) */}
@@ -676,6 +838,213 @@ const Administrativo = () => {
               </div>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Employee Form Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar Colaborador</DialogTitle>
+            <DialogDescription>Atualize os dados e foto do colaborador</DialogDescription>
+          </DialogHeader>
+
+          {editingEmployee && (
+            <form onSubmit={handleSaveEdit} className="flex flex-col md:flex-row gap-6 mt-2">
+              {/* Coluna da Foto (Esquerda) - 3x4 */}
+              <div className="flex flex-col items-center gap-3 w-full md:w-1/3">
+                <div className="w-40 h-56 bg-muted border-2 border-dashed border-primary/20 rounded-md flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 hover:bg-muted/80 transition-all relative overflow-hidden group shadow-sm">
+                  {editPhoto ? (
+                    <>
+                      <img src={editPhoto} alt="Foto 3x4" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium">
+                        Trocar foto
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-10 w-10 text-primary/40 group-hover:scale-110 transition-transform mb-2" />
+                      <span className="text-xs text-primary/60 font-medium uppercase tracking-wider">Foto 3x4</span>
+                    </>
+                  )}
+                  
+                  <input 
+                    id="edit-photo-upload" 
+                    type="file" 
+                    accept="image/*" 
+                    className="absolute inset-0 opacity-0 cursor-pointer" 
+                    onChange={handleEditPhotoChange} 
+                  />
+                </div>
+                {editPhoto ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditPhoto(null)} className="text-xs text-destructive hover:text-destructive">
+                    Remover Foto
+                  </Button>
+                ) : (
+                  <label htmlFor="edit-photo-upload" className="text-sm text-primary hover:underline font-medium cursor-pointer flex items-center gap-1">
+                    <Upload className="h-3.5 w-3.5" /> Adicionar Foto
+                  </label>
+                )}
+              </div>
+
+              {/* Coluna do Formulário (Direita) */}
+              <div className="flex-1 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Nome Completo *</label>
+                  <Input name="name" required defaultValue={editingEmployee.name} placeholder="Nome do colaborador" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Cargo *</label>
+                    <Select name="role" defaultValue={editingEmployee.role}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Professor(a)">Professor(a)</SelectItem>
+                        <SelectItem value="Coordenador(a)">Coordenador(a)</SelectItem>
+                        <SelectItem value="Secretário(a)">Secretário(a)</SelectItem>
+                        <SelectItem value="Auxiliar">Auxiliar</SelectItem>
+                        <SelectItem value="Porteiro">Porteiro</SelectItem>
+                        <SelectItem value="Serviços Gerais">Serviços Gerais</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Departamento *</label>
+                    <Select name="department" defaultValue={editingEmployee.department}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Pedagógico">Pedagógico</SelectItem>
+                        <SelectItem value="Administrativo">Administrativo</SelectItem>
+                        <SelectItem value="Financeiro">Financeiro</SelectItem>
+                        <SelectItem value="Serviços Gerais">Serviços Gerais</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Telefone *</label>
+                    <Input name="phone" required defaultValue={editingEmployee.phone} placeholder="(00) 00000-0000" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Data de Admissão *</label>
+                    <Input type="date" name="hire_date" required defaultValue={editingEmployee.hire_date} />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Email</label>
+                  <Input type="email" name="email" defaultValue={editingEmployee.email || ''} placeholder="email@exemplo.com" />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">
+                    Salvar Alterações
+                  </Button>
+                </div>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Ver Ficha Dialog */}
+      <Dialog open={isViewFichaOpen} onOpenChange={setIsViewFichaOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ficha do Colaborador</DialogTitle>
+            <DialogDescription>Detalhes cadastrais e administrativos</DialogDescription>
+          </DialogHeader>
+
+          {viewingEmployee && (
+            <div className="space-y-6 pt-2">
+              <div className="flex flex-col sm:flex-row items-center gap-5 p-4 bg-muted/40 rounded-lg border">
+                <Avatar className="h-24 w-24 border-2 border-primary/20 shadow-sm rounded-lg">
+                  {viewingEmployee.photoUrl && (
+                    <AvatarImage src={viewingEmployee.photoUrl} alt={viewingEmployee.name} className="object-cover" />
+                  )}
+                  <AvatarFallback className="bg-primary/10 text-primary text-3xl font-bold rounded-lg">
+                    {viewingEmployee.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-center sm:text-left space-y-1 flex-1">
+                  <h3 className="text-xl font-bold text-foreground">{viewingEmployee.name}</h3>
+                  <p className="text-sm text-muted-foreground flex items-center justify-center sm:justify-start gap-1.5">
+                    <Briefcase className="h-4 w-4" /> {viewingEmployee.role} • {viewingEmployee.department}
+                  </p>
+                  <div className="pt-1 flex items-center justify-center sm:justify-start gap-2">
+                    {getStatusBadge(viewingEmployee.status)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div className="p-3 rounded-md bg-background border space-y-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                    <Phone className="h-3.5 w-3.5" /> Telefone
+                  </span>
+                  <p className="font-semibold text-foreground">{viewingEmployee.phone || '-'}</p>
+                </div>
+
+                <div className="p-3 rounded-md bg-background border space-y-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                    <Mail className="h-3.5 w-3.5" /> Email
+                  </span>
+                  <p className="font-semibold text-foreground truncate">{viewingEmployee.email || 'Não informado'}</p>
+                </div>
+
+                <div className="p-3 rounded-md bg-background border space-y-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                    <Calendar className="h-3.5 w-3.5" /> Data de Admissão
+                  </span>
+                  <p className="font-semibold text-foreground">
+                    {new Date(viewingEmployee.hire_date).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-md bg-background border space-y-1">
+                  <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                    <FileText className="h-3.5 w-3.5" /> Ocorrências Registradas
+                  </span>
+                  <p className="font-semibold text-foreground">
+                    {viewingEmployee.ocorrencias?.length || 0} registro(s)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-3 border-t">
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedEmployeeHistory(viewingEmployee);
+                    setIsHistoryOpen(true);
+                  }}
+                >
+                  <FileText className="mr-2 h-4 w-4" /> Histórico & Ocorrências
+                </Button>
+                <Button 
+                  onClick={() => {
+                    const emp = viewingEmployee;
+                    setIsViewFichaOpen(false);
+                    handleOpenEdit(emp);
+                  }}
+                >
+                  <Pencil className="mr-2 h-4 w-4" /> Editar Colaborador
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
