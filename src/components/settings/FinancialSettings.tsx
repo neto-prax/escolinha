@@ -19,6 +19,16 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Pencil, Trash2, CreditCard, Percent, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface PaymentPlan {
   id: string;
@@ -47,6 +57,7 @@ export const FinancialSettings = () => {
   const [isDiscountDialogOpen, setIsDiscountDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<PaymentPlan | null>(null);
   const [editingDiscount, setEditingDiscount] = useState<DiscountType | null>(null);
+  const [planToDelete, setPlanToDelete] = useState<PaymentPlan | null>(null);
   
   // Plan form state
   const [planName, setPlanName] = useState('');
@@ -96,6 +107,7 @@ export const FinancialSettings = () => {
   // Mutations
   const savePlanMutation = useMutation({
     mutationFn: async (data: Partial<PaymentPlan>) => {
+      if (!school?.id) throw new Error('Escola não identificada');
       if (editingPlan) {
         const { error } = await supabase
           .from('payment_plans')
@@ -110,7 +122,7 @@ export const FinancialSettings = () => {
             description: data.description,
             installments: data.installments || 1,
             discount_percentage: data.discount_percentage || 0,
-            school_id: school?.id!,
+            school_id: school.id,
           });
         if (error) throw error;
       }
@@ -131,9 +143,25 @@ export const FinancialSettings = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payment-plans'] });
+      setPlanToDelete(null);
       toast.success('Plano removido!');
     },
     onError: () => toast.error('Erro ao remover plano'),
+  });
+
+  const togglePlanMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from('payment_plans')
+        .update({ is_active: isActive })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payment-plans'] });
+      toast.success('Plano atualizado!');
+    },
+    onError: () => toast.error('Erro ao atualizar plano'),
   });
 
   const saveDiscountMutation = useMutation({
@@ -258,7 +286,7 @@ export const FinancialSettings = () => {
         <TabsList>
           <TabsTrigger value="plans" className="gap-2">
             <CreditCard className="h-4 w-4" />
-            Planos de Pagamento
+            Planos de mensalidade
           </TabsTrigger>
           <TabsTrigger value="discounts" className="gap-2">
             <Percent className="h-4 w-4" />
@@ -271,9 +299,9 @@ export const FinancialSettings = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Planos de Pagamento</CardTitle>
+                <CardTitle>Planos de mensalidade</CardTitle>
                 <CardDescription>
-                  Configure os planos disponíveis para matrícula (ex: Anual, Semestral, Mensal)
+                  Configure as opções de cobrança disponíveis nas matrículas
                 </CardDescription>
               </div>
               <Button onClick={() => openPlanDialog()}>
@@ -315,13 +343,24 @@ export const FinancialSettings = () => {
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <div className="flex items-center gap-2 pr-2">
+                          <span className="text-xs text-muted-foreground">
+                            {plan.is_active ? 'Ativo' : 'Inativo'}
+                          </span>
+                          <Switch
+                            checked={plan.is_active}
+                            disabled={togglePlanMutation.isPending}
+                            onCheckedChange={(checked) => togglePlanMutation.mutate({ id: plan.id, isActive: checked })}
+                            aria-label={`${plan.is_active ? 'Desativar' : 'Ativar'} plano ${plan.name}`}
+                          />
+                        </div>
                         <Button variant="ghost" size="icon" onClick={() => openPlanDialog(plan)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => deletePlanMutation.mutate(plan.id)}
+                          onClick={() => setPlanToDelete(plan)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -407,9 +446,9 @@ export const FinancialSettings = () => {
       <Dialog open={isPlanDialogOpen} onOpenChange={setIsPlanDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingPlan ? 'Editar Plano' : 'Novo Plano'}</DialogTitle>
+            <DialogTitle>{editingPlan ? 'Editar plano de mensalidade' : 'Novo plano de mensalidade'}</DialogTitle>
             <DialogDescription>
-              Configure um plano de pagamento para as matrículas
+              Configure um plano de mensalidade para as matrículas
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -462,6 +501,29 @@ export const FinancialSettings = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!planToDelete} onOpenChange={(open) => { if (!open) setPlanToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir plano de mensalidade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O plano “{planToDelete?.name}” será removido. Matrículas que já usam esse plano podem impedir a exclusão.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletePlanMutation.isPending}
+              onClick={() => {
+                if (planToDelete) deletePlanMutation.mutate(planToDelete.id);
+              }}
+            >
+              Excluir plano
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Discount Dialog */}
       <Dialog open={isDiscountDialogOpen} onOpenChange={setIsDiscountDialogOpen}>

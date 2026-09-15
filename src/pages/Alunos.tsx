@@ -21,6 +21,16 @@ import { Aluno, Mensalidade } from '@/types/aluno';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { usePermissions } from '@/hooks/usePermissions';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 type PaymentDetail = {
   mensalidadeId: string;
@@ -66,6 +76,7 @@ const Alunos = () => {
   const [selectedAlunosIds, setSelectedAlunosIds] = useState<string[]>([]);
   const [selectedMensalidadesIds, setSelectedMensalidadesIds] = useState<string[]>([]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [mensalidadesToDelete, setMensalidadesToDelete] = useState<string[]>([]);
   const [paymentDetails, setPaymentDetails] = useState<Record<string, PaymentDetail>>({});
   
   const [enturmarValorBase, setEnturmarValorBase] = useState('');
@@ -466,6 +477,29 @@ const Alunos = () => {
     setSelectedMensalidadesIds(prev => 
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
+  };
+
+  const handleDeleteMensalidades = () => {
+    if (mensalidadesToDelete.length === 0) return;
+
+    const ids = new Set(mensalidadesToDelete);
+    const linkedLancamentoIds = new Set(
+      mensalidades
+        .filter((mensalidade) => ids.has(mensalidade.id) && mensalidade.lancamentoId)
+        .map((mensalidade) => mensalidade.lancamentoId as string),
+    );
+
+    setMensalidades(mensalidades.filter((mensalidade) => !ids.has(mensalidade.id)));
+    if (linkedLancamentoIds.size > 0) {
+      setLancamentos(lancamentos.filter((lancamento) => !linkedLancamentoIds.has(lancamento.id)));
+    }
+    setSelectedMensalidadesIds((selected) => selected.filter((id) => !ids.has(id)));
+    toast.success(
+      mensalidadesToDelete.length === 1
+        ? 'Mensalidade excluída com sucesso!'
+        : `${mensalidadesToDelete.length} mensalidades excluídas com sucesso!`,
+    );
+    setMensalidadesToDelete([]);
   };
 
   const handleDownloadTemplateMensalidades = () => {
@@ -1483,13 +1517,21 @@ const Alunos = () => {
             </div>
             <div className="flex flex-wrap gap-2 items-center">
               {selectedMensalidadesIds.length > 0 && (
-                <Button 
-                  variant="default" 
-                  className="bg-green-600 hover:bg-green-700" 
-                  onClick={openPaymentModal}
-                >
-                  Dar Baixa em {selectedMensalidadesIds.length} Selecionada(s)
-                </Button>
+                <>
+                  <Button 
+                    variant="default" 
+                    className="bg-green-600 hover:bg-green-700" 
+                    onClick={openPaymentModal}
+                  >
+                    Dar Baixa em {selectedMensalidadesIds.length} Selecionada(s)
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setMensalidadesToDelete(selectedMensalidadesIds)}
+                  >
+                    Excluir {selectedMensalidadesIds.length} selecionada(s)
+                  </Button>
+                </>
               )}
               
               <Input
@@ -1615,20 +1657,31 @@ const Alunos = () => {
                                 const mesFormatado = `${mes}/${ano}`;
                                 
                                 return (
-                                  <Badge 
-                                    key={mensalidade.id}
-                                    variant={mensalidade.status === 'Pago' ? 'default' : (isAtrasada ? 'destructive' : 'outline')} 
-                                    className={`cursor-pointer transition-all px-3 py-1 ${mensalidade.status === 'Pago' ? 'bg-green-500 hover:bg-green-600 text-white border-transparent' : 'hover:bg-primary/10'} ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
-                                    onClick={() => {
-                                      if (mensalidade.status === 'Pendente') {
-                                        toggleMensalidadeSelection(mensalidade.id);
-                                      }
-                                    }}
-                                    title={mensalidade.status === 'Pago' ? 'Já está pago' : 'Clique para selecionar/deselecionar'}
-                                  >
-                                    <span className="font-medium mr-2">{mesFormatado}</span>
-                                    <span className="opacity-80">({statusText})</span>
-                                  </Badge>
+                                  <div key={mensalidade.id} className="flex items-center gap-1">
+                                    <Badge 
+                                      variant={mensalidade.status === 'Pago' ? 'default' : (isAtrasada ? 'destructive' : 'outline')} 
+                                      className={`cursor-pointer transition-all px-3 py-1 ${mensalidade.status === 'Pago' ? 'bg-green-500 hover:bg-green-600 text-white border-transparent' : 'hover:bg-primary/10'} ${isSelected ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+                                      onClick={() => {
+                                        if (mensalidade.status === 'Pendente') {
+                                          toggleMensalidadeSelection(mensalidade.id);
+                                        }
+                                      }}
+                                      title={mensalidade.status === 'Pago' ? 'Já está pago' : 'Clique para selecionar/deselecionar'}
+                                    >
+                                      <span className="font-medium mr-2">{mesFormatado}</span>
+                                      <span className="opacity-80">({statusText})</span>
+                                    </Badge>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-destructive hover:text-destructive"
+                                      title={`Excluir mensalidade de ${mesFormatado}`}
+                                      onClick={() => setMensalidadesToDelete([mensalidade.id])}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
                                 );
                               })
                             )}
@@ -1644,6 +1697,33 @@ const Alunos = () => {
         </Card>
       </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={mensalidadesToDelete.length > 0}
+        onOpenChange={(open) => {
+          if (!open) setMensalidadesToDelete([]);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Excluir {mensalidadesToDelete.length === 1 ? 'mensalidade' : 'mensalidades'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. Caso uma mensalidade esteja paga, o lançamento financeiro associado também será removido.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteMensalidades}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={isAlunoFormOpen} onOpenChange={(open) => {
         setIsAlunoFormOpen(open);
