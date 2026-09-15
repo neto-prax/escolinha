@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Award, GraduationCap, Plus, Search, TrendingUp, AlertTriangle, CheckCircle, Edit3, Trash2 } from 'lucide-react';
-import { Award, GraduationCap, Plus, Search, TrendingUp, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface NotaAluno {
