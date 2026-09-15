@@ -6,7 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Users, FileDown, Upload, Download, MoreHorizontal, UserCog, FileText, UserPlus } from 'lucide-react';
+import { 
+  Plus, Users, FileDown, Upload, Download, MoreHorizontal, UserCog, FileText, UserPlus,
+  ChevronDown, ChevronRight, ChevronUp, FolderTree, AlertCircle, CheckCircle2, DollarSign, AlertTriangle, GraduationCap 
+} from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -67,6 +70,11 @@ const Alunos = () => {
   
   const [enturmarValorBase, setEnturmarValorBase] = useState('');
   const [enturmarTurmaInfo, setEnturmarTurmaInfo] = useState('');
+
+  const [expandedTurmas, setExpandedTurmas] = useState<Record<string, boolean>>({});
+  const [expandedAlunos, setExpandedAlunos] = useState<Record<string, boolean>>({});
+  const [turmasFilterText, setTurmasFilterText] = useState('');
+  const [apenasInadimplentes, setApenasInadimplentes] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileInputMensalidadesRef = useRef<HTMLInputElement>(null);
@@ -580,14 +588,190 @@ const Alunos = () => {
     reader.readAsBinaryString(file);
   };
 
+  const isMensalidadeAtrasada = (m: Mensalidade) => {
+    if (m.status === 'Pago') return false;
+    if (m.status === 'Atrasado') return true;
+    if (m.status === 'Pendente') {
+      const todayMidnight = new Date();
+      todayMidnight.setHours(0, 0, 0, 0);
+      const dueDate = new Date(m.dataVencimento);
+      return dueDate.getTime() < todayMidnight.getTime();
+    }
+    return false;
+  };
+
+  const getAlunoFinanceiroInfo = (aluno: Aluno) => {
+    const alunoMensalidades = mensalidades.filter(m => m.alunoId === aluno.id);
+    const atrasadas = alunoMensalidades.filter(isMensalidadeAtrasada);
+    const pagas = alunoMensalidades.filter(m => m.status === 'Pago');
+    const pendentes = alunoMensalidades.filter(m => m.status === 'Pendente' && !isMensalidadeAtrasada(m));
+
+    const valorBase = parseFloat(aluno.valorBase || '0') || 0;
+    const desconto = parseFloat(aluno.descontoMensalidade || '0') || 0;
+    const valorLiquido = Math.max(0, valorBase - desconto);
+
+    const totalAtrasado = atrasadas.reduce((sum, m) => sum + (Number(m.valorFinal) || 0), 0);
+    const totalPago = pagas.reduce((sum, m) => sum + (Number(m.valorFinal) || 0), 0);
+    const totalPendente = pendentes.reduce((sum, m) => sum + (Number(m.valorFinal) || 0), 0);
+
+    const isInadimplente = atrasadas.length > 0;
+
+    return {
+      mensalidades: alunoMensalidades.sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia)),
+      atrasadas,
+      pagas,
+      pendentes,
+      valorBase,
+      desconto,
+      valorLiquido,
+      totalAtrasado,
+      totalPago,
+      totalPendente,
+      isInadimplente
+    };
+  };
+
+  const formatCurrency = (val: number) => {
+    return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const formatDateBR = (dateStr?: string) => {
+    if (!dateStr) return '-';
+    try {
+      const parts = dateStr.split('T')[0].split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatMonthRef = (mesRef?: string) => {
+    if (!mesRef) return '-';
+    const [ano, mes] = mesRef.split('-');
+    if (ano && mes) {
+      const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      const mesIndex = parseInt(mes, 10) - 1;
+      const nomeMes = meses[mesIndex] || mes;
+      return `${nomeMes}/${ano}`;
+    }
+    return mesRef;
+  };
+
   const groupedAlunos = alunos.reduce((acc, aluno) => {
-    if (aluno.setor && aluno.classe && aluno.turma && aluno.status === 'Ativo') {
-      const groupKey = `${aluno.setor} - ${aluno.classe} (Turma ${aluno.turma})`;
+    if (aluno.status === 'Ativo') {
+      const groupKey = (aluno.setor && aluno.classe && aluno.turma)
+        ? `${aluno.setor} - ${aluno.classe} (Turma ${aluno.turma})`
+        : (aluno.setor || aluno.classe)
+          ? `${aluno.setor || ''} ${aluno.classe || ''} (Sem Turma)`.trim()
+          : 'Alunos Sem Turma Definida';
       if (!acc[groupKey]) acc[groupKey] = [];
       acc[groupKey].push(aluno);
     }
     return acc;
   }, {} as Record<string, Aluno[]>);
+
+  const turmasTreeData = Object.entries(groupedAlunos).map(([groupName, groupAlunos]) => {
+    const alunosWithFin = groupAlunos.map(aluno => ({
+      aluno,
+      fin: getAlunoFinanceiroInfo(aluno)
+    }));
+
+    const totalAlunos = alunosWithFin.length;
+    const totalBase = alunosWithFin.reduce((sum, a) => sum + a.fin.valorBase, 0);
+    const totalDesconto = alunosWithFin.reduce((sum, a) => sum + a.fin.desconto, 0);
+    const totalLiquido = alunosWithFin.reduce((sum, a) => sum + a.fin.valorLiquido, 0);
+    const totalAtrasado = alunosWithFin.reduce((sum, a) => sum + a.fin.totalAtrasado, 0);
+    const totalPago = alunosWithFin.reduce((sum, a) => sum + a.fin.totalPago, 0);
+    const inadimplentesCount = alunosWithFin.filter(a => a.fin.isInadimplente).length;
+
+    return {
+      groupName,
+      groupAlunos: alunosWithFin,
+      totalAlunos,
+      totalBase,
+      totalDesconto,
+      totalLiquido,
+      totalAtrasado,
+      totalPago,
+      inadimplentesCount
+    };
+  });
+
+  const filteredTurmasTree = turmasTreeData.filter(turma => {
+    const ft = turmasFilterText.trim().toLowerCase();
+    const matchesFilterText = 
+      !ft ||
+      turma.groupName.toLowerCase().includes(ft) ||
+      turma.groupAlunos.some(a => 
+        a.aluno.nome.toLowerCase().includes(ft) ||
+        a.aluno.matricula.toLowerCase().includes(ft)
+      );
+
+    if (!matchesFilterText) return false;
+
+    if (apenasInadimplentes && turma.inadimplentesCount === 0) {
+      return false;
+    }
+
+    return true;
+  }).map(turma => {
+    let visibleAlunos = turma.groupAlunos;
+    if (apenasInadimplentes) {
+      visibleAlunos = visibleAlunos.filter(a => a.fin.isInadimplente);
+    }
+    if (turmasFilterText.trim()) {
+      const ft = turmasFilterText.trim().toLowerCase();
+      if (!turma.groupName.toLowerCase().includes(ft)) {
+        visibleAlunos = visibleAlunos.filter(a => 
+          a.aluno.nome.toLowerCase().includes(ft) ||
+          a.aluno.matricula.toLowerCase().includes(ft)
+        );
+      }
+    }
+    return {
+      ...turma,
+      visibleAlunos
+    };
+  });
+
+  const globalTotalAlunosEnturmados = turmasTreeData.reduce((sum, t) => sum + t.totalAlunos, 0);
+  const globalTotalBase = turmasTreeData.reduce((sum, t) => sum + t.totalBase, 0);
+  const globalTotalDesconto = turmasTreeData.reduce((sum, t) => sum + t.totalDesconto, 0);
+  const globalTotalLiquidoMensal = turmasTreeData.reduce((sum, t) => sum + t.totalLiquido, 0);
+  const globalTotalAtrasado = turmasTreeData.reduce((sum, t) => sum + t.totalAtrasado, 0);
+  const globalTotalInadimplentes = turmasTreeData.reduce((sum, t) => sum + t.inadimplentesCount, 0);
+  const globalTaxaAdimplencia = globalTotalAlunosEnturmados > 0 
+    ? (((globalTotalAlunosEnturmados - globalTotalInadimplentes) / globalTotalAlunosEnturmados) * 100).toFixed(1) 
+    : '100';
+
+  const isTurmaOpen = (groupName: string) => {
+    return expandedTurmas[groupName] ?? true;
+  };
+
+  const toggleTurma = (groupName: string) => {
+    setExpandedTurmas(prev => ({
+      ...prev,
+      [groupName]: !isTurmaOpen(groupName)
+    }));
+  };
+
+  const toggleAluno = (alunoId: string) => {
+    setExpandedAlunos(prev => ({
+      ...prev,
+      [alunoId]: !prev[alunoId]
+    }));
+  };
+
+  const expandAllTurmas = (open: boolean) => {
+    const newState: Record<string, boolean> = {};
+    turmasTreeData.forEach(t => {
+      newState[t.groupName] = open;
+    });
+    setExpandedTurmas(newState);
+  };
 
   return (
     <div className="space-y-6">
@@ -813,59 +997,478 @@ const Alunos = () => {
       </Card>
       </TabsContent>
 
-      <TabsContent value="turmas" className="space-y-4">
+      <TabsContent value="turmas" className="space-y-6">
+        {/* KPI Summary Cards */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="bg-gradient-to-br from-blue-50/50 to-blue-100/30 dark:from-blue-950/20 dark:to-blue-900/10 border-blue-200 dark:border-blue-900/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                Previsão Líquida Mensal
+                <DollarSign className="h-4 w-4 text-primary" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">{formatCurrency(globalTotalLiquidoMensal)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Base: {formatCurrency(globalTotalBase)} | Bolsas: -{formatCurrency(globalTotalDesconto)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-red-50/50 to-red-100/30 dark:from-red-950/20 dark:to-red-900/10 border-red-200 dark:border-red-900/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                Total em Atraso (Inadimplência)
+                <AlertCircle className="h-4 w-4 text-destructive" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-destructive">{formatCurrency(globalTotalAtrasado)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {globalTotalInadimplentes} aluno{globalTotalInadimplentes !== 1 ? 's' : ''} com mensalidade{globalTotalInadimplentes !== 1 ? 's' : ''} em atraso
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                Turmas & Alunos
+                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{turmasTreeData.length} turmas</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {globalTotalAlunosEnturmados} alunos enturmados ativos
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                Taxa de Adimplência
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-600">{globalTaxaAdimplencia}%</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {globalTotalAlunosEnturmados - globalTotalInadimplentes} de {globalTotalAlunosEnturmados} em dia
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tree View Main Card */}
         <Card>
-          <CardHeader>
-            <CardTitle>Turmas e Contratos</CardTitle>
-            <CardDescription>Visão geral de alunos agrupados por turma e seus detalhes financeiros.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-8">
-            {Object.keys(groupedAlunos).length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">Nenhum aluno enturmado ainda.</div>
-            ) : (
-              Object.entries(groupedAlunos).map(([groupName, groupAlunos]) => (
-                <div key={groupName} className="space-y-3">
-                  <h3 className="font-semibold text-lg border-b pb-2">{groupName}</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Matrícula</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Valor Base</TableHead>
-                        <TableHead>Desconto</TableHead>
-                        <TableHead>Valor Final</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {groupAlunos.map(aluno => {
-                        const valorBase = parseFloat(aluno.valorBase || '0');
-                        const desconto = parseFloat(aluno.descontoMensalidade || '0');
-                        const valorFinal = Math.max(0, valorBase - desconto);
-                        
-                        return (
-                          <TableRow key={aluno.id}>
-                            <TableCell className="font-medium text-muted-foreground">{aluno.matricula}</TableCell>
-                            <TableCell className="font-bold">{aluno.nome}</TableCell>
-                            <TableCell>
-                              {valorBase.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </TableCell>
-                            <TableCell className="text-destructive">
-                              {desconto > 0 ? desconto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}
-                            </TableCell>
-                            <TableCell className="font-medium text-primary">
-                              {valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </TableCell>
-                            <TableCell>
-                              Dia {aluno.diaVencimento || '5'}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+          <CardHeader className="space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <FolderTree className="h-5 w-5 text-primary" />
+                  Mensalidades por Turma (Estrutura em Árvore)
+                </CardTitle>
+                <CardDescription>
+                  Visão hierárquica das turmas e detalhamento dos contratos e faturas por aluno.
+                </CardDescription>
+              </div>
+
+              {/* Controls Bar */}
+              <div className="flex flex-wrap items-center gap-3">
+                <Input
+                  placeholder="Filtrar por turma ou aluno..."
+                  value={turmasFilterText}
+                  onChange={e => setTurmasFilterText(e.target.value)}
+                  className="w-full sm:w-64"
+                />
+
+                <div className="flex items-center space-x-2 bg-muted/40 px-3 py-1.5 rounded-lg border">
+                  <Switch
+                    id="apenasInadimplentes"
+                    checked={apenasInadimplentes}
+                    onCheckedChange={setApenasInadimplentes}
+                  />
+                  <label
+                    htmlFor="apenasInadimplentes"
+                    className="text-xs sm:text-sm font-medium cursor-pointer flex items-center gap-1.5 select-none"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <span>Apenas Inadimplentes</span>
+                    {globalTotalInadimplentes > 0 && (
+                      <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                        {globalTotalInadimplentes}
+                      </Badge>
+                    )}
+                  </label>
                 </div>
-              ))
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => expandAllTurmas(true)}
+                    className="text-xs"
+                  >
+                    Expandir Todas
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => expandAllTurmas(false)}
+                    className="text-xs"
+                  >
+                    Recolher Todas
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            {filteredTurmasTree.length === 0 ? (
+              <div className="text-center text-muted-foreground py-12 border border-dashed rounded-lg">
+                {turmasFilterText || apenasInadimplentes ? (
+                  <div className="space-y-2">
+                    <p className="font-semibold text-foreground">Nenhuma turma ou aluno encontrado com os filtros atuais.</p>
+                    <p className="text-sm">Tente limpar a busca ou desativar o filtro de inadimplentes.</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => { setTurmasFilterText(''); setApenasInadimplentes(false); }}
+                      className="mt-2 text-xs"
+                    >
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Nenhum aluno enturmado no sistema ainda.</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredTurmasTree.map(turma => {
+                  const isExpanded = isTurmaOpen(turma.groupName);
+
+                  return (
+                    <div
+                      key={turma.groupName}
+                      className="border rounded-xl overflow-hidden bg-card shadow-sm transition-all"
+                    >
+                      {/* Turma Root Tree Node Header */}
+                      <div
+                        className="p-4 bg-muted/25 hover:bg-muted/40 cursor-pointer border-b flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors"
+                        onClick={() => toggleTurma(turma.groupName)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            className="p-1 rounded-md hover:bg-muted text-muted-foreground transition-colors"
+                            aria-label={isExpanded ? "Recolher turma" : "Expandir turma"}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-5 w-5 text-primary" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                            )}
+                          </button>
+
+                          <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                            <GraduationCap className="h-5 w-5" />
+                          </div>
+
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-bold text-base sm:text-lg text-foreground">
+                                {turma.groupName}
+                              </h3>
+                              <Badge variant="secondary" className="text-xs">
+                                {turma.totalAlunos} aluno{turma.totalAlunos !== 1 ? 's' : ''}
+                              </Badge>
+
+                              {turma.inadimplentesCount > 0 ? (
+                                <Badge variant="destructive" className="text-xs flex items-center gap-1 font-semibold">
+                                  <AlertCircle className="h-3 w-3" />
+                                  {turma.inadimplentesCount} inadimplente{turma.inadimplentesCount !== 1 ? 's' : ''}
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 text-xs flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                                  100% Em Dia
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Financial Snapshot on Turma Node */}
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm">
+                          <div className="bg-background px-3 py-1.5 rounded-md border text-muted-foreground">
+                            Base: <strong className="text-foreground">{formatCurrency(turma.totalBase)}</strong>
+                          </div>
+                          {turma.totalDesconto > 0 && (
+                            <div className="bg-background px-3 py-1.5 rounded-md border text-muted-foreground">
+                              Bolsas: <strong className="text-destructive">-{formatCurrency(turma.totalDesconto)}</strong>
+                            </div>
+                          )}
+                          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40 px-3 py-1.5 rounded-md text-emerald-700 dark:text-emerald-300">
+                            A Receber/Mês: <strong className="font-bold">{formatCurrency(turma.totalLiquido)}</strong>
+                          </div>
+                          {turma.totalAtrasado > 0 && (
+                            <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/40 px-3 py-1.5 rounded-md text-red-700 dark:text-red-300">
+                              Atrasado: <strong className="font-bold">{formatCurrency(turma.totalAtrasado)}</strong>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Turma Subtree (When Expanded) */}
+                      {isExpanded && (
+                        <div className="p-4 sm:p-5 space-y-4 bg-background/50">
+                          {/* Detailed Turma Financial Strip */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3.5 rounded-lg bg-muted/30 border text-xs sm:text-sm">
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-medium">Previsão Bruta (Base)</span>
+                              <span className="font-bold text-foreground text-sm sm:text-base">{formatCurrency(turma.totalBase)}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-medium">Descontos / Bolsas</span>
+                              <span className="font-bold text-destructive text-sm sm:text-base">
+                                {turma.totalDesconto > 0 ? `-${formatCurrency(turma.totalDesconto)}` : 'R$ 0,00'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-medium">Previsão Líquida (A Receber)</span>
+                              <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm sm:text-base">{formatCurrency(turma.totalLiquido)}/mês</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[11px] uppercase tracking-wider font-medium">Inadimplência Acumulada</span>
+                              <span className={`font-bold text-sm sm:text-base ${turma.totalAtrasado > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                {turma.totalAtrasado > 0 ? formatCurrency(turma.totalAtrasado) : 'R$ 0,00'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Tree Children: Students of this Turma */}
+                          <div className="space-y-3 pl-2 sm:pl-4 border-l-2 border-primary/20 ml-2 sm:ml-4">
+                            {turma.visibleAlunos.length === 0 ? (
+                              <div className="text-xs text-muted-foreground italic py-3">
+                                Nenhum aluno desta turma corresponde aos filtros selecionados.
+                              </div>
+                            ) : (
+                              turma.visibleAlunos.map(({ aluno, fin }) => {
+                                const isAlunoExpanded = !!expandedAlunos[aluno.id];
+
+                                return (
+                                  <div
+                                    key={aluno.id}
+                                    className={`rounded-lg border transition-all ${
+                                      fin.isInadimplente
+                                        ? 'border-red-300 dark:border-red-900/60 bg-red-50/40 dark:bg-red-950/20 shadow-sm'
+                                        : 'border-border bg-card hover:bg-muted/20'
+                                    }`}
+                                  >
+                                    {/* Student Header */}
+                                    <div className="p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                                      <div className="flex items-start sm:items-center gap-3">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleAluno(aluno.id)}
+                                          className="p-1 hover:bg-muted rounded text-muted-foreground mt-0.5 sm:mt-0 transition-colors"
+                                          title={isAlunoExpanded ? "Ocultar faturas" : "Ver faturas"}
+                                        >
+                                          {isAlunoExpanded ? (
+                                            <ChevronDown className="h-4 w-4 text-primary" />
+                                          ) : (
+                                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                          )}
+                                        </button>
+
+                                        <div>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            {/* IMPORTANT: If student is defaulting, display name in RED */}
+                                            <span
+                                              className={
+                                                fin.isInadimplente
+                                                  ? "text-red-600 dark:text-red-400 font-bold text-base flex items-center gap-1.5"
+                                                  : "text-foreground font-semibold text-base flex items-center gap-1.5"
+                                              }
+                                            >
+                                              {fin.isInadimplente ? (
+                                                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                                              ) : (
+                                                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                              )}
+                                              {aluno.nome}
+                                            </span>
+
+                                            <Badge variant="outline" className="text-xs font-normal">
+                                              Matrícula: {aluno.matricula}
+                                            </Badge>
+
+                                            {fin.isInadimplente ? (
+                                              <Badge variant="destructive" className="text-xs font-semibold flex items-center gap-1">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Inadimplente ({fin.atrasadas.length} fatura{fin.atrasadas.length > 1 ? 's' : ''} vencida{fin.atrasadas.length > 1 ? 's' : ''}: {formatCurrency(fin.totalAtrasado)})
+                                              </Badge>
+                                            ) : (
+                                              <Badge variant="outline" className="text-xs text-emerald-700 dark:text-emerald-400 border-emerald-300 flex items-center gap-1">
+                                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                                Em Dia
+                                              </Badge>
+                                            )}
+                                          </div>
+
+                                          <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                                            <span>Responsável: <strong className="text-foreground">{aluno.nomeResponsavel || '-'}</strong> {aluno.contatoResponsavel ? `(${aluno.contatoResponsavel})` : ''}</span>
+                                            <span>Vencimento do Contrato: <strong className="text-foreground">Todo dia {aluno.diaVencimento || '5'}</strong></span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Student Financial Breakdown Values */}
+                                      <div className="flex flex-wrap items-center gap-3 sm:gap-6 bg-muted/40 dark:bg-muted/10 p-2.5 rounded-lg border border-border/60 text-xs sm:text-sm">
+                                        <div>
+                                          <span className="text-[11px] text-muted-foreground block">Valor Base</span>
+                                          <span className="font-medium text-foreground">{formatCurrency(fin.valorBase)}</span>
+                                        </div>
+
+                                        <div>
+                                          <span className="text-[11px] text-muted-foreground block">Desconto</span>
+                                          <span className="font-medium text-destructive">
+                                            {fin.desconto > 0 ? `-${formatCurrency(fin.desconto)}` : '-'}
+                                          </span>
+                                        </div>
+
+                                        <div>
+                                          <span className="text-[11px] text-muted-foreground block font-medium">A Receber/Mês</span>
+                                          <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{formatCurrency(fin.valorLiquido)}</span>
+                                        </div>
+
+                                        {fin.isInadimplente && (
+                                          <div className="border-l pl-3 sm:pl-4 border-red-300 dark:border-red-800">
+                                            <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 block">Total em Atraso</span>
+                                            <span className="font-bold text-red-600 dark:text-red-400 text-sm">{formatCurrency(fin.totalAtrasado)}</span>
+                                          </div>
+                                        )}
+
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => toggleAluno(aluno.id)}
+                                          className="text-xs ml-auto hover:bg-muted"
+                                        >
+                                          {isAlunoExpanded ? 'Ocultar faturas' : `Ver faturas (${fin.mensalidades.length})`}
+                                          {isAlunoExpanded ? (
+                                            <ChevronUp className="h-3.5 w-3.5 ml-1 text-muted-foreground" />
+                                          ) : (
+                                            <ChevronDown className="h-3.5 w-3.5 ml-1 text-muted-foreground" />
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </div>
+
+                                    {/* Student Leaf: Monthly Installments Subtree */}
+                                    {isAlunoExpanded && (
+                                      <div className="border-t border-dashed p-3 sm:p-4 bg-muted/15 space-y-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                            <span>Mensalidades e Faturas do Aluno</span>
+                                            <span className="font-normal text-muted-foreground">({fin.mensalidades.length} geradas)</span>
+                                          </h4>
+                                          <div className="text-xs flex flex-wrap gap-3 text-muted-foreground">
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                              ● {fin.pagas.length} paga{fin.pagas.length !== 1 ? 's' : ''}
+                                            </span>
+                                            <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                              ● {fin.pendentes.length} a vencer
+                                            </span>
+                                            {fin.atrasadas.length > 0 && (
+                                              <span className="text-red-600 dark:text-red-400 font-bold">
+                                                ● {fin.atrasadas.length} em atraso
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {fin.mensalidades.length === 0 ? (
+                                          <div className="text-xs text-muted-foreground italic py-3 text-center bg-background/50 rounded-md border border-dashed">
+                                            Nenhuma mensalidade gerada para este aluno ainda. Você pode gerá-las na aba <strong>Mensalidades</strong>.
+                                          </div>
+                                        ) : (
+                                          <div className="rounded-md border bg-card overflow-x-auto">
+                                            <Table>
+                                              <TableHeader>
+                                                <TableRow className="text-xs bg-muted/40">
+                                                  <TableHead>Mês Referência</TableHead>
+                                                  <TableHead>Data de Vencimento</TableHead>
+                                                  <TableHead>Valor Líquido</TableHead>
+                                                  <TableHead>Status</TableHead>
+                                                  <TableHead>Data de Pagamento</TableHead>
+                                                </TableRow>
+                                              </TableHeader>
+                                              <TableBody>
+                                                {fin.mensalidades.map(m => {
+                                                  const atrasada = isMensalidadeAtrasada(m);
+                                                  return (
+                                                    <TableRow
+                                                      key={m.id}
+                                                      className={
+                                                        atrasada
+                                                          ? "bg-red-50/60 dark:bg-red-950/30 hover:bg-red-50/80"
+                                                          : m.status === 'Pago'
+                                                          ? "hover:bg-muted/30"
+                                                          : "hover:bg-muted/30"
+                                                      }
+                                                    >
+                                                      <TableCell className="font-semibold text-xs">
+                                                        {formatMonthRef(m.mesReferencia)}
+                                                      </TableCell>
+                                                      <TableCell className="text-xs">
+                                                        {formatDateBR(m.dataVencimento)}
+                                                      </TableCell>
+                                                      <TableCell className="text-xs font-semibold text-foreground">
+                                                        {formatCurrency(m.valorFinal)}
+                                                      </TableCell>
+                                                      <TableCell className="text-xs">
+                                                        {m.status === 'Pago' ? (
+                                                          <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] flex items-center gap-1 w-fit">
+                                                            <CheckCircle2 className="h-3 w-3" /> Pago
+                                                          </Badge>
+                                                        ) : atrasada ? (
+                                                          <Badge variant="destructive" className="text-[11px] flex items-center gap-1 w-fit">
+                                                            <AlertCircle className="h-3 w-3" /> Vencido / Atrasado
+                                                          </Badge>
+                                                        ) : (
+                                                          <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-300 text-[11px] flex items-center gap-1 w-fit">
+                                                            A Vencer
+                                                          </Badge>
+                                                        )}
+                                                      </TableCell>
+                                                      <TableCell className="text-xs text-muted-foreground">
+                                                        {m.dataPagamento ? formatDateBR(m.dataPagamento) : '-'}
+                                                      </TableCell>
+                                                    </TableRow>
+                                                  );
+                                                })}
+                                              </TableBody>
+                                            </Table>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
