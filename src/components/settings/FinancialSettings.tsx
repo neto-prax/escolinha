@@ -166,6 +166,7 @@ export const FinancialSettings = () => {
 
   const saveDiscountMutation = useMutation({
     mutationFn: async (data: Partial<DiscountType>) => {
+      if (!school?.id) throw new Error('Escola não identificada');
       if (editingDiscount) {
         const { error } = await supabase
           .from('discount_types')
@@ -180,7 +181,7 @@ export const FinancialSettings = () => {
             description: data.description,
             discount_percentage: data.discount_percentage,
             discount_fixed: data.discount_fixed,
-            school_id: school?.id!,
+            school_id: school.id,
           });
         if (error) throw error;
       }

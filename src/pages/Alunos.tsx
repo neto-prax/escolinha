@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Plus, Users, FileDown, Upload, Download, MoreHorizontal, UserCog, FileText, UserPlus,
-  ChevronDown, ChevronRight, ChevronUp, FolderTree, AlertCircle, CheckCircle2, DollarSign, AlertTriangle, GraduationCap 
+  ChevronDown, ChevronRight, ChevronUp, FolderTree, AlertCircle, CheckCircle2, DollarSign, AlertTriangle, GraduationCap, Trash2
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
