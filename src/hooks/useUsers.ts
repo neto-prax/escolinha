@@ -96,7 +96,9 @@ export function useUpdateUserRoles() {
       userId: string;
       roles: AppRole[];
     }) => {
-      if (!profile?.school_id) throw new Error('No school ID');
+      if (!profile?.school_id) {
+        throw new Error('Escola não identificada no perfil do usuário logado.');
+      }
 
       // Delete existing roles for this user in this school
       const { error: deleteError } = await supabase
@@ -105,7 +107,12 @@ export function useUpdateUserRoles() {
         .eq('user_id', userId)
         .eq('school_id', profile.school_id);
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        if (deleteError.code === '42501' || deleteError.message?.toLowerCase().includes('policy')) {
+          throw new Error('Permissão negada pelo banco: seu usuário precisa de permissão de Diretor/Administrador no Supabase para alterar cargos.');
+        }
+        throw deleteError;
+      }
 
       // Insert new roles
       if (roles.length > 0) {
@@ -119,7 +126,12 @@ export function useUpdateUserRoles() {
             }))
           );
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          if (insertError.code === '42501' || insertError.message?.toLowerCase().includes('policy')) {
+            throw new Error('Permissão negada pelo banco: seu usuário precisa de permissão de Diretor/Administrador no Supabase para alterar cargos.');
+          }
+          throw insertError;
+        }
       }
     },
     onSuccess: () => {

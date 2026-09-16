@@ -29,6 +29,13 @@ import {
   Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/utils';
+import {
+  TurmaPedagogica,
+  Materia,
+  DEFAULT_TURMAS_PEDAGOGICO,
+  DEFAULT_MATERIAS,
+} from '@/types/pedagogico';
 
 export interface AtividadeItem {
   id: string;
@@ -579,6 +586,11 @@ const TimeSlotRow: React.FC<TimeSlotRowProps> = ({
 };
 
 export const DiarioTab: React.FC = () => {
+  const [turmasPedagogico] = useLocalStorage<TurmaPedagogica[]>(
+    'escolinha_turmas_pedagogico_v1',
+    DEFAULT_TURMAS_PEDAGOGICO
+  );
+  const [materias] = useLocalStorage<Materia[]>('escolinha_materias_v1', DEFAULT_MATERIAS);
   const [aulas, setAulas] = useLocalStorage<AulaPlanejamento[]>('escolinha_aulas_planejadas', mockAulas);
   const [bancoAtividades, setBancoAtividades] = useLocalStorage<AtividadeItem[]>(
     'escolinha_banco_atividades',
@@ -587,7 +599,9 @@ export const DiarioTab: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<'diario' | 'semanal' | 'mensal'>('diario');
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [selectedTurmaFilter, setSelectedTurmaFilter] = useState('Sub-11 A');
+  const [selectedTurmaFilter, setSelectedTurmaFilter] = useState(
+    () => turmasPedagogico[0]?.nome || '1º Ano A'
+  );
   const [selectedDateFilter, setSelectedDateFilter] = useState(new Date().toISOString().split('T')[0]);
 
   // States de Banco de Atividades
@@ -751,7 +765,7 @@ export const DiarioTab: React.FC = () => {
 
     if (countSaved > 0) {
       toast.success(
-        `Sucesso! ${countSaved} horário(s) salvo(s) para o dia ${new Date(selectedDateFilter + 'T12:00:00').toLocaleDateString('pt-BR')}!`
+        `Sucesso! ${countSaved} horário(s) salvo(s) para o dia ${formatDate(selectedDateFilter)}!`
       );
     } else {
       toast.error('Preencha ao menos o nome de uma aula para salvar.');
@@ -781,7 +795,7 @@ export const DiarioTab: React.FC = () => {
   const handleSelectDateFromCalendar = (dateStr: string) => {
     setSelectedDateFilter(dateStr);
     setViewMode('diario');
-    toast.info(`Visualizando dia ${new Date(dateStr + 'T12:00:00').toLocaleDateString('pt-BR')}`);
+    toast.info(`Visualizando dia ${formatDate(dateStr)}`);
   };
 
   return (
@@ -851,14 +865,15 @@ export const DiarioTab: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <Select value={selectedTurmaFilter} onValueChange={setSelectedTurmaFilter}>
-              <SelectTrigger className="w-[160px] h-9 text-xs font-medium">
+              <SelectTrigger className="w-[180px] h-9 text-xs font-medium">
                 <SelectValue placeholder="Turma" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Sub-11 A">Sub-11 A</SelectItem>
-                <SelectItem value="Maternal A">Maternal A</SelectItem>
-                <SelectItem value="Sub-9 A">Sub-9 A</SelectItem>
-                <SelectItem value="Sub-13 A">Sub-13 A</SelectItem>
+                {turmasPedagogico.map((t) => (
+                  <SelectItem key={t.id} value={t.nome}>
+                    {t.nome}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
@@ -1063,7 +1078,7 @@ export const DiarioTab: React.FC = () => {
               <h4 className="text-sm font-bold">Modo de Fácil Leitura (Visualização Limpa)</h4>
               <p className="text-xs text-purple-800/80">
                 Visualizando planejamentos da turma <strong>{selectedTurmaFilter}</strong> do dia{' '}
-                <strong>{new Date(selectedDateFilter + 'T12:00:00').toLocaleDateString('pt-BR')}</strong> sem campos de edição.
+                <strong>{formatDate(selectedDateFilter)}</strong> sem campos de edição.
               </p>
             </div>
           </div>
@@ -1073,7 +1088,7 @@ export const DiarioTab: React.FC = () => {
             onClick={() => window.print()}
             className="text-xs bg-purple-800 border-purple-700 text-white hover:bg-purple-700 gap-1.5 hidden sm:flex"
           >
-            <Printer className="h-4 w-4" /> Imprimir Diário
+            <Printer className="h-4 w-4" /> Imprimir Planejamento
           </Button>
         </div>
       )}
@@ -1086,7 +1101,7 @@ export const DiarioTab: React.FC = () => {
               <Clock className="h-4.5 w-4.5 text-purple-600" />
               Planejamento Diário ({selectedTurmaFilter}) —{' '}
               <span className="text-slate-500 font-normal">
-                {new Date(selectedDateFilter + 'T12:00:00').toLocaleDateString('pt-BR')}
+                {formatDate(selectedDateFilter)}
               </span>
             </h3>
           </div>
@@ -1164,8 +1179,8 @@ export const DiarioTab: React.FC = () => {
                 Calendário Semanal — {selectedTurmaFilter}
               </h3>
               <p className="text-xs text-slate-500">
-                Semana de {new Date(weekDays[0] + 'T12:00:00').toLocaleDateString('pt-BR')} a{' '}
-                {new Date(weekDays[6] + 'T12:00:00').toLocaleDateString('pt-BR')}
+                Semana de {formatDate(weekDays[0])} a{' '}
+                {formatDate(weekDays[6])}
               </p>
             </div>
 
@@ -1257,7 +1272,7 @@ export const DiarioTab: React.FC = () => {
                 Calendário Mensal — {monthNames[refDateObj.getMonth()]} de {refDateObj.getFullYear()}
               </h3>
               <p className="text-xs text-slate-500">
-                Visualize os dias com planejamentos e clique em qualquer data para abrir o diário de classe.
+                Visualize os dias com planejamentos e clique em qualquer data para abrir o planejamento do dia.
               </p>
             </div>
 

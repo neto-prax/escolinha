@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Salario, SalarioItem, Lancamento, Caixa, Cartao, FormaPagamento } from '../../types/finance';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Clock, Calculator, DollarSign } from 'lucide-react';
 
 interface SalariosTabProps {
   salarios: Salario[];
@@ -17,14 +17,60 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
   const [dataPagamento, setDataPagamento] = useState('');
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('Transferência Bancária');
   const [status, setStatus] = useState<'Pago' | 'Em Aberto'>('Pago');
+  const [horasAulas, setHorasAulas] = useState<string>('');
   
   const [caixaId, setCaixaId] = useState<string>(caixas[0]?.id || '');
   const [cartaoId, setCartaoId] = useState<string>(cartoes[0]?.id || '');
+
+  const selectedEmployee = employees.find(e => e.name === colaborador);
+  const isHorista = selectedEmployee?.contract_type === 'horista' || (!selectedEmployee?.contract_type && Number(selectedEmployee?.hourly_rate) > 0);
 
   // Lista dinâmica de verbas do salário
   const [itens, setItens] = useState<SalarioItem[]>([
     { id: crypto.randomUUID(), descricao: 'Salário Base', tipo: 'Provento', valor: 0 }
   ]);
+
+  const handleSelectColaborador = (nome: string) => {
+    setColaborador(nome);
+    const emp = employees.find(e => e.name === nome);
+    if (emp) {
+      const empIsHorista = emp.contract_type === 'horista' || (!emp.contract_type && Number(emp.hourly_rate) > 0);
+      if (empIsHorista) {
+        const rate = Number(emp.hourly_rate || 0);
+        setHorasAulas('');
+        setItens([
+          { 
+            id: crypto.randomUUID(), 
+            descricao: `Aulas Ministradas (${rate > 0 ? formatCurrency(rate) : ''}/h-aula)`, 
+            tipo: 'Provento', 
+            valor: 0 
+          }
+        ]);
+      } else {
+        const sal = Number(emp.salary || 0);
+        setItens([
+          { id: crypto.randomUUID(), descricao: 'Salário Base', tipo: 'Provento', valor: sal }
+        ]);
+      }
+    }
+  };
+
+  const handleCalcularHoras = () => {
+    const qtd = parseFloat(horasAulas.replace(',', '.')) || 0;
+    const rate = Number(selectedEmployee?.hourly_rate || 0);
+    const total = qtd * rate;
+    setItens(prev => {
+      const copy = [...prev];
+      const index = copy.findIndex(i => i.tipo === 'Provento');
+      const itemDesc = `${qtd} Hora${qtd !== 1 ? 's' : ''}/Aula${qtd !== 1 ? 's' : ''} (${formatCurrency(rate)}/h)`;
+      if (index >= 0) {
+        copy[index] = { ...copy[index], descricao: itemDesc, valor: total };
+      } else {
+        copy.unshift({ id: crypto.randomUUID(), descricao: itemDesc, tipo: 'Provento', valor: total });
+      }
+      return copy;
+    });
+  };
 
   const handleAddItem = () => {
     setItens([...itens, { id: crypto.randomUUID(), descricao: '', tipo: 'Provento', valor: 0 }]);
@@ -116,7 +162,7 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
               <label className="text-sm font-medium text-gray-700 mb-1">Colaborador</label>
               <select
                 value={colaborador}
-                onChange={(e) => setColaborador(e.target.value)}
+                onChange={(e) => handleSelectColaborador(e.target.value)}
                 required
                 className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-white"
               >
@@ -125,10 +171,24 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
                 </option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.name}>
-                    {emp.name} ({emp.role})
+                    {emp.name} ({emp.role}) {emp.contract_type === 'horista' ? '• Horista' : ''}
                   </option>
                 ))}
               </select>
+
+              {selectedEmployee && (
+                <div className="mt-1.5 p-1.5 bg-white rounded border border-gray-200 text-xs text-gray-600 flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-gray-800">
+                    {isHorista ? 'Regime: Horista' : 'Regime: Mensalista'}
+                  </span>
+                  <span>•</span>
+                  <span className="text-emerald-700 font-medium">
+                    {isHorista 
+                      ? `${formatCurrency(selectedEmployee.hourly_rate || 0)}/hora-aula` 
+                      : `${formatCurrency(selectedEmployee.salary || 0)}/mês`}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col">
@@ -195,6 +255,40 @@ export function SalariosTab({ salarios, caixas, cartoes, onAddSalario, onAddLanc
           </div>
 
           <div>
+            {isHorista && (
+              <div className="mb-4 p-3 bg-blue-50/80 border border-blue-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-100 rounded-md text-blue-700">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <span className="font-semibold text-blue-900 block">Colaborador Horista</span>
+                    <span className="text-xs text-blue-700">
+                      Remuneração cadastrada: <strong>{formatCurrency(selectedEmployee?.hourly_rate || 0)}</strong> por hora-aula
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    placeholder="Qtd. Horas/Aulas"
+                    value={horasAulas}
+                    onChange={(e) => setHorasAulas(e.target.value)}
+                    className="w-36 p-1.5 text-sm border border-blue-300 rounded bg-white text-gray-800"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCalcularHoras}
+                    className="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center gap-1 shrink-0"
+                  >
+                    <Calculator className="h-3.5 w-3.5" /> Calcular e Lançar
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-between items-center mb-2 mt-4">
               <h3 className="text-md font-bold text-gray-700">Verbas Salariais (Proventos e Descontos)</h3>
               <button 

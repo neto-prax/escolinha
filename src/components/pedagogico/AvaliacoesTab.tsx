@@ -21,6 +21,15 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDate } from '@/lib/utils';
+import {
+  TurmaPedagogica,
+  Materia,
+  ConfiguracaoAcademica,
+  DEFAULT_TURMAS_PEDAGOGICO,
+  DEFAULT_MATERIAS,
+  DEFAULT_CONFIG_ACADEMICA,
+} from '@/types/pedagogico';
 
 export interface AvaliacaoItem {
   id: string;
@@ -119,6 +128,10 @@ const mockPareceres: ParecerAvaliativo[] = [
 ];
 
 export const AvaliacoesTab: React.FC = () => {
+  const [turmasPedagogico] = useLocalStorage<TurmaPedagogica[]>('escolinha_turmas_pedagogico_v1', DEFAULT_TURMAS_PEDAGOGICO);
+  const [materias] = useLocalStorage<Materia[]>('escolinha_materias_v1', DEFAULT_MATERIAS);
+  const [configAcademica] = useLocalStorage<ConfiguracaoAcademica>('escolinha_config_academica_v1', DEFAULT_CONFIG_ACADEMICA);
+
   const [avaliacoes, setAvaliacoes] = useLocalStorage<AvaliacaoItem[]>('escolinha_avaliacoes_v1', mockAvaliacoes);
   const [pareceres, setPareceres] = useLocalStorage<ParecerAvaliativo[]>('escolinha_pareceres_v1', mockPareceres);
 
@@ -127,12 +140,17 @@ export const AvaliacoesTab: React.FC = () => {
   const [selectedTurma, setSelectedTurma] = useState('todas');
   const [selectedBimestre, setSelectedBimestre] = useState('todos');
 
+  const ciclosDisponiveis = configAcademica?.ciclos || DEFAULT_CONFIG_ACADEMICA.ciclos;
+  const defaultTurmaNome = turmasPedagogico[0]?.nome || '1º Ano A';
+  const defaultCicloNome = ciclosDisponiveis[0]?.nomePublico || '1º Bimestre';
+  const defaultDisciplinaNome = materias[0]?.nome || 'Língua Portuguesa';
+
   // Modal State - Nova Avaliação
   const [isModalAvaliacaoOpen, setIsModalAvaliacaoOpen] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState('');
-  const [novaTurma, setNovaTurma] = useState('Sub-11 A');
-  const [novoBimestre, setNovoBimestre] = useState('1º Bimestre');
-  const [novaDisciplina, setNovaDisciplina] = useState('Futebol Tático');
+  const [novaTurma, setNovaTurma] = useState(defaultTurmaNome);
+  const [novoBimestre, setNovoBimestre] = useState(defaultCicloNome);
+  const [novaDisciplina, setNovaDisciplina] = useState(defaultDisciplinaNome);
   const [novoTipo, setNovoTipo] = useState<AvaliacaoItem['tipo']>('Avaliação Prática');
   const [novaData, setNovaData] = useState(new Date().toISOString().split('T')[0]);
   const [novoPeso, setNovoPeso] = useState<number>(10);
@@ -141,9 +159,9 @@ export const AvaliacoesTab: React.FC = () => {
   // Modal State - Novo Parecer
   const [isModalParecerOpen, setIsModalParecerOpen] = useState(false);
   const [parecerAluno, setParecerAluno] = useState('');
-  const [parecerTurma, setParecerTurma] = useState('Sub-11 A');
-  const [parecerBimestre, setParecerBimestre] = useState('1º Bimestre');
-  const [parecerDisciplina, setParecerDisciplina] = useState('Futebol Tático');
+  const [parecerTurma, setParecerTurma] = useState(defaultTurmaNome);
+  const [parecerBimestre, setParecerBimestre] = useState(defaultCicloNome);
+  const [parecerDisciplina, setParecerDisciplina] = useState(defaultDisciplinaNome);
   const [parecerNivel, setParecerNivel] = useState<ParecerAvaliativo['nivelDesempenho']>('Adequado');
   const [parecerTexto, setParecerTexto] = useState('');
 
@@ -386,29 +404,30 @@ export const AvaliacoesTab: React.FC = () => {
           </div>
 
           <Select value={selectedTurma} onValueChange={setSelectedTurma}>
-            <SelectTrigger className="w-[140px] text-xs h-9">
+            <SelectTrigger className="w-[150px] text-xs h-9">
               <SelectValue placeholder="Turma" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas as Turmas</SelectItem>
-              <SelectItem value="Maternal A">Maternal A</SelectItem>
-              <SelectItem value="Sub-9 A">Sub-9 A</SelectItem>
-              <SelectItem value="Sub-11 A">Sub-11 A</SelectItem>
-              <SelectItem value="Sub-13 A">Sub-13 A</SelectItem>
-              <SelectItem value="Sub-15 A">Sub-15 A</SelectItem>
+              {turmasPedagogico.map((t) => (
+                <SelectItem key={t.id} value={t.nome}>
+                  {t.nome}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
           <Select value={selectedBimestre} onValueChange={setSelectedBimestre}>
-            <SelectTrigger className="w-[130px] text-xs h-9">
-              <SelectValue placeholder="Bimestre" />
+            <SelectTrigger className="w-[140px] text-xs h-9">
+              <SelectValue placeholder="Ciclo Letivo" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos Bimestres</SelectItem>
-              <SelectItem value="1º Bimestre">1º Bimestre</SelectItem>
-              <SelectItem value="2º Bimestre">2º Bimestre</SelectItem>
-              <SelectItem value="3º Bimestre">3º Bimestre</SelectItem>
-              <SelectItem value="4º Bimestre">4º Bimestre</SelectItem>
+              <SelectItem value="todos">Todos os Ciclos</SelectItem>
+              {ciclosDisponiveis.map((c) => (
+                <SelectItem key={c.id} value={c.nomePublico}>
+                  {c.nomePublico}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -459,7 +478,7 @@ export const AvaliacoesTab: React.FC = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center text-xs font-mono text-slate-700">
-                      {av.dataAplicacao ? new Date(av.dataAplicacao + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                      {formatDate(av.dataAplicacao)}
                     </TableCell>
                     <TableCell className="text-center text-xs font-mono font-bold text-slate-800">
                       {av.pesoMaximo.toFixed(1)}
@@ -530,7 +549,7 @@ export const AvaliacoesTab: React.FC = () => {
                       </p>
                     </TableCell>
                     <TableCell className="text-center text-xs font-mono text-slate-600">
-                      {p.dataRegistro ? new Date(p.dataRegistro + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}
+                      {formatDate(p.dataRegistro)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -581,26 +600,27 @@ export const AvaliacoesTab: React.FC = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Maternal A">Maternal A</SelectItem>
-                    <SelectItem value="Sub-9 A">Sub-9 A</SelectItem>
-                    <SelectItem value="Sub-11 A">Sub-11 A</SelectItem>
-                    <SelectItem value="Sub-13 A">Sub-13 A</SelectItem>
-                    <SelectItem value="Sub-15 A">Sub-15 A</SelectItem>
+                    {turmasPedagogico.map((t) => (
+                      <SelectItem key={t.id} value={t.nome}>
+                        {t.nome}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Bimestre</label>
+                <label className="text-xs font-medium text-slate-700 block mb-1">Ciclo Letivo</label>
                 <Select value={novoBimestre} onValueChange={setNovoBimestre}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1º Bimestre">1º Bimestre</SelectItem>
-                    <SelectItem value="2º Bimestre">2º Bimestre</SelectItem>
-                    <SelectItem value="3º Bimestre">3º Bimestre</SelectItem>
-                    <SelectItem value="4º Bimestre">4º Bimestre</SelectItem>
+                    {ciclosDisponiveis.map((c) => (
+                      <SelectItem key={c.id} value={c.nomePublico}>
+                        {c.nomePublico}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -609,12 +629,21 @@ export const AvaliacoesTab: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-slate-700 block mb-1">Disciplina / Matéria</label>
-                <Input
-                  value={novaDisciplina}
-                  onChange={(e) => setNovaDisciplina(e.target.value)}
-                  placeholder="Ex: Futebol Tático, Fundamentos..."
-                  required
-                />
+                <Select value={novaDisciplina} onValueChange={setNovaDisciplina}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a disciplina..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {materias.map((m) => (
+                      <SelectItem key={m.id} value={m.nome}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.cor }} />
+                          <span>{m.nome}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -715,26 +744,27 @@ export const AvaliacoesTab: React.FC = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Maternal A">Maternal A</SelectItem>
-                    <SelectItem value="Sub-9 A">Sub-9 A</SelectItem>
-                    <SelectItem value="Sub-11 A">Sub-11 A</SelectItem>
-                    <SelectItem value="Sub-13 A">Sub-13 A</SelectItem>
-                    <SelectItem value="Sub-15 A">Sub-15 A</SelectItem>
+                    {turmasPedagogico.map((t) => (
+                      <SelectItem key={t.id} value={t.nome}>
+                        {t.nome}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Bimestre</label>
+                <label className="text-xs font-medium text-slate-700 block mb-1">Ciclo Letivo</label>
                 <Select value={parecerBimestre} onValueChange={setParecerBimestre}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1º Bimestre">1º Bimestre</SelectItem>
-                    <SelectItem value="2º Bimestre">2º Bimestre</SelectItem>
-                    <SelectItem value="3º Bimestre">3º Bimestre</SelectItem>
-                    <SelectItem value="4º Bimestre">4º Bimestre</SelectItem>
+                    {ciclosDisponiveis.map((c) => (
+                      <SelectItem key={c.id} value={c.nomePublico}>
+                        {c.nomePublico}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -743,12 +773,21 @@ export const AvaliacoesTab: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-slate-700 block mb-1">Disciplina / Área</label>
-                <Input
-                  value={parecerDisciplina}
-                  onChange={(e) => setParecerDisciplina(e.target.value)}
-                  placeholder="Ex: Futebol Tático, Expressão Corporal..."
-                  required
-                />
+                <Select value={parecerDisciplina} onValueChange={setParecerDisciplina}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a disciplina..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {materias.map((m) => (
+                      <SelectItem key={m.id} value={m.nome}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.cor }} />
+                          <span>{m.nome}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>

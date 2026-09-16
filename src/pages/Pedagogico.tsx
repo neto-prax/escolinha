@@ -2,15 +2,40 @@ import React from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs } from '@/components/financeiro/Tabs';
 import { DiarioTab } from '@/components/pedagogico/DiarioTab';
+import { PlanejamentoTab } from '@/components/pedagogico/PlanejamentoTab';
 import { AvaliacoesTab } from '@/components/pedagogico/AvaliacoesTab';
-import { NotasTab } from '@/components/pedagogico/NotasTab';
-import { BookOpen, ClipboardCheck, GraduationCap } from 'lucide-react';
+import { TurmasPedagogicoTab } from '@/components/pedagogico/TurmasPedagogicoTab';
+import { PedagogicoSettings } from '@/components/settings/PedagogicoSettings';
+import {
+  BookOpen,
+  FileText,
+  CalendarDays,
+  ClipboardCheck,
+  Users,
+  Settings2,
+} from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 
 const Pedagogico = () => {
   const { canAccessTab } = usePermissions();
 
+  const canAccessConfig =
+    canAccessTab('pedagogico', 'configuracoes') ||
+    canAccessTab('pedagogico', 'materias') ||
+    canAccessTab('pedagogico', 'ciclos-medias') ||
+    canAccessTab('pedagogico', 'notas') ||
+    canAccessTab('configuracoes', 'pedagogico');
+
   const allTabs = [
+    {
+      id: 'planejamento',
+      label: (
+        <span className="flex items-center gap-2">
+          <CalendarDays size={16} /> Planejamento
+        </span>
+      ),
+      content: <DiarioTab />,
+    },
     {
       id: 'diario',
       label: (
@@ -18,7 +43,7 @@ const Pedagogico = () => {
           <BookOpen size={16} /> Diário de Classe
         </span>
       ),
-      content: <DiarioTab />,
+      content: <PlanejamentoTab />,
     },
     {
       id: 'avaliacoes',
@@ -30,24 +55,39 @@ const Pedagogico = () => {
       content: <AvaliacoesTab />,
     },
     {
-      id: 'notas',
+      id: 'turmas',
       label: (
         <span className="flex items-center gap-2">
-          <GraduationCap size={16} /> Notas
+          <Users size={16} /> Turmas & Horários
         </span>
       ),
-      content: <NotasTab />,
+      content: <TurmasPedagogicoTab />,
     },
+    ...(canAccessConfig
+      ? [
+          {
+            id: 'configuracoes',
+            label: (
+              <span className="flex items-center gap-2">
+                <Settings2 size={16} /> Configurações
+              </span>
+            ),
+            content: <PedagogicoSettings />,
+          },
+        ]
+      : []),
   ];
 
-  const visibleTabs = allTabs.filter((t) => canAccessTab('pedagogico', t.id));
+  const visibleTabs = allTabs.filter(
+    (t) => t.id === 'configuracoes' || canAccessTab('pedagogico', t.id)
+  );
 
   return (
     <div className="space-y-6">
       <div className="print:hidden">
         <PageHeader
           title="Pedagógico"
-          description="Gestão de diários de classe, planejamento de avaliações e acompanhamento de notas"
+          description="Gestão de diários de classe, planejamento de aulas, avaliações e turmas"
         />
       </div>
       <Tabs tabs={visibleTabs} />
@@ -56,3 +96,4 @@ const Pedagogico = () => {
 };
 
 export default Pedagogico;
+

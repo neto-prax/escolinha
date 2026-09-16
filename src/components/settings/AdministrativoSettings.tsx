@@ -12,6 +12,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { supabase } from '@/integrations/supabase/client';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatDate } from '@/lib/utils';
 export function AdministrativoSettings() {
   const { profile } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -123,7 +124,7 @@ _Acesse o painel para mais detalhes: {{link_caixa}}_`;
     const totalEmployees = employees.length;
     const ocorrenciasHoje = employees.flatMap(e => e.ocorrencias || []).filter(o => o.data === new Date().toISOString().split('T')[0]).length;
     
-    const dataFormatada = new Date().toLocaleDateString('pt-BR');
+    const dataFormatada = formatDate(new Date());
     const formatMoney = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
     
     const financialData = getLocalFinancialData();
@@ -141,7 +142,7 @@ Nenhum lançamento financeiro cadastrado.`;
     const linkCaixa = `${baseUrl}/app/financeiro`;
 
     let finalMessage = mensagemRelatorio
-      .replace(/{{data}}/g, new Date().toLocaleDateString('pt-BR'))
+      .replace(/{{data}}/g, formatDate(new Date()))
       .replace(/{{total_funcionarios}}/g, String(totalEmployees))
       .replace(/{{ativos}}/g, String(activeEmployees))
       .replace(/{{ocorrencias}}/g, String(ocorrenciasHoje))
@@ -150,7 +151,7 @@ Nenhum lançamento financeiro cadastrado.`;
 
     if (!mensagemRelatorio.includes('{{')) {
       finalMessage = `*Relatório Administrativo Diário*
-Data: ${new Date().toLocaleDateString('pt-BR')}
+Data: ${formatDate(new Date())}
 
 👥 *Quadro de Funcionários*
 Total: ${totalEmployees}

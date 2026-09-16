@@ -67,15 +67,53 @@ export interface Aluno {
   descontoMensalidade?: string;
   diaVencimento?: string;
   valorBase?: string;
+
+  // Contraturno
+  temContraturno?: boolean;
+  setorContraturno?: string;
+  classeContraturno?: string;
+  turmaContraturno?: string;
+  valorContraturno?: string;
+
+  // Matrícula & Parcelamento
+  dataMatricula?: string;
+  parcelasContratadas?: number;
+
+  // Histórico Financeiro e Cobranças
+  historicoFinanceiro?: CobrancaHistorico[];
+}
+
+export interface CobrancaHistorico {
+  id: string;
+  data: string; // ISO date/time
+  colaboradorId?: string;
+  colaboradorNome: string;
+  responsavelNome: string;
+  responsavelContato?: string;
+  parentesco?: string;
+  mesReferencia: string; // ex: '2026-09'
+  valorCobrado: number;
+  canal: 'whatsapp' | 'ligacao';
+  bloqueadoWhatsapp?: boolean;
+  statusResultado: 'promessa_pagamento' | 'recusou' | 'sem_contato' | 'mensagem_enviada' | 'ligacao_realizada' | 'outro';
+  dataPromessa?: string;
+  observacoes?: string;
+  judicializada?: boolean;
 }
 
 export interface Mensalidade {
   id: string;
   alunoId: string;
   mesReferencia: string; // ex: '2024-03'
-  valorFinal: number; // valorBase - desconto
+  valorFinal: number; // valor líquido ou base
   dataVencimento: string; // ISO date
-  status: 'Pendente' | 'Pago' | 'Atrasado';
+  status: 'Pendente' | 'Pago' | 'Atrasado' | 'Judicializada';
   dataPagamento?: string; // ISO date se pago
   lancamentoId?: string; // ID do Lancamento gerado no Financeiro
+  judicializada?: boolean;
+  dataJudicializacao?: string;
+  motivoJudicializacao?: string;
+  descontoPontualidade?: number; // valor do desconto que valia até o vencimento
+  valorOriginalBase?: number;
 }
+

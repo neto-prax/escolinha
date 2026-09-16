@@ -8,10 +8,11 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User, Wallet, FileWarning, Calendar, Mail, Phone, Briefcase } from 'lucide-react';
+import { User, Wallet, FileWarning, Calendar, Mail, Phone, Briefcase, DollarSign } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { formatDate } from '@/lib/utils';
 
 // Interfaces baseadas no que já existe na tela
 interface Employee {
@@ -24,6 +25,9 @@ interface Employee {
   photoUrl?: string;
   hire_date: string;
   status: string;
+  contract_type?: 'mensalista' | 'horista';
+  salary?: number;
+  hourly_rate?: number;
   ocorrencias?: any[];
 }
 
@@ -152,13 +156,33 @@ export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOco
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground flex items-center gap-2"><Calendar className="h-4 w-4"/> Admissão</p>
-                    <p className="font-medium text-gray-900">{new Date(employee.hire_date).toLocaleDateString('pt-BR')}</p>
+                    <p className="font-medium text-gray-900">{formatDate(employee.hire_date)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-4 w-4"/> Status</p>
                     <Badge variant={employee.status === 'active' ? 'default' : 'secondary'} className="mt-1">
                       {employee.status === 'active' ? 'Ativo' : employee.status}
                     </Badge>
+                  </div>
+                  <div className="space-y-1 col-span-1 sm:col-span-2 pt-2 border-t">
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-emerald-600"/> Remuneração Cadastrada
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-emerald-700 text-base">
+                        {employee.contract_type === 'horista' || (!employee.contract_type && (employee.hourly_rate || 0) > 0)
+                          ? `${formatCurrency(employee.hourly_rate || 0)} / hora-aula`
+                          : formatCurrency(employee.salary || 0)}
+                      </span>
+                      <Badge variant="outline" className="text-xs">
+                        {employee.contract_type === 'horista' || (!employee.contract_type && (employee.hourly_rate || 0) > 0) ? 'Horista' : 'Mensalista'}
+                      </Badge>
+                      {(employee.contract_type === 'horista' || (!employee.contract_type && (employee.hourly_rate || 0) > 0)) && (employee.salary || 0) > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          (Base fixa: {formatCurrency(employee.salary || 0)})
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </TabsContent>
@@ -167,6 +191,20 @@ export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOco
                 <div className="flex justify-between items-end border-b pb-2 mb-4">
                   <h3 className="font-semibold text-lg text-gray-800">Histórico de Pagamentos</h3>
                   <Badge variant="outline" className="text-xs">Registros Reais</Badge>
+                </div>
+
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg mb-4 flex justify-between items-center text-sm">
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Remuneração Base no Cadastro:</span>
+                    <span className="font-bold text-emerald-800">
+                      {employee.contract_type === 'horista' || (!employee.contract_type && (employee.hourly_rate || 0) > 0)
+                        ? `${formatCurrency(employee.hourly_rate || 0)}/hora-aula (Horista)`
+                        : `${formatCurrency(employee.salary || 0)}/mês (Mensalista)`}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-xs bg-white">
+                    {employee.contract_type === 'horista' || (!employee.contract_type && (employee.hourly_rate || 0) > 0) ? 'Horista' : 'Mensalista'}
+                  </Badge>
                 </div>
                 
                 {lancamentosDoFuncionario.length === 0 && salariosDoFuncionario.length === 0 ? (
@@ -180,7 +218,7 @@ export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOco
                         <div className="flex flex-col">
                           <span className="font-medium text-gray-900">{item.descricao}</span>
                           <span className="text-xs text-gray-500">
-                            {item.data ? new Date(item.data).toLocaleDateString('pt-BR') : 'Data não informada'} • {item.formaPagamento || 'Forma não especificada'}
+                            {item.data ? formatDate(item.data) : 'Data não informada'} • {item.formaPagamento || 'Forma não especificada'}
                           </span>
                         </div>
                         <div className="text-right">
@@ -275,7 +313,7 @@ export function EmployeeHistoryDialog({ employee, isOpen, onOpenChange, onAddOco
                           <p className="mt-2 text-gray-700">{item.descricao}</p>
                         </div>
                         <span className="text-sm font-medium text-gray-500 shrink-0">
-                          {new Date(item.data).toLocaleDateString('pt-BR')}
+                          {formatDate(item.data)}
                         </span>
                       </div>
                     </div>

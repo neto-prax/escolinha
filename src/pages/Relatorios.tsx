@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Aluno, Mensalidade } from '@/types/aluno';
 import { Lancamento, Caixa } from '@/types/finance';
+import { formatDate } from '@/lib/utils';
 
 const Relatorios = () => {
   const [dataInicio, setDataInicio] = useState('');
@@ -46,7 +47,7 @@ const Relatorios = () => {
     doc.text(title, 14, 15);
     if (dataInicio && dataFim) {
       doc.setFontSize(10);
-      doc.text(`Período: ${new Date(dataInicio).toLocaleDateString('pt-BR')} a ${new Date(dataFim).toLocaleDateString('pt-BR')}`, 14, 22);
+      doc.text(`Período: ${formatDate(dataInicio)} a ${formatDate(dataFim)}`, 14, 22);
     }
     
     autoTable(doc, {
@@ -63,7 +64,7 @@ const Relatorios = () => {
     const data = getFilteredData(lancamentos.filter(e => e.tipo === 'Entrada'));
     if(data.length === 0) return toast.error("Nenhuma entrada no período.");
     
-    const body = data.map(e => [new Date(e.data).toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
+    const body = data.map(e => [formatDate(e.data), e.descricao, e.categoria, formatCurrency(e.valor)]);
     generatePDF("Relatório de Entradas por Período", [['Data', 'Descrição', 'Categoria', 'Valor']], body);
   };
 
@@ -71,7 +72,7 @@ const Relatorios = () => {
     const data = getFilteredData(lancamentos.filter(e => e.tipo === 'Saída'));
     if(data.length === 0) return toast.error("Nenhuma saída no período.");
     
-    const body = data.map(e => [new Date(e.data).toLocaleDateString('pt-BR'), e.descricao, e.categoria, formatCurrency(e.valor)]);
+    const body = data.map(e => [formatDate(e.data), e.descricao, e.categoria, formatCurrency(e.valor)]);
     generatePDF("Relatório de Saídas por Período", [['Data', 'Descrição', 'Categoria', 'Valor']], body);
   };
 
@@ -104,20 +105,33 @@ const Relatorios = () => {
     if (employees.length === 0) {
       return toast.error("Nenhum funcionário cadastrado no sistema.");
     }
-    const body = employees.map(emp => [
-      emp.name,
-      emp.role,
-      emp.department,
-      emp.phone || '-',
-      emp.status === 'active' ? 'Ativo' : emp.status === 'vacation' ? 'Férias' : 'Afastado'
-    ]);
-    generatePDF("Quadro de Colaboradores e Funcionários", [['Nome', 'Cargo', 'Departamento', 'Telefone', 'Status']], body);
+    const body = employees.map(emp => {
+      const isHorista = emp.contract_type === 'horista' || (!emp.contract_type && Number(emp.hourly_rate) > 0);
+      const remuneracao = isHorista 
+        ? `${(Number(emp.hourly_rate) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/h-aula`
+        : (Number(emp.salary) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+      return [
+        emp.name,
+        emp.role,
+        emp.department,
+        isHorista ? 'Horista' : 'Mensalista',
+        remuneracao,
+        emp.phone || '-',
+        emp.status === 'active' ? 'Ativo' : emp.status === 'vacation' ? 'Férias' : 'Afastado'
+      ];
+    });
+    generatePDF(
+      "Quadro de Colaboradores e Funcionários", 
+      [['Nome', 'Cargo', 'Departamento', 'Regime', 'Remuneração', 'Telefone', 'Status']], 
+      body
+    );
   };
 
   const exportOcorrencias = () => {
     const allOcorrencias = employees.flatMap(emp => 
       (emp.ocorrencias || []).map((oco: any) => [
-        oco.data ? new Date(oco.data).toLocaleDateString('pt-BR') : '-',
+        oco.data ? formatDate(oco.data) : '-',
         emp.name,
         oco.tipo || 'Ocorrência',
         oco.descricao || ''
@@ -156,7 +170,7 @@ const Relatorios = () => {
       return [
         aluno?.nome || 'Desconhecido',
         m.mesReferencia,
-        new Date(m.dataPagamento!).toLocaleDateString('pt-BR'),
+        formatDate(m.dataPagamento),
         formatCurrency(m.valorFinal)
       ];
     });
@@ -183,7 +197,7 @@ const Relatorios = () => {
       return [
         aluno?.nome || 'Desconhecido',
         m.mesReferencia,
-        new Date(m.dataVencimento).toLocaleDateString('pt-BR'),
+        formatDate(m.dataVencimento),
         formatCurrency(m.valorFinal)
       ];
     });

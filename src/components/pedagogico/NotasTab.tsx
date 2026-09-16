@@ -9,6 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Award, GraduationCap, Plus, Search, TrendingUp, AlertTriangle, CheckCircle, Edit3, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  TurmaPedagogica,
+  Materia,
+  ConfiguracaoAcademica,
+  DEFAULT_TURMAS_PEDAGOGICO,
+  DEFAULT_MATERIAS,
+  DEFAULT_CONFIG_ACADEMICA,
+} from '@/types/pedagogico';
 
 export interface NotaAluno {
   id: string;
@@ -59,34 +67,58 @@ const mockNotas: NotaAluno[] = [
 ];
 
 export const NotasTab: React.FC = () => {
+  const [turmasPedagogico] = useLocalStorage<TurmaPedagogica[]>('escolinha_turmas_pedagogico_v1', DEFAULT_TURMAS_PEDAGOGICO);
+  const [materias] = useLocalStorage<Materia[]>('escolinha_materias_v1', DEFAULT_MATERIAS);
+  const [configAcademica] = useLocalStorage<ConfiguracaoAcademica>('escolinha_config_academica_v1', DEFAULT_CONFIG_ACADEMICA);
+
   const [notasList, setNotasList] = useLocalStorage<NotaAluno[]>('escolinha_notas_alunos', mockNotas);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTurma, setSelectedTurma] = useState('todas');
   const [selectedBimestre, setSelectedBimestre] = useState('todos');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const ciclosDisponiveis = configAcademica?.ciclos || DEFAULT_CONFIG_ACADEMICA.ciclos;
+  const defaultTurmaNome = turmasPedagogico[0]?.nome || '1º Ano A';
+  const defaultCicloNome = ciclosDisponiveis[0]?.nomePublico || '1º Bimestre';
+  const defaultDisciplinaNome = materias[0]?.nome || 'Língua Portuguesa';
+
   // Form State
   const [alunoNome, setAlunoNome] = useState('');
-  const [turma, setTurma] = useState('Sub-11 A');
-  const [bimestre, setBimestre] = useState('1º Bimestre');
-  const [disciplina, setDisciplina] = useState('Futebol Tático');
+  const [turma, setTurma] = useState(defaultTurmaNome);
+  const [bimestre, setBimestre] = useState(defaultCicloNome);
+  const [disciplina, setDisciplina] = useState(defaultDisciplinaNome);
   const [notaAvaliacao1, setNotaAvaliacao1] = useState<number>(8.0);
   const [notaAvaliacao2, setNotaAvaliacao2] = useState<number>(8.0);
   const [notaExame, setNotaExame] = useState<number>(8.0);
   const [parecerPedagogico, setParecerPedagogico] = useState('');
 
-  const calculateMedia = (n1: number, n2: number, nExame: number) => {
-    const media = (Number(n1) + Number(n2) + Number(nExame)) / 3;
-    return Number(media.toFixed(1));
+  const calculateMedia = (n1: number, n2: number, _nExame?: number) => {
+    const tipo = configAcademica?.mediaParcial?.tipoCalculo || 'aritmetica';
+    if (tipo === 'ponderada') {
+      const p = configAcademica?.mediaParcial?.pesosAvaliacoes || { prova: 6, trabalho: 4 };
+      const pesoN1 = p.prova || 6;
+      const pesoN2 = p.trabalho || 4;
+      const soma = Number(n1) * pesoN1 + Number(n2) * pesoN2;
+      const media = soma / (pesoN1 + pesoN2);
+      return Number(media.toFixed(1));
+    } else if (tipo === 'somatoria') {
+      return Number((Number(n1) + Number(n2)).toFixed(1));
+    } else {
+      const media = (Number(n1) + Number(n2)) / 2;
+      return Number(media.toFixed(1));
+    }
   };
 
   const getStatusBadge = (media: number) => {
-    if (media >= 7.0) {
-      return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold">Excelente</Badge>;
-    } else if (media >= 6.0) {
-      return <Badge className="bg-blue-100 text-blue-800 border-blue-300 font-semibold">Satisfatório</Badge>;
+    const notaAprovacao = configAcademica?.mediaFinal?.notaAprovacaoDireta ?? 7.0;
+    const notaExameMin = configAcademica?.mediaFinal?.notaMinimaExame ?? 4.0;
+
+    if (media >= notaAprovacao) {
+      return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold">Aprovado Direto</Badge>;
+    } else if (media >= notaExameMin) {
+      return <Badge className="bg-amber-100 text-amber-800 border-amber-300 font-semibold">Recuperação / Exame</Badge>;
     } else {
-      return <Badge className="bg-amber-100 text-amber-800 border-amber-300 font-semibold">Em Acompanhamento</Badge>;
+      return <Badge className="bg-rose-100 text-rose-800 border-rose-300 font-semibold">Reprovado</Badge>;
     }
   };
 
@@ -224,24 +256,25 @@ export const NotasTab: React.FC = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todas">Todas as Turmas</SelectItem>
-              <SelectItem value="Maternal A">Maternal A</SelectItem>
-              <SelectItem value="Sub-9 A">Sub-9 A</SelectItem>
-              <SelectItem value="Sub-11 A">Sub-11 A</SelectItem>
-              <SelectItem value="Sub-13 A">Sub-13 A</SelectItem>
-              <SelectItem value="Sub-15 A">Sub-15 A</SelectItem>
+              {turmasPedagogico.map((t) => (
+                <SelectItem key={t.id} value={t.nome}>
+                  {t.nome}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
           <Select value={selectedBimestre} onValueChange={setSelectedBimestre}>
             <SelectTrigger className="w-[160px] text-xs">
-              <SelectValue placeholder="Bimestre" />
+              <SelectValue placeholder="Ciclo Letivo" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos Bimestres</SelectItem>
-              <SelectItem value="1º Bimestre">1º Bimestre</SelectItem>
-              <SelectItem value="2º Bimestre">2º Bimestre</SelectItem>
-              <SelectItem value="3º Bimestre">3º Bimestre</SelectItem>
-              <SelectItem value="4º Bimestre">4º Bimestre</SelectItem>
+              <SelectItem value="todos">Todos os Ciclos</SelectItem>
+              {ciclosDisponiveis.map((c) => (
+                <SelectItem key={c.id} value={c.nomePublico}>
+                  {c.nomePublico}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -346,39 +379,49 @@ export const NotasTab: React.FC = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Maternal A">Maternal A</SelectItem>
-                    <SelectItem value="Sub-9 A">Sub-9 A</SelectItem>
-                    <SelectItem value="Sub-11 A">Sub-11 A</SelectItem>
-                    <SelectItem value="Sub-13 A">Sub-13 A</SelectItem>
-                    <SelectItem value="Sub-15 A">Sub-15 A</SelectItem>
+                    {turmasPedagogico.map((t) => (
+                      <SelectItem key={t.id} value={t.nome}>
+                        {t.nome}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-700 block mb-1">Bimestre</label>
+                <label className="text-xs font-medium text-slate-700 block mb-1">Ciclo Letivo</label>
                 <Select value={bimestre} onValueChange={setBimestre}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1º Bimestre">1º Bimestre</SelectItem>
-                    <SelectItem value="2º Bimestre">2º Bimestre</SelectItem>
-                    <SelectItem value="3º Bimestre">3º Bimestre</SelectItem>
-                    <SelectItem value="4º Bimestre">4º Bimestre</SelectItem>
+                    {ciclosDisponiveis.map((c) => (
+                      <SelectItem key={c.id} value={c.nomePublico}>
+                        {c.nomePublico}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-700 block mb-1">Disciplina / Módulo</label>
-              <Input
-                value={disciplina}
-                onChange={(e) => setDisciplina(e.target.value)}
-                placeholder="Ex: Futebol Tático, Preparação..."
-                required
-              />
+              <label className="text-xs font-medium text-slate-700 block mb-1">Disciplina / Matéria</label>
+              <Select value={disciplina} onValueChange={setDisciplina}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a disciplina..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {materias.map((m) => (
+                    <SelectItem key={m.id} value={m.nome}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.cor }} />
+                        <span>{m.nome}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Seção 2: Notas das Atividades / Avaliações */}

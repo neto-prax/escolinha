@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { Tabs } from '@/components/financeiro/Tabs';
 import { LancamentosTab } from '@/components/financeiro/LancamentosTab';
@@ -6,6 +6,8 @@ import { OrcamentosTab } from '@/components/financeiro/OrcamentosTab';
 import { SalariosTab } from '@/components/financeiro/SalariosTab';
 import { CartoesTab } from '@/components/financeiro/CartoesTab';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao, TurmaConfig } from '@/types/finance';
+import { Aluno, Mensalidade } from '@/types/aluno';
+import { getIntegratedLancamentos } from '@/lib/financeUtils';
 import { mockExpenses, mockCaixas, mockCartoes } from '@/data/mockData';
 import { Wallet, Calculator, Users, LayoutDashboard, CreditCard } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -13,7 +15,10 @@ import { usePermissions } from '@/hooks/usePermissions';
 
 const Financeiro = () => {
   const { canAccessTab } = usePermissions();
+  const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
+  const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentosStorage, setLancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+  const [lancamentosV2Storage, setLancamentosV2Storage] = useLocalStorage<any[]>('escolinha_lancamentos_v2', []);
   const [orcamentos, setOrcamentos] = useLocalStorage<Orcamento[]>('escolinha_orcamentos', []);
   const [salarios, setSalarios] = useLocalStorage<Salario[]>('escolinha_salarios', []);
   const [caixas, setCaixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
@@ -35,14 +40,16 @@ const Financeiro = () => {
     'Reformas'
   ]);
 
-  // Necessário porque o LocalStorage converte Date para string
-  const lancamentos: Lancamento[] = lancamentosStorage.map(l => ({
-    ...l,
-    data: typeof l.data === 'string' ? new Date(l.data) : l.data
-  }));
+  // Unifica e integra lançamentos manuais com todas as mensalidades escolares pagas
+  const lancamentos: Lancamento[] = useMemo(() => {
+    const combined = [...lancamentosStorage, ...lancamentosV2Storage];
+    return getIntegratedLancamentos(combined, mensalidades, alunos);
+  }, [lancamentosStorage, lancamentosV2Storage, mensalidades, alunos]);
 
   const setLancamentos = (novosLancamentos: Lancamento[]) => {
-    setLancamentosStorage(novosLancamentos);
+    // Salva apenas os lançamentos não-sintéticos no storage
+    const customOnly = novosLancamentos.filter(l => !l.id.startsWith('mensalidade-'));
+    setLancamentosStorage(customOnly);
   };
 
   useEffect(() => {

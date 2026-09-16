@@ -33,6 +33,16 @@ export interface Lancamento {
   observacoes?: string;
   turmas?: TurmaConfig[];
   fechado?: boolean;
+  itensEstoque?: {
+    produtoId: string;
+    produtoNome: string;
+    variacaoId?: string;
+    variacaoNome?: string;
+    quantidade: number;
+    precoUnitario: number;
+    subtotal: number;
+  }[];
+  reciboNumero?: string;
 }
 
 // Para retrocompatibilidade caso algo use Expense

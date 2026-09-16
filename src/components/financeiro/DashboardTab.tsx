@@ -1,7 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '../../types/finance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowDownRight, ArrowUpRight, DollarSign, Target, CreditCard } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ArrowDownRight, ArrowUpRight, DollarSign, Target, CreditCard, Eye, EyeOff, AlertCircle, Info } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { formatDate } from '@/lib/utils';
 import {
   BarChart,
   Bar,
@@ -27,32 +31,54 @@ interface DashboardTabProps {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#ffc658', '#d0ed57'];
 
 export function DashboardTab({ lancamentos, orcamentos, salarios, caixas, cartoes }: DashboardTabProps) {
+  const { canViewKpis } = usePermissions();
+  const [showTotals, setShowTotals] = useLocalStorage<boolean>('escolinha_show_kpis_financeiro_tab', true);
+  const [visionMode, setVisionMode] = useState<'realizado' | 'previsto'>('realizado');
   
-  const { receitas, despesas, folhaPagamento, totalOrcado, faturasCartao } = useMemo(() => {
-    let r = 0;
+  const {
+    receitasPagas,
+    receitasPendentes,
+    receitasTotal,
+    despesas,
+    folhaPagamento,
+    totalOrcado,
+    faturasCartao,
+    mensalidadesPagasCount,
+    mensalidadesPendentesCount,
+  } = useMemo(() => {
+    let rPagas = 0;
+    let rPendentes = 0;
     let d = 0;
     let f = 0;
     let o = 0;
     let cartao = 0;
+    let mPagas = 0;
+    let mPendentes = 0;
 
     lancamentos.forEach(l => {
-      // Ignora lançamentos em aberto
-      if (l.status !== 'Pago') return;
+      const isMensalidade = l.categoria === 'Mensalidades' || !!l.alunoId;
 
       if (l.tipo === 'Entrada') {
-        r += l.valor;
-      } else {
-        if (l.formaPagamento === 'Cartão') {
-          // Valores pagos no cartão entram como fatura pendente
-          cartao += l.valor;
+        if (l.status === 'Pago') {
+          rPagas += l.valor;
+          if (isMensalidade) mPagas++;
         } else {
-          // Outras formas de pagamento entram como despesa de caixa imediata
-          d += l.valor;
+          // Lançamento em aberto / a receber (mensalidades anexadas em aberto)
+          rPendentes += l.valor;
+          if (isMensalidade) mPendentes++;
         }
-        
-        // Se for salário, soma em folhaPagamento apenas para o KPI visual, mas já está dentro de 'd' ou 'cartao'
-        if (l.categoria === 'Pessoal/RH') {
-          f += l.valor;
+      } else {
+        // Despesas (Saídas)
+        if (l.status === 'Pago') {
+          if (l.formaPagamento === 'Cartão') {
+            cartao += l.valor;
+          } else {
+            d += l.valor;
+          }
+          
+          if (l.categoria === 'Pessoal/RH') {
+            f += l.valor;
+          }
         }
       }
     });
@@ -62,15 +88,20 @@ export function DashboardTab({ lancamentos, orcamentos, salarios, caixas, cartoe
     });
 
     return {
-      receitas: r,
-      despesas: d, // 'f' já está contido em 'd' porque virou um lançamento de saída
+      receitasPagas: rPagas,
+      receitasPendentes: rPendentes,
+      receitasTotal: rPagas + rPendentes,
+      despesas: d,
       folhaPagamento: f,
       totalOrcado: o,
       faturasCartao: cartao,
+      mensalidadesPagasCount: mPagas,
+      mensalidadesPendentesCount: mPendentes,
     };
   }, [lancamentos, orcamentos]);
 
-  const saldo = receitas - despesas;
+  const receitasExibidas = visionMode === 'realizado' ? receitasPagas : receitasTotal;
+  const saldo = receitasExibidas - despesas;
 
   const expensesByCategory = useMemo(() => {
     const data: Record<string, number> = {};
@@ -85,10 +116,19 @@ export function DashboardTab({ lancamentos, orcamentos, salarios, caixas, cartoe
       .sort((a, b) => b.value - a.value);
   }, [lancamentos]);
 
-  const overviewData = [
-    { name: 'Receitas', valor: receitas, fill: '#10b981' },
-    { name: 'Despesas', valor: despesas, fill: '#ef4444' }
-  ];
+  const overviewData = useMemo(() => {
+    if (visionMode === 'realizado') {
+      return [
+        { name: 'Receitas (Caixa)', valor: receitasPagas, fill: '#10b981' },
+        { name: 'Despesas', valor: despesas, fill: '#ef4444' }
+      ];
+    }
+    return [
+      { name: 'Receitas Pagas', valor: receitasPagas, fill: '#10b981' },
+      { name: 'A Receber (Anexadas)', valor: receitasPendentes, fill: '#3b82f6' },
+      { name: 'Despesas', valor: despesas, fill: '#ef4444' }
+    ];
+  }, [visionMode, receitasPagas, receitasPendentes, despesas]);
 
   const recentTransactions = useMemo(() => {
     return [...lancamentos]
@@ -104,60 +144,161 @@ export function DashboardTab({ lancamentos, orcamentos, salarios, caixas, cartoe
     <div className="space-y-6">
       
       {/* KPIs Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receitas</CardTitle>
-            <ArrowUpRight className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(receitas)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Total de entradas</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Despesas</CardTitle>
-            <ArrowDownRight className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{formatCurrency(despesas)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Inclui Folha ({formatCurrency(folhaPagamento)})</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo Atual</CardTitle>
-            <DollarSign className={`h-4 w-4 ${saldo >= 0 ? 'text-green-500' : 'text-red-500'}`} />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(saldo)}
+      {canViewKpis('financeiro') && (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Resumo Financeiro
+              </span>
+              {/* Toggle Visão Realizado x Previsto */}
+              <div className="inline-flex items-center p-0.5 rounded-lg bg-muted border border-border text-xs">
+                <button
+                  type="button"
+                  onClick={() => setVisionMode('realizado')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                    visionMode === 'realizado'
+                      ? 'bg-background text-foreground shadow-sm font-semibold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Realizado (Caixa)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisionMode('previsto')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+                    visionMode === 'previsto'
+                      ? 'bg-background text-foreground shadow-sm font-semibold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span>Previsto (Com Mensalidades)</span>
+                  {receitasPendentes > 0 && (
+                    <span className="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.2 rounded-full text-[10px] font-bold">
+                      +{formatCurrency(receitasPendentes)}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Receitas - Despesas</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Faturas (Cartões)</CardTitle>
-            <CreditCard className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{formatCurrency(faturasCartao)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Ainda não saíram do caixa</p>
-          </CardContent>
-        </Card>
-      </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTotals(!showTotals)}
+              className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5 self-start sm:self-auto"
+            >
+              {showTotals ? (
+                <>
+                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Ocultar Totais</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Exibir Totais</span>
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* Banner explicativo quando há mensalidades anexadas mas nada foi pago no caixa */}
+          {receitasPagas === 0 && receitasPendentes > 0 && (
+            <div className="flex items-start gap-3 p-3.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg text-sm text-blue-900 dark:text-blue-200">
+              <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="font-semibold text-xs sm:text-sm">
+                  {mensalidadesPendentesCount} mensalidade(s) anexada(s) totalizando {formatCurrency(receitasPendentes)} a receber.
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  A visão atual <strong>"Realizado (Caixa)"</strong> exibe apenas valores já quitados (R$ 0,00 recebidos). Para visualizar o total contratado com as mensalidades anexadas, selecione <strong>"Previsto (Com Mensalidades)"</strong> acima, ou registre os pagamentos recebidos na aba de Alunos.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {showTotals && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {visionMode === 'realizado' ? 'Receitas (Caixa)' : 'Receitas (Previsto)'}
+                  </CardTitle>
+                  <ArrowUpRight className="h-4 w-4 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{formatCurrency(receitasExibidas)}</div>
+                  {visionMode === 'realizado' ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {receitasPendentes > 0 ? (
+                        <span className="text-blue-600 font-medium">
+                          +{formatCurrency(receitasPendentes)} a receber ({mensalidadesPendentesCount} anexadas)
+                        </span>
+                      ) : (
+                        'Total de entradas quitadas'
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatCurrency(receitasPagas)} quitadas + {formatCurrency(receitasPendentes)} a receber
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Despesas</CardTitle>
+                  <ArrowDownRight className="h-4 w-4 text-red-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">{formatCurrency(despesas)}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Inclui Folha ({formatCurrency(folhaPagamento)})</p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {visionMode === 'realizado' ? 'Saldo Atual (Caixa)' : 'Saldo Projetado'}
+                  </CardTitle>
+                  <DollarSign className={`h-4 w-4 ${saldo >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${saldo >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(saldo)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Receitas - Despesas</p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Faturas (Cartões)</CardTitle>
+                  <CreditCard className="h-4 w-4 text-orange-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-orange-600">{formatCurrency(faturasCartao)}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Ainda não saíram do caixa</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         
         {/* Gráfico de Barras: Receitas x Despesas */}
         <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Receitas vs Despesas</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-base font-medium">
+              {visionMode === 'realizado' ? 'Receitas vs Despesas (Caixa)' : 'Receitas vs Despesas (Projeção)'}
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {visionMode === 'realizado' ? 'Somente quitados' : 'Inclui mensalidades anexadas'}
+            </span>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -232,7 +373,7 @@ export function DashboardTab({ lancamentos, orcamentos, salarios, caixas, cartoe
               <tbody className="divide-y">
                 {recentTransactions.map((t) => (
                   <tr key={t.id} className="hover:bg-muted/50 transition-colors">
-                    <td className="py-3">{t.data.toLocaleDateString('pt-BR')}</td>
+                    <td className="py-3">{formatDate(t.data)}</td>
                     <td className="py-3 font-medium">{t.descricao}</td>
                     <td className="py-3">
                       <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">

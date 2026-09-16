@@ -20,6 +20,14 @@ export const APP_SCREENS: ScreenDefinition[] = [
     label: 'Dashboard',
   },
   {
+    id: 'comercial',
+    label: 'Comercial',
+    tabs: [
+      { id: 'kanban', label: 'Kanban por Turmas' },
+      { id: 'metas', label: 'Metas de Matrícula e Rematrícula' },
+    ],
+  },
+  {
     id: 'alunos',
     label: 'Alunos',
     tabs: [
@@ -33,8 +41,13 @@ export const APP_SCREENS: ScreenDefinition[] = [
     label: 'Pedagógico',
     tabs: [
       { id: 'diario', label: 'Diário de Classe' },
+      { id: 'planejamento', label: 'Planejamento de Aulas' },
       { id: 'avaliacoes', label: 'Avaliações' },
+      { id: 'turmas', label: 'Turmas & Horários' },
+      { id: 'configuracoes', label: 'Configurações (Disciplinas, Médias, Notas)' },
       { id: 'notas', label: 'Notas' },
+      { id: 'materias', label: 'Disciplinas & Matérias' },
+      { id: 'ciclos-medias', label: 'Ciclos & Médias' },
     ],
   },
   {
@@ -55,6 +68,15 @@ export const APP_SCREENS: ScreenDefinition[] = [
       { id: 'cartoes', label: 'Cartões' },
       { id: 'dashboard', label: 'Dashboard Financeiro' },
       { id: 'turmas', label: 'Turmas' },
+    ],
+  },
+  {
+    id: 'estoque',
+    label: 'Estoque',
+    tabs: [
+      { id: 'vendas', label: 'Produtos para Venda' },
+      { id: 'retiradas', label: 'Retiradas & Consumo' },
+      { id: 'movimentacoes', label: 'Histórico de Movimentações' },
     ],
   },
   {
@@ -85,6 +107,7 @@ export const APP_SCREENS: ScreenDefinition[] = [
 export interface UserVisibilityConfig {
   screens: string[];
   tabs: Record<string, string[]>;
+  kpis?: Record<string, boolean>; // screenId -> show/hide total cards
 }
 
 export type AllUserPermissions = Record<string, UserVisibilityConfig>;
@@ -178,6 +201,22 @@ export function usePermissions() {
     return true;
   };
 
+  const canViewKpis = (screenId: string, targetUserId?: string): boolean => {
+    const checkUserId = targetUserId || user?.id;
+    if (!checkUserId) return true;
+
+    const userConfig = permissionsStore[checkUserId];
+    if (userConfig && userConfig.kpis && typeof userConfig.kpis[screenId] === 'boolean') {
+      return userConfig.kpis[screenId];
+    }
+
+    if (userConfig && userConfig.kpis && typeof userConfig.kpis['_all'] === 'boolean') {
+      return userConfig.kpis['_all'];
+    }
+
+    return true; // Padrão: visível a menos que explicitamente desativado para o usuário
+  };
+
   const saveUserPermissions = (userId: string, config: UserVisibilityConfig) => {
     setPermissionsStore((prev) => ({
       ...prev,
@@ -203,6 +242,7 @@ export function usePermissions() {
   return {
     canAccessScreen,
     canAccessTab,
+    canViewKpis,
     saveUserPermissions,
     resetUserPermissions,
     getUserPermissions,

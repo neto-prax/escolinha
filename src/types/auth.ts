@@ -56,9 +56,9 @@ export interface AuthState {
 // Role-based permissions
 export const ROLE_PERMISSIONS: Record<AppRole, string[]> = {
   teacher: ['pedagogico', 'diario', 'turmas'],
-  secretary: ['secretaria', 'turmas', 'alunos', 'mensagens'],
-  admin: ['administrativo', 'financeiro', 'mensagens'],
-  seller: ['vendas'],
+  secretary: ['secretaria', 'turmas', 'alunos', 'mensagens', 'comercial', 'estoque'],
+  admin: ['administrativo', 'financeiro', 'mensagens', 'comercial', 'estoque'],
+  seller: ['vendas', 'comercial'],
   director: ['*'], // Acesso total
 };
 

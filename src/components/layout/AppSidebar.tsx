@@ -17,6 +17,8 @@ import {
   Megaphone,
   Brain,
   Shield,
+  Target,
+  Package,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -60,6 +62,7 @@ const navigationGroups: NavGroup[] = [
     label: 'Principal',
     items: [
       { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, module: 'dashboard' },
+      { title: 'Comercial', url: '/app/comercial', icon: Target, module: 'comercial' },
       { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
       { title: 'Pedagógico', url: '/app/pedagogico', icon: BookOpen, module: 'pedagogico' },
       { title: 'Comissão', url: '/app/vendas', icon: Briefcase, module: 'vendas' },
@@ -68,6 +71,7 @@ const navigationGroups: NavGroup[] = [
   {
     label: 'Financeiro',
     items: [
+      { title: 'Estoque', url: '/app/estoque', icon: Package, module: 'estoque' },
       { title: 'Administrativo', url: '/app/administrativo', icon: Briefcase, module: 'administrativo' },
       { title: 'Financeiro', url: '/app/financeiro', icon: DollarSign, module: 'financeiro' },
     ],

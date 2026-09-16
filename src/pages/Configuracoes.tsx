@@ -4,7 +4,7 @@ import { WhatsAppInstancesManager } from '@/components/settings/WhatsAppInstance
 import { SectorUsersManager } from '@/components/settings/SectorUsersManager';
 import { AutomationSettings } from '@/components/settings/AutomationSettings';
 import { FinancialSettings } from '@/components/settings/FinancialSettings';
-import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
+import { PedagogicoSettings } from '@/components/settings/PedagogicoSettings';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { DangerZoneSettings } from '@/components/settings/DangerZoneSettings';
 import { AdministrativoSettings } from '@/components/settings/AdministrativoSettings';
@@ -129,7 +129,7 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
 
         {/* 4. PEDAGÓGICO */}
         <TabsContent value="pedagogico" className="space-y-6">
-          <DailyReportSettings />
+          <PedagogicoSettings />
         </TabsContent>
 
         {/* 5. ADMINISTRATIVO */}

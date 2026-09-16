@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -33,9 +34,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound, Trash2, Layers, CheckCircle2 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound, Trash2, Layers, CheckCircle2, Briefcase, Link2, Unlink, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppRole } from '@/types/auth';
 import {
   useUsers,
@@ -69,6 +78,34 @@ const ROLE_COLORS: Record<AppRole, string> = {
   seller: 'bg-indigo-500',
 };
 
+const KPI_SCREENS = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard Principal',
+    description: 'Cards de Alunos Ativos, Receita Realizada, Inadimplência e Previsão Contratual.',
+  },
+  {
+    id: 'comercial',
+    label: 'Comercial / CRM',
+    description: 'Cards de Funil de Vendas (Leads, Contatos, Visitas, Matrículas) e Metas de Matrículas.',
+  },
+  {
+    id: 'alunos',
+    label: 'Alunos e Turmas',
+    description: 'Cards de Alunos Matriculados, Turmas Ativas, Capacidade Total e Vagas Disponíveis.',
+  },
+  {
+    id: 'financeiro',
+    label: 'Financeiro',
+    description: 'Cards de Receitas Totais (incluindo mensalidades), Despesas do Período e Saldo Líquido.',
+  },
+  {
+    id: 'administrativo',
+    label: 'Administrativo / RH',
+    description: 'Cards de Total de Colaboradores, Professores Ativos e Resumo Salarial.',
+  },
+];
+
 const Usuarios = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { data: users = [], isLoading } = useUsers();
@@ -84,6 +121,61 @@ const Usuarios = () => {
   const [selectedUser, setSelectedUser] = useState<UserWithRoles | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
+  // Estados e Funções para Vincular Usuário a Colaborador
+  const [employees, setEmployees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
+  const [isLinkEmployeeOpen, setIsLinkEmployeeOpen] = useState(false);
+  const [userToLink, setUserToLink] = useState<UserWithRoles | null>(null);
+  const [selectedEmployeeIdToLink, setSelectedEmployeeIdToLink] = useState<string>('none');
+
+  const handleOpenLinkEmployee = (targetUser: UserWithRoles) => {
+    setUserToLink(targetUser);
+    const existing = employees.find((e) => e.userId === targetUser.id);
+    setSelectedEmployeeIdToLink(existing ? existing.id : 'none');
+    setIsLinkEmployeeOpen(true);
+  };
+
+  const handleSaveLinkEmployee = () => {
+    if (!userToLink) return;
+
+    if (selectedEmployeeIdToLink === 'none') {
+      setEmployees((prev) =>
+        prev.map((emp) =>
+          emp.userId === userToLink.id
+            ? { ...emp, userId: undefined, userName: undefined, userEmail: undefined }
+            : emp
+        )
+      );
+      toast.success(`Vínculo de colaborador removido do usuário ${userToLink.full_name}.`);
+    } else {
+      setEmployees((prev) =>
+        prev.map((emp) => {
+          if (emp.id === selectedEmployeeIdToLink) {
+            return {
+              ...emp,
+              userId: userToLink.id,
+              userName: userToLink.full_name,
+              userEmail: userToLink.email,
+            };
+          }
+          if (emp.userId === userToLink.id) {
+            return {
+              ...emp,
+              userId: undefined,
+              userName: undefined,
+              userEmail: undefined,
+            };
+          }
+          return emp;
+        })
+      );
+      const empObj = employees.find((e) => e.id === selectedEmployeeIdToLink);
+      toast.success(`Usuário ${userToLink.full_name} conectado ao colaborador ${empObj?.name || ''}!`);
+    }
+
+    setIsLinkEmployeeOpen(false);
+    setUserToLink(null);
+  };
 
   const handleBulkDelete = async () => {
     if (selectedUserIds.length === 0) return;
@@ -131,7 +223,7 @@ const Usuarios = () => {
     APP_SCREENS,
   } = usePermissions();
 
-  const [permissionsTab, setPermissionsTab] = useState<'roles' | 'screens'>('roles');
+  const [permissionsTab, setPermissionsTab] = useState<'roles' | 'screens' | 'kpis'>('roles');
   const [customVisibility, setCustomVisibility] = useState(false);
   const [visibilityForm, setVisibilityForm] = useState<UserVisibilityConfig>({
     screens: [],
@@ -234,26 +326,45 @@ const Usuarios = () => {
 
   const handleRolesSave = async () => {
     if (!selectedUser) return;
-    try {
-      await updateRoles.mutateAsync({
-        userId: selectedUser.id,
-        roles: rolesForm,
-      });
 
+    // 1. Sempre salva as regras de visualização de telas e abas
+    try {
       if (customVisibility) {
         saveUserPermissions(selectedUser.id, visibilityForm);
       } else {
         resetUserPermissions(selectedUser.id);
       }
+    } catch (visErr) {
+      console.error('Erro ao salvar visibilidade de telas/abas:', visErr);
+    }
 
-      toast.success('Permissões e visibilidade de telas/abas salvas!');
+    // 2. Atualiza os papéis no Supabase de forma protegida
+    let rolesUpdated = false;
+    let rolesErrorMsg = '';
+
+    try {
+      await updateRoles.mutateAsync({
+        userId: selectedUser.id,
+        roles: rolesForm,
+      });
+      rolesUpdated = true;
+    } catch (error: any) {
+      console.error('Erro ao atualizar cargos no banco:', error);
+      rolesErrorMsg = error?.message || 'Permissão negada pelo banco de dados';
+    }
+
+    if (rolesUpdated) {
+      toast.success('Permissões e visibilidade de telas/abas salvas com sucesso!');
       setIsRolesOpen(false);
 
       if (selectedUser.id === user?.id) {
         await refreshProfile();
       }
-    } catch (error) {
-      toast.error('Erro ao atualizar permissões');
+    } else {
+      toast.warning(
+        `Visibilidade de telas/abas salva! Atenção: os cargos no banco não foram alterados (${rolesErrorMsg}).`
+      );
+      setIsRolesOpen(false);
     }
   };
 
@@ -371,6 +482,7 @@ const Usuarios = () => {
                   <TableHead>Telefone</TableHead>
                   <TableHead>Cargos</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Colaborador Vinculado</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -441,6 +553,35 @@ const Usuarios = () => {
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      {(() => {
+                        const linkedEmp = employees.find((e) => e.userId === u.id);
+                        if (linkedEmp) {
+                          return (
+                            <Badge
+                              variant="outline"
+                              onClick={() => handleOpenLinkEmployee(u)}
+                              className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 cursor-pointer flex items-center gap-1.5 w-fit"
+                              title="Clique para gerenciar vínculo com colaborador"
+                            >
+                              <Briefcase className="h-3 w-3 text-indigo-600" />
+                              <span className="font-semibold">{linkedEmp.name}</span>
+                              <span className="text-[10px] text-indigo-500">({linkedEmp.role})</span>
+                            </Badge>
+                          );
+                        }
+                        return (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenLinkEmployee(u)}
+                            className="text-[11px] h-6 px-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-dashed border-slate-200"
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Conectar
+                          </Button>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
@@ -448,6 +589,10 @@ const Usuarios = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenLinkEmployee(u)} className="text-indigo-700 font-medium">
+                            <Briefcase className="h-4 w-4 mr-2 text-indigo-600" />
+                            Vincular a Colaborador
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDetailsOpen(u)}>
                             <Building2 className="h-4 w-4 mr-2" />
                             Detalhes do Colaborador
@@ -554,13 +699,16 @@ const Usuarios = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={permissionsTab} onValueChange={(v) => setPermissionsTab(v as 'roles' | 'screens')} className="flex-1 flex flex-col overflow-hidden mt-1">
-            <TabsList className="grid grid-cols-2 w-full">
-              <TabsTrigger value="roles" className="flex items-center gap-2 text-xs">
-                <Shield className="h-3.5 w-3.5" /> Cargos no Sistema
+          <Tabs value={permissionsTab} onValueChange={(v) => setPermissionsTab(v as 'roles' | 'screens' | 'kpis')} className="flex-1 flex flex-col overflow-hidden mt-1">
+            <TabsList className="grid grid-cols-3 w-full">
+              <TabsTrigger value="roles" className="flex items-center gap-1.5 text-xs">
+                <Shield className="h-3.5 w-3.5" /> Cargos
               </TabsTrigger>
-              <TabsTrigger value="screens" className="flex items-center gap-2 text-xs">
-                <Layers className="h-3.5 w-3.5" /> Telas e Abas ({visibilityForm.screens.length} ativas)
+              <TabsTrigger value="screens" className="flex items-center gap-1.5 text-xs">
+                <Layers className="h-3.5 w-3.5" /> Telas e Abas ({visibilityForm.screens.length})
+              </TabsTrigger>
+              <TabsTrigger value="kpis" className="flex items-center gap-1.5 text-xs">
+                <Eye className="h-3.5 w-3.5" /> Totais (KPIs)
               </TabsTrigger>
             </TabsList>
 
@@ -755,6 +903,98 @@ const Usuarios = () => {
                 })}
               </div>
             </TabsContent>
+
+            {/* ABA 3: TOTAIS (KPIS) */}
+            <TabsContent value="kpis" className="space-y-4 py-3 flex-1 overflow-y-auto">
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg">
+                <span className="text-xs font-semibold text-purple-900 block mb-1">
+                  Exibição de Cards de Totais e Resumos (KPIs)
+                </span>
+                <p className="text-[11px] text-purple-700 leading-relaxed">
+                  Defina quais telas terão os cartões de indicadores consolidados e totais financeiros visíveis para este usuário.
+                  Se desativado, o usuário acessará normalmente a tela com suas tabelas e rotinas operacionais, mas os blocos de números agregados ficarão ocultos.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 py-1">
+                <span className="text-xs text-slate-500 font-medium">Controle de exibição por tela:</span>
+                <div className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-[11px] h-6 px-2 text-purple-700 hover:bg-purple-50"
+                    onClick={() => {
+                      setCustomVisibility(true);
+                      const allVisible: Record<string, boolean> = {};
+                      KPI_SCREENS.forEach((s) => {
+                        allVisible[s.id] = true;
+                      });
+                      setVisibilityForm({ ...visibilityForm, kpis: allVisible });
+                    }}
+                  >
+                    Exibir Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-[11px] h-6 px-2 text-slate-600 hover:bg-slate-100"
+                    onClick={() => {
+                      setCustomVisibility(true);
+                      const allHidden: Record<string, boolean> = {};
+                      KPI_SCREENS.forEach((s) => {
+                        allHidden[s.id] = false;
+                      });
+                      setVisibilityForm({ ...visibilityForm, kpis: allHidden });
+                    }}
+                  >
+                    Ocultar Todos
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                {KPI_SCREENS.map((kpiScreen) => {
+                  const isVisible = visibilityForm.kpis?.[kpiScreen.id] !== false;
+                  return (
+                    <div
+                      key={kpiScreen.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-300 bg-white"
+                    >
+                      <div className="space-y-0.5 pr-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-slate-800">{kpiScreen.label}</span>
+                          <Badge
+                            variant={isVisible ? 'default' : 'secondary'}
+                            className={`text-[10px] h-4 px-1.5 ${
+                              isVisible ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                            }`}
+                          >
+                            {isVisible ? 'Visível' : 'Oculto'}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">{kpiScreen.description}</p>
+                      </div>
+
+                      <Switch
+                        checked={isVisible}
+                        onCheckedChange={(checked) => {
+                          setCustomVisibility(true);
+                          setVisibilityForm({
+                            ...visibilityForm,
+                            kpis: {
+                              ...(visibilityForm.kpis || {}),
+                              [kpiScreen.id]: checked,
+                            },
+                          });
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </TabsContent>
           </Tabs>
 
           <DialogFooter className="pt-3 border-t mt-2">
@@ -900,6 +1140,102 @@ const Usuarios = () => {
               disabled={isChangingPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
             >
               {isChangingPassword ? 'Alterando...' : 'Alterar Senha'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Vínculo com Colaborador */}
+      <Dialog open={isLinkEmployeeOpen} onOpenChange={setIsLinkEmployeeOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5 text-indigo-600" />
+              Vincular a Colaborador
+            </DialogTitle>
+            <DialogDescription>
+              Conecte este usuário do sistema a um registro de funcionário/colaborador do módulo Administrativo.
+            </DialogDescription>
+          </DialogHeader>
+
+          {userToLink && (
+            <div className="space-y-4 py-2">
+              <div className="flex items-center gap-3 p-3 rounded-lg border bg-slate-50">
+                <Avatar className="h-10 w-10 border border-slate-200">
+                  <AvatarImage src={userToLink.avatar_url || ''} />
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                    {getInitials(userToLink.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-sm text-slate-800 truncate">{userToLink.full_name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{userToLink.email}</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {userToLink.roles.map((r) => (
+                      <Badge key={r} variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                        {ROLE_LABELS[r]}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="employee_select">Colaborador / Funcionário</Label>
+                <Select
+                  value={selectedEmployeeIdToLink}
+                  onValueChange={setSelectedEmployeeIdToLink}
+                >
+                  <SelectTrigger id="employee_select">
+                    <SelectValue placeholder="Selecione um colaborador..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none" className="text-muted-foreground italic">
+                      -- Nenhum (Desconectar usuário) --
+                    </SelectItem>
+                    {employees.map((emp) => {
+                      const isLinkedToAnother = emp.userId && emp.userId !== userToLink.id;
+                      return (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.name} ({emp.role} - {emp.department})
+                          {isLinkedToAnother ? ' [Já vinculado a outro]' : ''}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Ao vincular, o usuário do sistema terá correspondência direta com a ficha do funcionário no Administrativo.
+                </p>
+              </div>
+
+              {selectedEmployeeIdToLink !== 'none' && (() => {
+                const previewEmp = employees.find((e) => e.id === selectedEmployeeIdToLink);
+                if (!previewEmp) return null;
+                return (
+                  <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-md text-xs space-y-1">
+                    <div className="font-semibold text-indigo-900 flex items-center gap-1.5">
+                      <Briefcase className="h-3.5 w-3.5 text-indigo-600" />
+                      {previewEmp.name}
+                    </div>
+                    <div className="text-indigo-700 grid grid-cols-2 gap-1 pt-1">
+                      <div><span className="font-medium text-slate-500">Cargo:</span> {previewEmp.role}</div>
+                      <div><span className="font-medium text-slate-500">Depto:</span> {previewEmp.department}</div>
+                      <div><span className="font-medium text-slate-500">Contrato:</span> {previewEmp.contract_type}</div>
+                      <div><span className="font-medium text-slate-500">Tel:</span> {previewEmp.phone || 'Não inf.'}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsLinkEmployeeOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveLinkEmployee} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              Salvar Vínculo
             </Button>
           </DialogFooter>
         </DialogContent>

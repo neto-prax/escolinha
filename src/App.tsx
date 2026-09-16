@@ -29,6 +29,8 @@ import PainelVendedor from "./pages/PainelVendedor";
 import PublicDailyReport from "./pages/PublicDailyReport";
 import Pedagogico from "./pages/Pedagogico";
 import Perfil from "./pages/Perfil";
+import Comercial from "./pages/Comercial";
+import Estoque from "./pages/Estoque";
 
 const queryClient = new QueryClient();
 
@@ -52,11 +54,13 @@ const App = () => (
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="pedagogico" element={<Pedagogico />} />
               <Route path="financeiro" element={<Financeiro />} />
+              <Route path="estoque" element={<Estoque />} />
               <Route path="administrativo" element={<Administrativo />} />
               <Route path="relatorios" element={<Relatorios />} />
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="usuarios" element={<Usuarios />} />
               <Route path="alunos" element={<Alunos />} />
+              <Route path="comercial" element={<Comercial />} />
               <Route path="vendas" element={<PainelVendedor />} />
               <Route path="perfil" element={<Perfil />} />
             </Route>

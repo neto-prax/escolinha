@@ -41,8 +41,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Briefcase, Users, FileText, Plus, Search, MoreHorizontal, Clock, Calendar, 
-  Loader2, Download, Upload, FileDown, LayoutGrid, List, Wrench, Eye, Pencil, 
-  Trash2, Mail, Phone, Camera, UserCheck, ShieldAlert 
+  Loader2, Download, Upload, FileDown, LayoutGrid, List, Wrench, Eye, EyeOff, Pencil, 
+  Trash2, Mail, Phone, Camera, UserCheck, ShieldAlert, DollarSign, Shield, Link2 
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
@@ -50,6 +50,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { usePermissions } from '@/hooks/usePermissions';
 import { supabase } from '@/integrations/supabase/client';
+import { formatDate } from '@/lib/utils';
+import { useUsers } from '@/hooks/useUsers';
 
 import * as z from 'zod';
 import {
@@ -63,6 +65,21 @@ import {
 
 import { OrdensServicoTab } from '@/components/administrativo/OrdensServicoTab';
 
+const formatCurrency = (val: number) => {
+  return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+const parseCurrencyInput = (val: any): number => {
+  if (val === null || val === undefined || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const cleaned = String(val)
+    .replace(/[R$\s]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
 const employeeSchema = z.object({
   name: z.string().min(3, 'Nome é obrigatório'),
   role: z.string().min(1, 'Cargo é obrigatório'),
@@ -70,16 +87,37 @@ const employeeSchema = z.object({
   phone: z.string().min(10, 'Telefone é obrigatório'),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   hire_date: z.string().min(1, 'Data de admissão é obrigatória'),
+  contract_type: z.enum(['mensalista', 'horista']).default('mensalista'),
+  salary: z.string().optional().or(z.literal('')),
+  hourly_rate: z.string().optional().or(z.literal('')),
+  user_id: z.string().optional(),
 });
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
+
+const ROLE_LABELS: Record<string, string> = {
+  director: 'Diretor(a)',
+  admin: 'Administrativo',
+  secretary: 'Secretaria',
+  teacher: 'Professor(a)',
+  seller: 'Vendedor(a)',
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  director: 'bg-purple-500',
+  admin: 'bg-blue-500',
+  secretary: 'bg-green-500',
+  teacher: 'bg-orange-500',
+  seller: 'bg-indigo-500',
+};
 
 const MOCK_IDS = ['1', '2', '3', '4', '5'];
 const MOCK_NAMES = ['Maria Silva', 'João Santos', 'Ana Costa', 'Carlos Lima', 'Paula Oliveira'];
 
 const Administrativo = () => {
   const { profile } = useAuth();
-  const { canAccessTab } = usePermissions();
+  const { canAccessTab, canViewKpis } = usePermissions();
+  const [showTotals, setShowTotals] = useLocalStorage<boolean>('escolinha_show_kpis_administrativo', true);
 
   const [employees, setEmployees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
 
@@ -113,6 +151,7 @@ const Administrativo = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
   const [editPhoto, setEditPhoto] = useState<string | null>(null);
+  const [editContractType, setEditContractType] = useState<'mensalista' | 'horista'>('mensalista');
 
   const [isViewFichaOpen, setIsViewFichaOpen] = useState(false);
   const [viewingEmployee, setViewingEmployee] = useState<any | null>(null);
@@ -123,17 +162,44 @@ const Administrativo = () => {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedEmployeeHistory, setSelectedEmployeeHistory] = useState<any>(null);
 
+  const { data: systemUsers = [] } = useUsers();
+
+  // Estados para Conectar Colaborador a Usuário do Sistema
+  const [isConnectUserOpen, setIsConnectUserOpen] = useState(false);
+  const [employeeToConnect, setEmployeeToConnect] = useState<any | null>(null);
+  const [selectedUserIdToConnect, setSelectedUserIdToConnect] = useState<string>('none');
+
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const toISODate = (val: any): string => {
+    if (!val) return new Date().toISOString().split('T')[0];
+    const str = String(val).trim();
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+      const [d, m, y] = str.split('/');
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+      return str.split('T')[0];
+    }
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    } catch {}
+    return new Date().toISOString().split('T')[0];
+  };
 
   const handleExport = () => {
     const dataToExport = employees.map(e => ({
       Nome: e.name,
       Cargo: e.role,
       Departamento: e.department,
+      'Tipo de Contrato': e.contract_type === 'horista' || (!e.contract_type && e.hourly_rate > 0) ? 'Horista' : 'Mensalista',
+      'Salário': e.salary ? Number(e.salary) : '',
+      'Valor Hora Aula': e.hourly_rate ? Number(e.hourly_rate) : '',
       Telefone: e.phone,
       Email: e.email || '',
-      'Data de Admissão': e.hire_date,
+      'Data de Admissão': formatDate(e.hire_date),
       Status: e.status === 'active' ? 'Ativo' : e.status === 'vacation' ? 'Férias' : 'Afastado'
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -144,14 +210,30 @@ const Administrativo = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const templateData = [{
-      Nome: 'João da Silva',
-      Cargo: 'Professor(a)',
-      Departamento: 'Pedagógico',
-      Telefone: '(11) 99999-9999',
-      Email: 'joao@escola.com',
-      'Data de Admissão': '2024-01-15'
-    }];
+    const templateData = [
+      {
+        Nome: 'João da Silva',
+        Cargo: 'Professor(a)',
+        Departamento: 'Pedagógico',
+        'Tipo de Contrato': 'Horista',
+        'Salário': '',
+        'Valor Hora Aula': 50.00,
+        Telefone: '(11) 99999-9999',
+        Email: 'joao@escola.com',
+        'Data de Admissão': '15/01/2024'
+      },
+      {
+        Nome: 'Maria Santos',
+        Cargo: 'Coordenador(a)',
+        Departamento: 'Pedagógico',
+        'Tipo de Contrato': 'Mensalista',
+        'Salário': 4500.00,
+        'Valor Hora Aula': '',
+        Telefone: '(11) 98888-8888',
+        Email: 'maria@escola.com',
+        'Data de Admissão': '10/05/2023'
+      }
+    ];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
@@ -172,16 +254,37 @@ const Administrativo = () => {
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json<any>(ws);
 
-        const novosFuncionarios = data.map(row => ({
-          id: String(Date.now() + Math.random()),
-          name: row.Nome,
-          role: row.Cargo || 'Auxiliar',
-          department: row.Departamento || 'Administrativo',
-          phone: String(row.Telefone || ''),
-          email: String(row.Email || ''),
-          status: 'active',
-          hire_date: String(row['Data de Admissão'] || new Date().toISOString().split('T')[0]),
-        }));
+        const parseNum = (val: any) => {
+          if (val === undefined || val === null || val === '') return undefined;
+          if (typeof val === 'number') return isNaN(val) ? undefined : val;
+          const str = String(val).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+          const n = parseFloat(str);
+          return isNaN(n) ? undefined : n;
+        };
+
+        const novosFuncionarios = data.map(row => {
+          const tipoContratoRaw = String(row['Tipo de Contrato'] || row['Tipo'] || row['Regime'] || '').toLowerCase();
+          const isHorista = tipoContratoRaw.includes('horista') || (!tipoContratoRaw && row['Valor Hora Aula'] !== undefined && row['Valor Hora Aula'] !== '');
+          const contract_type = isHorista ? 'horista' : 'mensalista';
+
+          const salaryVal = parseNum(row['Salário'] || row['Salario'] || row['Salário Base'] || row['Salario Base']);
+          const hourlyRateVal = parseNum(row['Valor Hora Aula'] || row['Hora Aula'] || row['Valor Hora'] || row['Hora-Aula']);
+
+          return {
+            id: String(Date.now() + Math.random()),
+            name: row.Nome,
+            role: row.Cargo || 'Auxiliar',
+            department: row.Departamento || 'Administrativo',
+            phone: String(row.Telefone || ''),
+            email: String(row.Email || ''),
+            status: 'active',
+            hire_date: toISODate(row['Data de Admissão']),
+            contract_type,
+            salary: salaryVal,
+            hourly_rate: isHorista ? hourlyRateVal : undefined,
+            ocorrencias: []
+          };
+        });
 
         setEmployees(prev => [...prev, ...novosFuncionarios]);
         toast.success(`${novosFuncionarios.length} funcionários importados com sucesso!`);
@@ -194,9 +297,6 @@ const Administrativo = () => {
     reader.readAsBinaryString(file);
   };
 
-
-
-
   const form = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
     defaultValues: {
@@ -206,13 +306,18 @@ const Administrativo = () => {
       phone: '',
       email: '',
       hire_date: '',
+      contract_type: 'mensalista',
+      salary: '',
+      hourly_rate: '',
+      user_id: 'none',
     },
   });
 
   const filteredEmployees = employees.filter(emp =>
     emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     emp.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.department.toLowerCase().includes(searchQuery.toLowerCase())
+    emp.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (emp.userName && emp.userName.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,7 +330,7 @@ const Administrativo = () => {
     const reader = new FileReader();
     reader.onload = () => {
       setSelectedPhoto(reader.result as string);
-      toast.success("Foto carregada com sucesso!");
+      toast.success("Foto carregada!");
     };
     reader.readAsDataURL(file);
   };
@@ -248,6 +353,7 @@ const Administrativo = () => {
   const handleOpenEdit = (emp: any) => {
     setEditingEmployee(emp);
     setEditPhoto(emp.photoUrl || null);
+    setEditContractType(emp.contract_type === 'horista' || (!emp.contract_type && emp.hourly_rate > 0) ? 'horista' : 'mensalista');
     setIsEditDialogOpen(true);
   };
 
@@ -255,6 +361,12 @@ const Administrativo = () => {
     e.preventDefault();
     if (!editingEmployee) return;
     const formData = new FormData(e.currentTarget);
+    const contractType = (formData.get('contract_type') as string) || editContractType;
+    const salary = parseCurrencyInput(formData.get('salary'));
+    const hourlyRate = parseCurrencyInput(formData.get('hourly_rate'));
+    const formUserId = formData.get('user_id') as string;
+    const userObj = formUserId && formUserId !== 'none' ? systemUsers.find(u => u.id === formUserId) : null;
+
     const updated = {
       ...editingEmployee,
       name: formData.get('name') as string,
@@ -263,12 +375,67 @@ const Administrativo = () => {
       phone: formData.get('phone') as string,
       email: (formData.get('email') as string) || '',
       hire_date: formData.get('hire_date') as string,
+      contract_type: contractType,
+      salary: salary,
+      hourly_rate: contractType === 'horista' ? hourlyRate : undefined,
       photoUrl: editPhoto || '',
+      userId: userObj ? userObj.id : (formUserId === 'none' ? undefined : editingEmployee.userId),
+      userName: userObj ? userObj.full_name : (formUserId === 'none' ? undefined : editingEmployee.userName),
+      userEmail: userObj ? userObj.email : (formUserId === 'none' ? undefined : editingEmployee.userEmail),
     };
     setEmployees(employees.map(emp => emp.id === updated.id ? updated : emp));
     setIsEditDialogOpen(false);
     setEditingEmployee(null);
     toast.success("Dados do colaborador atualizados com sucesso!");
+  };
+
+  // Funções de Conexão com Usuário do Sistema
+  const handleOpenConnectUser = (emp: any) => {
+    setEmployeeToConnect(emp);
+    setSelectedUserIdToConnect(emp.userId || 'none');
+    setIsConnectUserOpen(true);
+  };
+
+  const handleSaveConnectUser = () => {
+    if (!employeeToConnect) return;
+
+    if (selectedUserIdToConnect === 'none' || !selectedUserIdToConnect) {
+      // Desconectar usuário
+      setEmployees(prev => prev.map(emp => 
+        emp.id === employeeToConnect.id 
+          ? { ...emp, userId: undefined, userName: undefined, userEmail: undefined } 
+          : emp
+      ));
+      toast.success(`Usuário desvinculado de ${employeeToConnect.name}.`);
+    } else {
+      const userObj = systemUsers.find(u => u.id === selectedUserIdToConnect);
+      if (!userObj) return;
+
+      setEmployees(prev => prev.map(emp => {
+        if (emp.id === employeeToConnect.id) {
+          return { 
+            ...emp, 
+            userId: userObj.id, 
+            userName: userObj.full_name, 
+            userEmail: userObj.email 
+          };
+        }
+        // Se outro colaborador estiver com este mesmo usuário vinculado, limpa para evitar duplicatas
+        if (emp.userId === userObj.id) {
+          return {
+            ...emp,
+            userId: undefined,
+            userName: undefined,
+            userEmail: undefined,
+          };
+        }
+        return emp;
+      }));
+      toast.success(`Colaborador ${employeeToConnect.name} conectado ao usuário ${userObj.full_name}!`);
+    }
+
+    setIsConnectUserOpen(false);
+    setEmployeeToConnect(null);
   };
 
   const handleOpenViewFicha = (emp: any) => {
@@ -279,6 +446,11 @@ const Administrativo = () => {
   const handleCreateEmployee = async (data: EmployeeFormData) => {
     setIsLoading(true);
     try {
+      const contractType = data.contract_type || 'mensalista';
+      const salaryNum = parseCurrencyInput(data.salary);
+      const hourlyRateNum = parseCurrencyInput(data.hourly_rate);
+      const userObj = data.user_id && data.user_id !== 'none' ? systemUsers.find(u => u.id === data.user_id) : null;
+
       const newEmployee = {
         id: String(Date.now()),
         name: data.name,
@@ -289,6 +461,12 @@ const Administrativo = () => {
         photoUrl: selectedPhoto || '',
         status: 'active',
         hire_date: data.hire_date,
+        contract_type: contractType,
+        salary: salaryNum,
+        hourly_rate: contractType === 'horista' ? hourlyRateNum : undefined,
+        userId: userObj?.id || undefined,
+        userName: userObj?.full_name || undefined,
+        userEmail: userObj?.email || undefined,
         ocorrencias: []
       };
       setEmployees([...employees, newEmployee]);
@@ -373,6 +551,9 @@ const Administrativo = () => {
 
   const activeEmployees = employees.filter(e => e.status === 'active').length;
   const onVacation = employees.filter(e => e.status === 'vacation').length;
+  const totalHoristas = employees.filter(e => e.contract_type === 'horista' || (!e.contract_type && e.hourly_rate > 0)).length;
+  const totalMensalistas = employees.length - totalHoristas;
+  const totalFolhaSalarial = employees.reduce((acc, cur) => acc + (Number(cur.salary) || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -390,28 +571,68 @@ const Administrativo = () => {
       </PageHeader>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Funcionários</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{employees.length}</div>
-            <p className="text-xs text-muted-foreground">{activeEmployees} ativos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Em Férias</CardTitle>
-            <Calendar className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{onVacation}</div>
-            <p className="text-xs text-muted-foreground">Este mês</p>
-          </CardContent>
-        </Card>
-      </div>
+      {canViewKpis('administrativo') && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Indicadores do Quadro de Colaboradores
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTotals(!showTotals)}
+              className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+            >
+              {showTotals ? (
+                <>
+                  <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Ocultar Totais</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Exibir Totais</span>
+                </>
+              )}
+            </Button>
+          </div>
+
+          {showTotals && (
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Total Funcionários</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{employees.length}</div>
+                  <p className="text-xs text-muted-foreground">{activeEmployees} ativos</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Em Férias</CardTitle>
+                  <Calendar className="h-4 w-4 text-primary" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-primary">{onVacation}</div>
+                  <p className="text-xs text-muted-foreground">Este mês</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium">Folha Salarial Base</CardTitle>
+                  <DollarSign className="h-4 w-4 text-emerald-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-emerald-600">{formatCurrency(totalFolhaSalarial)}</div>
+                  <p className="text-xs text-muted-foreground">{totalHoristas} horista{totalHoristas !== 1 ? 's' : ''} • {totalMensalistas} mensalista{totalMensalistas !== 1 ? 's' : ''}</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       {availableTabs.length === 0 ? (
@@ -519,9 +740,11 @@ const Administrativo = () => {
                           <TableHead>Funcionário</TableHead>
                           <TableHead>Cargo</TableHead>
                           <TableHead>Departamento</TableHead>
+                          <TableHead>Remuneração</TableHead>
                           <TableHead>Telefone</TableHead>
                           <TableHead>Admissão</TableHead>
                           <TableHead>Status</TableHead>
+                          <TableHead>Usuário do Sistema</TableHead>
                           <TableHead className="w-10"></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -546,9 +769,52 @@ const Administrativo = () => {
                             </TableCell>
                             <TableCell>{employee.role}</TableCell>
                             <TableCell>{employee.department}</TableCell>
+                            <TableCell>
+                              {employee.contract_type === 'horista' || (!employee.contract_type && employee.hourly_rate > 0) ? (
+                                <div className="space-y-0.5">
+                                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 block text-sm">
+                                    {formatCurrency(employee.hourly_rate || 0)}/h-aula
+                                  </span>
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 text-blue-700 dark:text-blue-300 bg-blue-50/50 dark:bg-blue-950/30">
+                                    Horista
+                                  </Badge>
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <span className="font-semibold text-foreground block text-sm">
+                                    {formatCurrency(employee.salary || 0)}
+                                  </span>
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                    Mensalista
+                                  </Badge>
+                                </div>
+                              )}
+                            </TableCell>
                             <TableCell>{employee.phone}</TableCell>
-                            <TableCell>{new Date(employee.hire_date).toLocaleDateString('pt-BR')}</TableCell>
+                            <TableCell>{formatDate(employee.hire_date)}</TableCell>
                             <TableCell>{getStatusBadge(employee.status)}</TableCell>
+                            <TableCell>
+                              {employee.userId ? (
+                                <Badge
+                                  variant="outline"
+                                  onClick={() => handleOpenConnectUser(employee)}
+                                  className="text-[11px] bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 cursor-pointer flex items-center gap-1 w-fit"
+                                  title="Clique para gerenciar vínculo de usuário"
+                                >
+                                  <UserCheck className="h-3 w-3 text-purple-600" />
+                                  <span className="font-semibold truncate max-w-[120px]">{employee.userName || 'Conectado'}</span>
+                                </Badge>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenConnectUser(employee)}
+                                  className="text-[11px] h-6 px-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 border border-dashed border-slate-200"
+                                >
+                                  <Plus className="h-3 w-3 mr-1" /> Conectar
+                                </Button>
+                              )}
+                            </TableCell>
                             <TableCell>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -562,6 +828,9 @@ const Administrativo = () => {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleOpenEdit(employee)}>
                                     <Pencil className="mr-2 h-4 w-4" /> Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleOpenConnectUser(employee)} className="text-purple-700 font-medium">
+                                    <UserCheck className="mr-2 h-4 w-4 text-purple-600" /> Conectar Usuário
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleToggleVacation(employee.id, employee.status)}>
                                     {employee.status === 'vacation' ? 'Retirar férias' : 'Registrar férias'}
@@ -607,6 +876,9 @@ const Administrativo = () => {
                                   <DropdownMenuItem onClick={() => handleOpenEdit(employee)}>
                                     <Pencil className="mr-2 h-4 w-4" /> Editar
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleOpenConnectUser(employee)} className="text-purple-700 font-medium">
+                                    <UserCheck className="mr-2 h-4 w-4 text-purple-600" /> Conectar Usuário
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleToggleVacation(employee.id, employee.status)}>
                                     {employee.status === 'vacation' ? 'Retirar férias' : 'Registrar férias'}
                                   </DropdownMenuItem>
@@ -643,12 +915,42 @@ const Administrativo = () => {
                               <span className="font-medium text-foreground truncate ml-2">{employee.department}</span>
                             </div>
                             <div className="flex justify-between items-center text-muted-foreground border-b pb-1 border-border/50">
+                              <span>Remuneração:</span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400 ml-2">
+                                {employee.contract_type === 'horista' || (!employee.contract_type && employee.hourly_rate > 0)
+                                  ? `${formatCurrency(employee.hourly_rate || 0)}/h-aula (Horista)`
+                                  : `${formatCurrency(employee.salary || 0)}/mês`}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center text-muted-foreground border-b pb-1 border-border/50">
                               <span>Telefone:</span>
                               <span className="font-medium text-foreground ml-2">{employee.phone}</span>
                             </div>
                             <div className="flex justify-between items-center text-muted-foreground pt-1">
                               <span>Status:</span>
                               <span>{getStatusBadge(employee.status)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-muted-foreground pt-1 border-t border-border/50">
+                              <span className="text-xs">Usuário:</span>
+                              {employee.userId ? (
+                                <Badge
+                                  variant="outline"
+                                  onClick={() => handleOpenConnectUser(employee)}
+                                  className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 cursor-pointer flex items-center gap-1 truncate max-w-[140px]"
+                                  title="Clique para gerenciar o vínculo com usuário"
+                                >
+                                  <UserCheck className="h-3 w-3 text-purple-600 shrink-0" />
+                                  <span className="truncate">{employee.userName || 'Conectado'}</span>
+                                </Badge>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenConnectUser(employee)}
+                                  className="text-[10px] text-purple-600 hover:underline flex items-center gap-0.5"
+                                >
+                                  <Plus className="h-3 w-3" /> Conectar Usuário
+                                </button>
+                              )}
                             </div>
                           </CardContent>
                         </Card>
@@ -826,6 +1128,113 @@ const Administrativo = () => {
                   )}
                 />
 
+                {/* Remuneração: Regime, Salário e Hora-Aula */}
+                <div className="p-3.5 bg-muted/30 rounded-lg border border-border/60 space-y-3">
+                  <FormField
+                    control={form.control}
+                    name="contract_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de Contratação / Remuneração</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione o regime" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="mensalista">Mensalista (Salário Fixo Mensal)</SelectItem>
+                            <SelectItem value="horista">Horista (Remuneração por Hora-Aula)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {form.watch('contract_type') === 'horista' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      <FormField
+                        control={form.control}
+                        name="hourly_rate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-primary font-semibold flex items-center gap-1.5">
+                              <Clock className="h-4 w-4" /> Valor da Hora-Aula (R$) *
+                            </FormLabel>
+                            <FormControl>
+                              <Input placeholder="Ex: 50,00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="salary"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Salário Base Mensal (R$) (Opcional)</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Ex: 1500,00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  ) : (
+                    <FormField
+                      control={form.control}
+                      name="salary"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-semibold flex items-center gap-1.5">
+                            <DollarSign className="h-4 w-4 text-emerald-600" /> Salário Mensal (R$)
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="Ex: 3500,00" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {/* Usuário do Sistema */}
+                  <FormField
+                    control={form.control}
+                    name="user_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-semibold flex items-center gap-1.5 text-purple-900">
+                          <UserCheck className="h-4 w-4 text-purple-600" /> Vincular a Usuário do Sistema (Opcional)
+                        </FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value || 'none'}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione um usuário para vincular..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum usuário vinculado</SelectItem>
+                            {systemUsers.map((u) => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.full_name} {u.email ? `(${u.email})` : ''} — {u.roles.map(r => ROLE_LABELS[r] || r).join(', ') || 'Sem cargo'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[11px] text-muted-foreground">
+                          Conecte o colaborador à conta de usuário do sistema para acesso unificado e permissões.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
                 <div className="flex justify-end gap-3 pt-4 border-t mt-4">
                   <Button type="button" variant="outline" onClick={() => setIsEmployeeFormOpen(false)} disabled={isLoading}>
                     Cancelar
@@ -945,6 +1354,83 @@ const Administrativo = () => {
                   <Input type="email" name="email" defaultValue={editingEmployee.email || ''} placeholder="email@exemplo.com" />
                 </div>
 
+                {/* Remuneração: Regime, Salário e Hora-Aula */}
+                <div className="p-3.5 bg-muted/30 rounded-lg border border-border/60 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Tipo de Contratação / Remuneração</label>
+                    <Select 
+                      name="contract_type" 
+                      value={editContractType} 
+                      onValueChange={(val: any) => setEditContractType(val)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o regime" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mensalista">Mensalista (Salário Fixo Mensal)</SelectItem>
+                        <SelectItem value="horista">Horista (Remuneração por Hora-Aula)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {editContractType === 'horista' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-primary flex items-center gap-1.5">
+                          <Clock className="h-4 w-4" /> Valor da Hora-Aula (R$) *
+                        </label>
+                        <Input 
+                          name="hourly_rate" 
+                          defaultValue={editingEmployee.hourly_rate || ''} 
+                          placeholder="Ex: 50,00" 
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Salário Base Mensal (R$) (Opcional)</label>
+                        <Input 
+                          name="salary" 
+                          defaultValue={editingEmployee.salary || ''} 
+                          placeholder="Ex: 1500,00" 
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold flex items-center gap-1.5">
+                        <DollarSign className="h-4 w-4 text-emerald-600" /> Salário Mensal (R$)
+                      </label>
+                      <Input 
+                        name="salary" 
+                        defaultValue={editingEmployee.salary || ''} 
+                        placeholder="Ex: 3500,00" 
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Usuário do Sistema Conectado */}
+                <div className="space-y-1.5 pt-1 border-t">
+                  <label className="text-sm font-semibold flex items-center gap-1.5 text-purple-900">
+                    <UserCheck className="h-4 w-4 text-purple-600" /> Usuário do Sistema Conectado
+                  </label>
+                  <Select name="user_id" defaultValue={editingEmployee.userId || 'none'}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um usuário para vincular..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum usuário vinculado (Desconectado)</SelectItem>
+                      {systemUsers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.full_name} {u.email ? `(${u.email})` : ''} — {u.roles.map(r => ROLE_LABELS[r] || r).join(', ') || 'Sem cargo'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Altere ou desvincule a conta de usuário associada a este colaborador.
+                  </p>
+                </div>
+
                 <div className="flex justify-end gap-3 pt-4 border-t mt-4">
                   <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                     Cancelar
@@ -1009,7 +1495,7 @@ const Administrativo = () => {
                     <Calendar className="h-3.5 w-3.5" /> Data de Admissão
                   </span>
                   <p className="font-semibold text-foreground">
-                    {new Date(viewingEmployee.hire_date).toLocaleDateString('pt-BR')}
+                    {formatDate(viewingEmployee.hire_date)}
                   </p>
                 </div>
 
@@ -1021,6 +1507,65 @@ const Administrativo = () => {
                     {viewingEmployee.ocorrencias?.length || 0} registro(s)
                   </p>
                 </div>
+              </div>
+
+              {/* Remuneração na Ficha */}
+              <div className="p-3.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs text-muted-foreground block font-medium">Regime de Contratação</span>
+                  <Badge variant={viewingEmployee.contract_type === 'horista' || (!viewingEmployee.contract_type && viewingEmployee.hourly_rate > 0) ? 'outline' : 'secondary'} className="font-semibold mt-1">
+                    {viewingEmployee.contract_type === 'horista' || (!viewingEmployee.contract_type && viewingEmployee.hourly_rate > 0) ? 'Horista' : 'Mensalista'}
+                  </Badge>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-xs text-muted-foreground block font-medium">
+                    {viewingEmployee.contract_type === 'horista' || (!viewingEmployee.contract_type && viewingEmployee.hourly_rate > 0) ? 'Valor da Hora-Aula' : 'Salário Mensal'}
+                  </span>
+                  <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    {viewingEmployee.contract_type === 'horista' || (!viewingEmployee.contract_type && viewingEmployee.hourly_rate > 0)
+                      ? `${formatCurrency(viewingEmployee.hourly_rate || 0)} / hora-aula`
+                      : formatCurrency(viewingEmployee.salary || 0)}
+                  </span>
+                  {(viewingEmployee.contract_type === 'horista' || (!viewingEmployee.contract_type && viewingEmployee.hourly_rate > 0)) && viewingEmployee.salary > 0 && (
+                    <span className="text-xs text-muted-foreground block">
+                      Salário base: {formatCurrency(viewingEmployee.salary)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Usuário Vinculado na Ficha */}
+              <div className="p-3.5 rounded-lg bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs text-purple-900 dark:text-purple-300 block font-semibold flex items-center gap-1.5">
+                    <UserCheck className="h-4 w-4 text-purple-600" /> Usuário do Sistema Conectado
+                  </span>
+                  {viewingEmployee.userId ? (
+                    <div className="mt-1">
+                      <strong className="text-sm text-foreground block">{viewingEmployee.userName || 'Usuário Vinculado'}</strong>
+                      {viewingEmployee.userEmail && (
+                        <span className="text-xs text-muted-foreground">{viewingEmployee.userEmail}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Nenhum usuário do sistema conectado a este colaborador.
+                    </p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs text-purple-700 border-purple-300 hover:bg-purple-100 shrink-0"
+                  onClick={() => {
+                    const emp = viewingEmployee;
+                    setIsViewFichaOpen(false);
+                    handleOpenConnectUser(emp);
+                  }}
+                >
+                  <UserCheck className="h-3.5 w-3.5 mr-1" />
+                  {viewingEmployee.userId ? 'Alterar Vínculo' : 'Conectar Usuário'}
+                </Button>
               </div>
 
               <div className="flex flex-col sm:flex-row justify-end gap-2 pt-3 border-t">
@@ -1159,6 +1704,109 @@ const Administrativo = () => {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Conectar Colaborador a Usuário do Sistema */}
+      <Dialog open={isConnectUserOpen} onOpenChange={setIsConnectUserOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-800">
+              <UserCheck className="text-purple-600 h-5 w-5" />
+              Conectar Colaborador a Usuário
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Vincule este colaborador a uma conta de usuário do sistema para sincronizar permissões, diários e acessos.
+            </DialogDescription>
+          </DialogHeader>
+
+          {employeeToConnect && (
+            <div className="space-y-4 py-2">
+              {/* Card Resumo do Colaborador */}
+              <div className="p-3 bg-slate-50 border rounded-lg flex items-center gap-3">
+                <Avatar className="h-10 w-10 border border-purple-200">
+                  {employeeToConnect.photoUrl && <AvatarImage src={employeeToConnect.photoUrl} />}
+                  <AvatarFallback className="bg-purple-100 text-purple-700 font-bold">
+                    {employeeToConnect.name.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-sm text-slate-800 truncate">{employeeToConnect.name}</h4>
+                  <p className="text-xs text-slate-500 truncate">{employeeToConnect.role} • {employeeToConnect.department}</p>
+                </div>
+              </div>
+
+              {/* Seletor de Usuário do Sistema */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">Selecione o Usuário do Sistema</label>
+                <Select value={selectedUserIdToConnect} onValueChange={setSelectedUserIdToConnect}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Selecione um usuário cadastrado..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum (Desconectar usuário)</SelectItem>
+                    {systemUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.full_name} {u.email ? `(${u.email})` : ''} — {u.roles.map((r) => ROLE_LABELS[r] || r).join(', ') || 'Sem cargo'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-slate-400">
+                  Mostra os usuários com conta de acesso cadastrada na instituição.
+                </p>
+              </div>
+
+              {/* Pré-visualização do Usuário Selecionado */}
+              {selectedUserIdToConnect && selectedUserIdToConnect !== 'none' && (() => {
+                const sel = systemUsers.find(u => u.id === selectedUserIdToConnect);
+                if (!sel) return null;
+                return (
+                  <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-purple-900 uppercase">Conta Selecionada</span>
+                      <Badge className={sel.is_active ? 'bg-emerald-600 text-white text-[10px]' : 'bg-slate-400 text-white text-[10px]'}>
+                        {sel.is_active ? 'Conta Ativa' : 'Inativa'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar className="h-8 w-8 border border-purple-300">
+                        <AvatarImage src={sel.avatar_url || undefined} />
+                        <AvatarFallback className="bg-purple-200 text-purple-800 text-xs font-bold">
+                          {sel.full_name.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-xs text-slate-800 truncate">{sel.full_name}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{sel.email || 'Sem e-mail'}</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {sel.roles.map((role) => (
+                        <Badge key={role} className={`${ROLE_COLORS[role] || 'bg-slate-600'} text-white text-[10px] px-1.5 py-0`}>
+                          {ROLE_LABELS[role] || role}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <DialogFooter className="pt-2 border-t">
+            <Button variant="outline" size="sm" onClick={() => setIsConnectUserOpen(false)}>
+              Cancelar
+            </Button>
+            {employeeToConnect?.userId && selectedUserIdToConnect === 'none' && (
+              <Button variant="destructive" size="sm" onClick={handleSaveConnectUser}>
+                Desconectar
+              </Button>
+            )}
+            <Button size="sm" onClick={handleSaveConnectUser} className="bg-purple-600 hover:bg-purple-700 text-white">
+              Salvar Vínculo
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
