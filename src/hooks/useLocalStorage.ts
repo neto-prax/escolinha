@@ -8,8 +8,10 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   const schoolId = profile?.school_id ?? school?.id ?? null;
   const scopedKey = schoolId ? getSchoolStorageKey(key, schoolId) : null;
   const [storedValue, setStoredValue] = useState<T>(initialValue);
+  const [valueScope, setValueScope] = useState<string | null>(null);
   const latestValue = useRef(storedValue);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeScope = useRef<string | null>(scopedKey);
 
   latestValue.current = storedValue;
 
@@ -20,14 +22,19 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       const valueToStore = value instanceof Function ? value(latestValue.current) : value;
       latestValue.current = valueToStore;
       setStoredValue(valueToStore);
+      setValueScope(scopedKey);
       window.localStorage.setItem(scopedKey, JSON.stringify(valueToStore));
       window.dispatchEvent(new CustomEvent('local-storage-sync', {
         detail: { key: scopedKey, newValue: valueToStore },
       }));
 
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      const targetSchoolId = schoolId;
+      const targetScope = scopedKey;
       saveTimer.current = setTimeout(() => {
-        void saveCloudState(key, valueToStore);
+        if (activeScope.current === targetScope) {
+          void saveCloudState(key, valueToStore, targetSchoolId);
+        }
       }, 400);
     } catch (error) {
       console.warn(`Erro ao salvar "${scopedKey}":`, error);
@@ -35,9 +42,12 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   };
 
   useEffect(() => {
+    activeScope.current = scopedKey;
+
     if (!scopedKey) {
       latestValue.current = initialValue;
       setStoredValue(initialValue);
+      setValueScope(null);
       return;
     }
 
@@ -55,13 +65,15 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       if (cancelled) return;
       latestValue.current = localValue;
       setStoredValue(localValue);
+      setValueScope(scopedKey);
 
-      const remote = await loadCloudState<T>(key);
+      const remote = await loadCloudState<T>(key, schoolId ?? undefined);
       if (cancelled) return;
 
       if (remote !== undefined && remote !== null) {
         latestValue.current = remote;
         setStoredValue(remote);
+        setValueScope(scopedKey);
         try {
           window.localStorage.setItem(scopedKey, JSON.stringify(remote));
         } catch { /* armazenamento indisponível */ }
@@ -73,7 +85,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 
       const scopedLocal = window.localStorage.getItem(scopedKey);
       if (scopedLocal !== null) {
-        void saveCloudState(key, JSON.parse(scopedLocal));
+        void saveCloudState(key, JSON.parse(scopedLocal), schoolId ?? undefined);
       }
     };
 
@@ -86,18 +98,20 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
         saveTimer.current = null;
       }
     };
-  }, [key, scopedKey]);
+  }, [key, schoolId, scopedKey]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
       if (scopedKey && event.key === scopedKey && event.newValue !== null) {
         setStoredValue(JSON.parse(event.newValue));
+        setValueScope(scopedKey);
       }
     };
 
     const handleCustomSync = (event: CustomEvent) => {
       if (scopedKey && event.detail.key === scopedKey) {
         setStoredValue(event.detail.newValue);
+        setValueScope(scopedKey);
       }
     };
 
@@ -110,5 +124,5 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     };
   }, [scopedKey]);
 
-  return [storedValue, setValue];
+  return [valueScope === scopedKey ? storedValue : initialValue, setValue];
 }

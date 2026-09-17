@@ -8,7 +8,6 @@ import { DashboardTurmasTab } from '@/components/financeiro/DashboardTurmasTab';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '@/types/finance';
 import { Aluno, Mensalidade } from '@/types/aluno';
 import { getIntegratedLancamentos } from '@/lib/financeUtils';
-import { mockCaixas, mockCartoes } from '@/data/mockData';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,8 +39,8 @@ const Dashboard = () => {
   const [lancamentosV2Storage] = useLocalStorage<any[]>('escolinha_lancamentos_v2', []);
   const [orcamentos] = useLocalStorage<Orcamento[]>('escolinha_orcamentos', []);
   const [salarios] = useLocalStorage<Salario[]>('escolinha_salarios', []);
-  const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
-  const [cartoes] = useLocalStorage<Cartao[]>('escolinha_cartoes', mockCartoes);
+  const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', []);
+  const [cartoes] = useLocalStorage<Cartao[]>('escolinha_cartoes', []);
 
   // Unifica e integra lançamentos com mensalidades escolares pagas
   const lancamentos: Lancamento[] = useMemo(() => {

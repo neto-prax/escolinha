@@ -115,7 +115,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Defer Supabase calls with setTimeout
         if (session?.user) {
           setTimeout(() => {
-            fetchUserData(session.user.id);
+            fetchUserData(session.user.id).finally(() => {
+              setIsLoading(false);
+            });
           }, 0);
         } else {
           setProfile(null);
