@@ -2,10 +2,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Trash2, AlertTriangle, Users, Briefcase, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
-import { removeAllCloudState, listCloudStateKeys } from '@/lib/cloudState';
+import { getSchoolId, getSchoolStorageKey, removeAllCloudState, listCloudStateKeys } from '@/lib/cloudState';
 
 const clearKeys = async (keys: string[]) => {
-  keys.forEach((key) => localStorage.removeItem(key));
+  const schoolId = await getSchoolId();
+  if (!schoolId) {
+    toast.error('Escola não identificada. Entre novamente antes de apagar os dados.');
+    return;
+  }
+  keys.forEach((key) => localStorage.removeItem(getSchoolStorageKey(key, schoolId)));
   await removeAllCloudState(keys);
 };
 
@@ -45,10 +50,16 @@ export const DangerZoneSettings = () => {
     if (confirm('ATENÇÃO: Você está prestes a apagar TODOS os dados da escola (Alunos, Colaboradores, Financeiro, Turmas e Configurações). Deseja continuar?')) {
       const promptText = prompt('Digite "APAGAR TUDO" para confirmar a exclusão de todos os dados:');
       if (promptText === 'APAGAR TUDO') {
+        const schoolId = await getSchoolId();
+        if (!schoolId) {
+          toast.error('Escola não identificada. Entre novamente antes de apagar os dados.');
+          return;
+        }
+        const scopedPrefix = `s_${schoolId}_`;
         const localKeys: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && key.startsWith('escolinha_')) localKeys.push(key);
+          if (key?.startsWith(scopedPrefix)) localKeys.push(key.slice(scopedPrefix.length));
         }
         const cloudKeys = await listCloudStateKeys();
         await clearKeys(Array.from(new Set([...localKeys, ...cloudKeys])));

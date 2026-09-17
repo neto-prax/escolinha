@@ -12,6 +12,7 @@ import { Aluno, Mensalidade } from '@/types/aluno';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { DocumentoEscolarTemplate, DEFAULT_DOCUMENTOS_ESCOLARES } from '@/types/documentoEscolar';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useAuth } from '@/contexts/AuthContext';
 import { ReciboMatriculaModal, ItemPagamentoRecibo } from './ReciboMatriculaModal';
 import { DocumentosImpressaoModal } from './DocumentosImpressaoModal';
 import {
@@ -46,6 +47,7 @@ export const MatriculaWizardModal: React.FC<MatriculaWizardModalProps> = ({
   onMatriculaConcluida,
 }) => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const { school } = useAuth();
 
   const [documentosTemplates] = useLocalStorage<DocumentoEscolarTemplate[]>(
     'escolinha_documentos_escolares',
@@ -359,16 +361,16 @@ export const MatriculaWizardModal: React.FC<MatriculaWizardModalProps> = ({
     // Persistir lançamentos em localStorage de forma compatível
     if (novosLancamentosFinanceiro.length > 0) {
       try {
-        const rawV2 = localStorage.getItem('escolinha_lancamentos_v2');
+        const rawV2 = localStorage.getItem(`s_${school?.id}_escolinha_lancamentos_v2`);
         const listV2 = rawV2 ? JSON.parse(rawV2) : [];
-        const rawV1 = localStorage.getItem('escolinha_lancamentos');
+        const rawV1 = localStorage.getItem(`s_${school?.id}_escolinha_lancamentos`);
         const listV1 = rawV1 ? JSON.parse(rawV1) : [];
 
         const updatedV2 = [...listV2, ...novosLancamentosFinanceiro];
         const updatedV1 = [...listV1, ...novosLancamentosFinanceiro];
 
-        localStorage.setItem('escolinha_lancamentos_v2', JSON.stringify(updatedV2));
-        localStorage.setItem('escolinha_lancamentos', JSON.stringify(updatedV1));
+        localStorage.setItem(`s_${school?.id}_escolinha_lancamentos_v2`, JSON.stringify(updatedV2));
+        localStorage.setItem(`s_${school?.id}_escolinha_lancamentos`, JSON.stringify(updatedV1));
       } catch (err) {
         console.error('Erro ao registrar lançamentos de matrícula no Financeiro:', err);
       }

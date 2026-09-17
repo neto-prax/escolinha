@@ -39,6 +39,7 @@ import {
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   ComercialLead, 
   LeadEtapa, 
@@ -60,6 +61,7 @@ interface KanbanTabProps {
 
 export function KanbanTab({ turmas, alunos: alunosProp }: KanbanTabProps) {
   const { canViewKpis } = usePermissions();
+  const { school } = useAuth();
   const [showTotals, setShowTotals] = useLocalStorage<boolean>('escolinha_show_kpis_comercial', true);
 
   const [alunosLocal] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
@@ -447,7 +449,7 @@ export function KanbanTab({ turmas, alunos: alunosProp }: KanbanTabProps) {
 
     // Atualiza o storage de alunos
     const alunosAtualizados = [...alunos, novoAluno];
-    localStorage.setItem('escolinha_alunos', JSON.stringify(alunosAtualizados));
+    localStorage.setItem(`s_${school?.id}_escolinha_alunos`, JSON.stringify(alunosAtualizados));
 
     // Atualiza etapa do lead
     handleMoveEtapa(lead.id, lead.tipo === 'rematricula' ? 'rematriculado' : 'matriculado');

@@ -12,9 +12,11 @@ import { mockExpenses, mockCaixas, mockCartoes } from '@/data/mockData';
 import { Wallet, Calculator, Users, LayoutDashboard, CreditCard } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Financeiro = () => {
   const { canAccessTab } = usePermissions();
+  const { school } = useAuth();
   const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentosStorage, setLancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
@@ -53,7 +55,7 @@ const Financeiro = () => {
   };
 
   useEffect(() => {
-    const isFixed = window.localStorage.getItem('fix_lancamento_dates_v1');
+    const isFixed = window.localStorage.getItem(`s_${school?.id}_fix_lancamento_dates_v1`);
     if (!isFixed && lancamentosStorage.length > 0) {
       let modified = false;
       const fixedLancamentos = lancamentosStorage.map((l: any) => {
@@ -66,9 +68,9 @@ const Financeiro = () => {
       if (modified) {
         setLancamentosStorage(fixedLancamentos);
       }
-      window.localStorage.setItem('fix_lancamento_dates_v1', 'true');
+      window.localStorage.setItem(`s_${school?.id}_fix_lancamento_dates_v1`, 'true');
     }
-  }, [lancamentosStorage, setLancamentosStorage]);
+  }, [lancamentosStorage, school?.id, setLancamentosStorage]);
 
   const handleAddCategoria = (novaCategoria: string) => {
     if (novaCategoria && !categorias.includes(novaCategoria)) {

@@ -46,7 +46,7 @@ export const Perfil: React.FC = () => {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('purple_edu_banner');
+      const saved = localStorage.getItem(`s_${profile?.school_id}_purple_edu_banner`);
       if (saved) {
         setBanner(JSON.parse(saved));
       } else {
@@ -62,7 +62,7 @@ export const Perfil: React.FC = () => {
     } catch {
       // fallback
     }
-  }, []);
+  }, [profile?.school_id]);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
