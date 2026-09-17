@@ -11,3 +11,5 @@
 - [x] Validar alternância entre escolas e compilação.
 - [x] Corrigir o painel que ainda compartilha dados entre escolas.
 - [x] Validar o painel após alternar entre escolas.
+- [ ] Adaptar a página inicial à referência aprovada.
+- [ ] Validar a nova página em celular e computador.
