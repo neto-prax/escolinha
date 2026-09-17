@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   CircleDollarSign,
-  FileCheck2,
   GraduationCap,
   LayoutDashboard,
   Loader2,
@@ -46,12 +45,6 @@ const pillars = [
     title: 'Captação e WhatsApp',
     description: 'Acompanhe interessados no funil comercial e centralize conversas com as famílias.',
     points: ['CRM para novas matrículas', 'Histórico de atendimento'],
-  },
-  {
-    icon: FileCheck2,
-    title: 'Portal e rotina escolar',
-    description: 'Dê às famílias acesso direto a atividades, ocorrências, boletos, eventos e datas.',
-    points: ['Portal do responsável', 'Calendário e comunicados'],
   },
 ];
 
@@ -240,10 +233,10 @@ const Landing = () => {
           <div className="container px-4 sm:px-6">
             <div className="max-w-3xl">
               <p className="text-sm font-bold uppercase text-primary">Plataforma completa</p>
-              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Quatro frentes que trabalham juntas</h2>
+              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Três frentes que trabalham juntas</h2>
               <p className="mt-4 text-lg text-muted-foreground">Uma visão contínua da jornada da família, do primeiro contato à rotina financeira.</p>
             </div>
-            <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-12 grid gap-5 md:grid-cols-3">
               {pillars.map(({ icon: Icon, title, description, points }) => (
                 <Card key={title} className="group border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-xl">
                   <CardContent className="p-6">
