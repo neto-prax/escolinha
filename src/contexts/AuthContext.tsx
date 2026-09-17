@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { AppRole, UserProfile, School, Sector } from '@/types/auth';
@@ -34,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [school, setSchool] = useState<School | null>(null);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const activeUserId = useRef<string | null>(null);
   const { toast } = useToast();
 
   const fetchUserData = useCallback(async (userId: string) => {
@@ -99,6 +100,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         resetSchoolIdCache();
+        const nextUserId = session?.user?.id ?? null;
+        if (activeUserId.current !== nextUserId) {
+          activeUserId.current = nextUserId;
+          setProfile(null);
+          setRoles([]);
+          setSchool(null);
+          setSectors([]);
+          if (nextUserId) setIsLoading(true);
+        }
         setSession(session);
         setUser(session?.user ?? null);
 
@@ -144,6 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setSession(session);
       setUser(session?.user ?? null);
+      activeUserId.current = session?.user?.id ?? null;
 
       if (session?.user) {
         fetchUserData(session.user.id).finally(() => {

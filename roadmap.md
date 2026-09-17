@@ -8,4 +8,4 @@
 - [x] Separar todo estado persistido por escola no navegador.
 - [x] Validar isolamento das regras de acesso no banco.
 - [x] Impedir reaproveitamento de dados locais entre logins/escolas.
-- [ ] Validar alternância entre escolas e compilação.
+- [x] Validar alternância entre escolas e compilação.
