@@ -53,7 +53,7 @@ const Financeiro = () => {
   };
 
   useEffect(() => {
-    const isFixed = window.localStorage.getItem('fix_lancamento_dates_v1');
+    const isFixed = window.localStorage.getItem(`s_${school?.id}_fix_lancamento_dates_v1`);
     if (!isFixed && lancamentosStorage.length > 0) {
       let modified = false;
       const fixedLancamentos = lancamentosStorage.map((l: any) => {
@@ -66,7 +66,7 @@ const Financeiro = () => {
       if (modified) {
         setLancamentosStorage(fixedLancamentos);
       }
-      window.localStorage.setItem('fix_lancamento_dates_v1', 'true');
+      window.localStorage.setItem(`s_${school?.id}_fix_lancamento_dates_v1`, 'true');
     }
   }, [lancamentosStorage, setLancamentosStorage]);
 
