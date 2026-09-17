@@ -10,6 +10,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   const [storedValue, setStoredValue] = useState<T>(initialValue);
   const latestValue = useRef(storedValue);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeScope = useRef<string | null>(scopedKey);
 
   latestValue.current = storedValue;
 
@@ -26,8 +27,12 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       }));
 
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      const targetSchoolId = schoolId;
+      const targetScope = scopedKey;
       saveTimer.current = setTimeout(() => {
-        void saveCloudState(key, valueToStore);
+        if (activeScope.current === targetScope) {
+          void saveCloudState(key, valueToStore, targetSchoolId);
+        }
       }, 400);
     } catch (error) {
       console.warn(`Erro ao salvar "${scopedKey}":`, error);
@@ -35,6 +40,8 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   };
 
   useEffect(() => {
+    activeScope.current = scopedKey;
+
     if (!scopedKey) {
       latestValue.current = initialValue;
       setStoredValue(initialValue);
@@ -56,7 +63,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       latestValue.current = localValue;
       setStoredValue(localValue);
 
-      const remote = await loadCloudState<T>(key);
+      const remote = await loadCloudState<T>(key, schoolId ?? undefined);
       if (cancelled) return;
 
       if (remote !== undefined && remote !== null) {
@@ -73,7 +80,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 
       const scopedLocal = window.localStorage.getItem(scopedKey);
       if (scopedLocal !== null) {
-        void saveCloudState(key, JSON.parse(scopedLocal));
+        void saveCloudState(key, JSON.parse(scopedLocal), schoolId ?? undefined);
       }
     };
 
@@ -86,7 +93,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
         saveTimer.current = null;
       }
     };
-  }, [key, scopedKey]);
+  }, [key, schoolId, scopedKey]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {

@@ -9,3 +9,5 @@
 - [x] Validar isolamento das regras de acesso no banco.
 - [x] Impedir reaproveitamento de dados locais entre logins/escolas.
 - [x] Validar alternância entre escolas e compilação.
+- [ ] Corrigir o painel que ainda compartilha dados entre escolas.
+- [ ] Validar o painel após alternar entre escolas.

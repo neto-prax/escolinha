@@ -37,8 +37,8 @@ export function getSchoolStorageKey(key: string, schoolId: string): string {
 }
 
 /** Read a persisted value from the cloud. Returns undefined when there is no row. */
-export async function loadCloudState<T>(key: string): Promise<T | undefined> {
-  const schoolId = await getSchoolId();
+export async function loadCloudState<T>(key: string, requestedSchoolId?: string): Promise<T | undefined> {
+  const schoolId = requestedSchoolId ?? await getSchoolId();
   if (!schoolId) return undefined;
   const { data, error } = await supabase
     .from('app_state')
@@ -55,8 +55,8 @@ export async function loadCloudState<T>(key: string): Promise<T | undefined> {
 }
 
 /** Persist a value in the cloud (one row per school + key). */
-export async function saveCloudState<T>(key: string, value: T): Promise<void> {
-  const schoolId = await getSchoolId();
+export async function saveCloudState<T>(key: string, value: T, requestedSchoolId?: string): Promise<void> {
+  const schoolId = requestedSchoolId ?? await getSchoolId();
   if (!schoolId) return;
   const { data: auth } = await supabase.auth.getUser();
   const { error } = await supabase
