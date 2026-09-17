@@ -8,6 +8,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   const schoolId = profile?.school_id ?? school?.id ?? null;
   const scopedKey = schoolId ? getSchoolStorageKey(key, schoolId) : null;
   const [storedValue, setStoredValue] = useState<T>(initialValue);
+  const [valueScope, setValueScope] = useState<string | null>(null);
   const latestValue = useRef(storedValue);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeScope = useRef<string | null>(scopedKey);
@@ -21,6 +22,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       const valueToStore = value instanceof Function ? value(latestValue.current) : value;
       latestValue.current = valueToStore;
       setStoredValue(valueToStore);
+      setValueScope(scopedKey);
       window.localStorage.setItem(scopedKey, JSON.stringify(valueToStore));
       window.dispatchEvent(new CustomEvent('local-storage-sync', {
         detail: { key: scopedKey, newValue: valueToStore },
@@ -45,6 +47,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     if (!scopedKey) {
       latestValue.current = initialValue;
       setStoredValue(initialValue);
+      setValueScope(null);
       return;
     }
 
@@ -62,6 +65,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       if (cancelled) return;
       latestValue.current = localValue;
       setStoredValue(localValue);
+      setValueScope(scopedKey);
 
       const remote = await loadCloudState<T>(key, schoolId ?? undefined);
       if (cancelled) return;
@@ -69,6 +73,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       if (remote !== undefined && remote !== null) {
         latestValue.current = remote;
         setStoredValue(remote);
+        setValueScope(scopedKey);
         try {
           window.localStorage.setItem(scopedKey, JSON.stringify(remote));
         } catch { /* armazenamento indisponível */ }
@@ -99,12 +104,14 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     const handleStorageChange = (event: StorageEvent) => {
       if (scopedKey && event.key === scopedKey && event.newValue !== null) {
         setStoredValue(JSON.parse(event.newValue));
+        setValueScope(scopedKey);
       }
     };
 
     const handleCustomSync = (event: CustomEvent) => {
       if (scopedKey && event.detail.key === scopedKey) {
         setStoredValue(event.detail.newValue);
+        setValueScope(scopedKey);
       }
     };
 
@@ -117,5 +124,5 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     };
   }, [scopedKey]);
 
-  return [storedValue, setValue];
+  return [valueScope === scopedKey ? storedValue : initialValue, setValue];
 }
