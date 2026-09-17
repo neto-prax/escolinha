@@ -1,39 +1,78 @@
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  ArrowRight,
+  BarChart3,
+  Check,
+  CheckCircle2,
+  CircleDollarSign,
+  FileCheck2,
+  GraduationCap,
+  LayoutDashboard,
+  Loader2,
+  Menu,
+  MessageCircle,
+  ShieldCheck,
+  Sparkles,
+  TrendingDown,
+  Users,
+  X,
+  Zap,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  BookOpen,
-  DollarSign,
-  MessageSquare,
-  Users,
-  BarChart3,
-  CheckCircle,
-  ArrowRight,
-  Building2,
-  Phone,
-  Mail,
-  MapPin,
-  ShieldCheck,
-  TrendingUp,
-  Award
-} from 'lucide-react';
-import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import directorImage from '@/assets/diretora-purple-edu.jpg';
+
+const pillars = [
+  {
+    icon: CircleDollarSign,
+    title: 'Financeiro sem planilhas soltas',
+    description: 'Mensalidades, caixa, despesas, salários e relatórios reunidos em uma visão clara.',
+    points: ['Acompanhamento de mensalidades', 'Relatórios financeiros diários'],
+  },
+  {
+    icon: GraduationCap,
+    title: 'Alunos sempre organizados',
+    description: 'Cadastros, matrículas, responsáveis e histórico escolar acessíveis pela equipe autorizada.',
+    points: ['Visão completa de cada aluno', 'Documentos e responsáveis vinculados'],
+  },
+  {
+    icon: MessageCircle,
+    title: 'Captação e WhatsApp',
+    description: 'Acompanhe interessados no funil comercial e centralize conversas com as famílias.',
+    points: ['CRM para novas matrículas', 'Histórico de atendimento'],
+  },
+  {
+    icon: FileCheck2,
+    title: 'Portal e rotina escolar',
+    description: 'Dê às famílias acesso direto a atividades, ocorrências, boletos, eventos e datas.',
+    points: ['Portal do responsável', 'Calendário e comunicados'],
+  },
+];
 
 const Landing = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [studentCount, setStudentCount] = useState(450);
   const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const estimate = useMemo(() => {
+    const monthlyHours = Math.round(studentCount * 0.12);
+    const yearlyValue = Math.round(studentCount * 120);
+    return { monthlyHours, yearlyValue };
+  }, [studentCount]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setIsSubmitting(true);
 
-    const formData = new FormData(e.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     const leadData = {
       school_name: formData.get('schoolName') as string,
       contact_name: formData.get('contactName') as string,
@@ -48,386 +87,300 @@ const Landing = () => {
     try {
       const { error } = await supabase.from('leads').insert([leadData]);
       if (error) throw error;
-      toast({
-        title: 'Solicitação enviada!',
-        description: 'Em breve nossa equipe entrará em contato.',
-      });
-      (e.target as HTMLFormElement).reset();
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao enviar',
-        description: 'Tente novamente mais tarde.',
-      });
+      toast({ title: 'Solicitação enviada!', description: 'Em breve nossa equipe entrará em contato.' });
+      form.reset();
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro ao enviar', description: 'Tente novamente mais tarde.' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const scrollToContact = () => document.querySelector('#contato')?.scrollIntoView({ behavior: 'smooth' });
+
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-white/95 backdrop-blur-sm">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-20 items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-xl shadow-md">
-                I
-              </div>
-              <span className="font-bold text-2xl tracking-tight text-slate-900">Interagir ERP</span>
-            </div>
-            <nav className="hidden md:flex items-center gap-8">
-              <a href="#solucoes" className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">Soluções</a>
-            </nav>
-            <div className="flex items-center gap-4">
-              <Link to="/login" className="hidden sm:block text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">
-                Área do Cliente
-              </Link>
-              <a href="#contato">
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-lg shadow-blue-500/30">
-                  Fale com um Especialista
-                </Button>
-              </a>
-            </div>
-          </div>
+    <div className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground">
+      <header className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-xl">
+        <div className="container flex h-16 items-center justify-between px-4 sm:h-20 sm:px-6">
+          <a href="#inicio" className="flex items-center gap-2.5" aria-label="Purple Edu - início">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-lg shadow-primary/20">
+              <span className="h-3.5 w-3.5 rotate-45 rounded-sm bg-primary-foreground" />
+            </span>
+            <span className="font-display text-xl text-foreground">Purple <span className="text-primary">Edu</span></span>
+          </a>
+
+          <nav className="hidden items-center gap-8 md:flex" aria-label="Navegação principal">
+            <a href="#solucoes" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Soluções</a>
+            <a href="#calculadora" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Calculadora</a>
+            <Link to="/login" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Área do cliente</Link>
+            <Button onClick={scrollToContact} className="shadow-lg shadow-primary/20">Solicitar demonstração</Button>
+          </nav>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
         </div>
+        {menuOpen && (
+          <nav className="border-t border-border bg-background px-4 py-4 md:hidden" aria-label="Navegação móvel">
+            <div className="flex flex-col gap-1">
+              <a href="#solucoes" onClick={() => setMenuOpen(false)} className="rounded-md px-3 py-3 font-semibold">Soluções</a>
+              <a href="#calculadora" onClick={() => setMenuOpen(false)} className="rounded-md px-3 py-3 font-semibold">Calculadora</a>
+              <Link to="/login" className="rounded-md px-3 py-3 font-semibold">Área do cliente</Link>
+              <Button onClick={() => { setMenuOpen(false); scrollToContact(); }} className="mt-2">Solicitar demonstração</Button>
+            </div>
+          </nav>
+        )}
       </header>
 
-      {/* Hero Section */}
-      <section className="relative pt-20 pb-28 lg:pt-32 lg:pb-40 bg-gradient-to-b from-slate-50 to-white overflow-hidden">
-        <div className="absolute inset-0 bg-grid-slate-100/[0.04] bg-[size:32px_32px]"></div>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
-            <div className="max-w-2xl">
-              <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-200 mb-6 px-3 py-1 text-sm font-medium border-0">
-                🚀 O software de gestão escolar definitivo
-              </Badge>
-              <h1 className="text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 leading-[1.1] mb-6">
-                Gestão inteligente para impulsionar o <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">sucesso da sua escola</span>
+      <main>
+        <section id="inicio" className="relative overflow-hidden bg-accent/40 py-12 sm:py-20 lg:py-24">
+          <div className="container grid items-center gap-12 px-4 sm:px-6 lg:grid-cols-12 lg:gap-10">
+            <div className="lg:col-span-7">
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-card px-3 py-1.5 text-xs font-bold uppercase text-primary shadow-sm">
+                <Sparkles className="h-3.5 w-3.5" /> Gestão escolar em uma só plataforma
+              </div>
+              <h1 className="max-w-4xl font-display text-4xl leading-[1.05] text-foreground sm:text-5xl lg:text-6xl">
+                A gestão escolar inteligente que devolve <span className="text-primary">tempo à sua diretoria.</span>
               </h1>
-              <p className="text-lg lg:text-xl text-slate-600 mb-8 leading-relaxed">
-                Centralize o pedagógico, o financeiro e a comunicação em uma plataforma feita para reduzir a inadimplência e acabar com o retrabalho.
+              <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground">
+                Centralize alunos, financeiro, captação e atendimento para reduzir o retrabalho e tomar decisões com mais segurança.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <a href="#contato" className="w-full sm:w-auto">
-                  <Button size="lg" className="w-full bg-blue-600 hover:bg-blue-700 text-white h-14 px-8 text-base font-semibold shadow-xl shadow-blue-500/20">
-                    Solicitar Demonstração
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </a>
-                <a href="#solucoes" className="w-full sm:w-auto">
-                  <Button size="lg" variant="outline" className="w-full h-14 px-8 text-base font-semibold border-slate-300 text-slate-700 hover:bg-slate-50">
-                    Conhecer Funcionalidades
-                  </Button>
-                </a>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Button size="lg" onClick={scrollToContact} className="h-13 px-7 text-base shadow-xl shadow-primary/20">
+                  Solicitar demonstração <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+                <Button size="lg" variant="outline" asChild className="h-13 px-7 text-base">
+                  <a href="#solucoes">Conhecer a plataforma</a>
+                </Button>
               </div>
-              <div className="mt-8 flex items-center gap-4 text-sm text-slate-500 font-medium">
-                <div className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-emerald-500" /> Sem taxa de adesão</div>
-                <div className="flex items-center gap-1.5"><CheckCircle className="h-4 w-4 text-emerald-500" /> Implantação guiada</div>
+              <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+                <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-success" /> Demonstração personalizada</span>
+                <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-success" /> Dados protegidos</span>
               </div>
             </div>
-            
-            <div className="relative lg:ml-auto w-full max-w-lg lg:max-w-none perspective-1000">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-[2.5rem] blur opacity-30 animate-pulse"></div>
-              <div className="relative bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden transform lg:-rotate-2 hover:rotate-0 transition-transform duration-500">
-                <div className="bg-slate-100 border-b border-slate-200 px-4 py-3 flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-amber-400"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                  </div>
-                  <div className="mx-auto bg-white rounded-md px-3 py-1 text-xs text-slate-400 font-mono w-1/2 text-center border border-slate-200">
-                    app.interagir.com.br
-                  </div>
-                </div>
-                <img 
-                  src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop" 
-                  alt="Dashboard do Sistema Interagir ERP" 
-                  className="w-full h-auto object-cover"
+
+            <div className="relative lg:col-span-5">
+              <div className="relative overflow-hidden rounded-[2rem] border-4 border-card bg-card shadow-2xl shadow-primary/20">
+                <img
+                  src={directorImage}
+                  alt="Diretora usando um tablet no corredor da escola"
+                  width={1200}
+                  height={1500}
+                  className="aspect-[4/5] w-full object-cover"
                 />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Social Proof Bandeja */}
-      <section className="py-10 bg-white border-y border-slate-100">
-        <div className="container mx-auto px-4">
-          <p className="text-center text-sm font-semibold text-slate-400 uppercase tracking-wider mb-6">
-            ESCOLHIDO POR INSTITUIÇÕES INOVADORAS EM TODO O BRASIL
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-60 grayscale hover:grayscale-0 transition-all duration-500">
-            <div className="flex items-center gap-2 font-bold text-xl text-slate-700"><Building2 className="h-6 w-6"/> Colégio Progresso</div>
-            <div className="flex items-center gap-2 font-bold text-xl text-slate-700"><BookOpen className="h-6 w-6"/> Instituto Saber</div>
-            <div className="flex items-center gap-2 font-bold text-xl text-slate-700"><Award className="h-6 w-6"/> Escola Futuro</div>
-            <div className="flex items-center gap-2 font-bold text-xl text-slate-700"><TrendingUp className="h-6 w-6"/> Rede Evolução</div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pilares da Gestão (Features Alternadas) */}
-      <section id="solucoes" className="py-24 bg-slate-50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-20">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-4">Tudo o que você precisa para uma gestão de excelência</h2>
-            <p className="text-lg text-slate-600">Automatize rotinas cansativas e tenha mais tempo para focar no que realmente importa: a educação.</p>
-          </div>
-
-          <div className="space-y-24">
-            {/* Feature 1: Financeiro */}
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="order-2 lg:order-1 relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200">
-                <img src="https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=2015&auto=format&fit=crop" alt="Gestão Financeira" className="w-full object-cover" />
-              </div>
-              <div className="order-1 lg:order-2">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 mb-6">
-                  <DollarSign className="h-6 w-6" />
+                <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-border/70 bg-card/95 p-4 shadow-xl backdrop-blur sm:bottom-6 sm:left-6 sm:right-6">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/15 text-success"><Check className="h-5 w-5" /></span>
+                    <div>
+                      <p className="font-display text-sm text-foreground">Sua escola no controle</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Informações organizadas para decisões mais rápidas.</p>
+                    </div>
+                  </div>
                 </div>
-                <h3 className="text-3xl font-bold text-slate-900 mb-4">Gestão Financeira Completa</h3>
-                <p className="text-lg text-slate-600 mb-6 leading-relaxed">
-                  Diga adeus à inadimplência e à bagunça nas contas. Tenha total controle do seu fluxo de caixa com ferramentas feitas para escolas.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-emerald-500 shrink-0" /><span className="text-slate-700">Emissão automática de Boletos e NF-e.</span></li>
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-emerald-500 shrink-0" /><span className="text-slate-700">Recebimentos via Pix integrados em tempo real.</span></li>
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-emerald-500 shrink-0" /><span className="text-slate-700">Régua de cobrança automática por WhatsApp e Email.</span></li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Feature 2: Pedagógico */}
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div>
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 mb-6">
-                  <BookOpen className="h-6 w-6" />
-                </div>
-                <h3 className="text-3xl font-bold text-slate-900 mb-4">Secretaria e Pedagógico</h3>
-                <p className="text-lg text-slate-600 mb-6 leading-relaxed">
-                  Otimize o tempo dos professores e da secretaria com um sistema acadêmico intuitivo e totalmente integrado.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-blue-500 shrink-0" /><span className="text-slate-700">Diário de classe digital com lançamento de notas e faltas.</span></li>
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-blue-500 shrink-0" /><span className="text-slate-700">Emissão de boletins, históricos e declarações em um clique.</span></li>
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-blue-500 shrink-0" /><span className="text-slate-700">Portal exclusivo para professores gerenciarem suas turmas.</span></li>
-                </ul>
-              </div>
-              <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200">
-                <img src="https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=2070&auto=format&fit=crop" alt="Gestão Pedagógica" className="w-full object-cover" />
-              </div>
-            </div>
-
-            {/* Feature 3: Comunicação */}
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div className="order-2 lg:order-1 relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200">
-                <img src="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?q=80&w=1974&auto=format&fit=crop" alt="Comunicação e CRM" className="w-full object-cover" />
-              </div>
-              <div className="order-1 lg:order-2">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 mb-6">
-                  <MessageSquare className="h-6 w-6" />
-                </div>
-                <h3 className="text-3xl font-bold text-slate-900 mb-4">Comunicação e Captação</h3>
-                <p className="text-lg text-slate-600 mb-6 leading-relaxed">
-                  Aproxime as famílias da escola e impulsione as matrículas com um CRM poderoso e comunicação via WhatsApp.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-indigo-500 shrink-0" /><span className="text-slate-700">Envio de avisos e comunicados em massa por WhatsApp.</span></li>
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-indigo-500 shrink-0" /><span className="text-slate-700">CRM Educacional para acompanhar interessados e fechar mais matrículas.</span></li>
-                  <li className="flex items-start gap-3"><CheckCircle className="h-6 w-6 text-indigo-500 shrink-0" /><span className="text-slate-700">Portal dos Pais para acompanhamento da vida escolar do aluno.</span></li>
-                </ul>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Impact Numbers */}
-      <section className="py-20 bg-blue-600 text-white">
-        <div className="container mx-auto px-4 text-center">
-          <div className="grid md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-blue-400/30">
-            <div className="pt-8 md:pt-0">
-              <div className="text-4xl md:text-5xl font-extrabold mb-2">98%</div>
-              <div className="text-blue-100 font-medium">De aprovação dos clientes</div>
+        <section className="border-y border-border bg-card py-8">
+          <div className="container grid grid-cols-2 gap-6 px-4 text-center sm:px-6 lg:grid-cols-4">
+            {[
+              ['Financeiro', 'mensalidades e caixa'],
+              ['Alunos', 'cadastros centralizados'],
+              ['Comercial', 'captação organizada'],
+              ['Famílias', 'portal de acesso'],
+            ].map(([title, text]) => (
+              <div key={title}>
+                <p className="font-display text-lg text-foreground">{title}</p>
+                <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-background py-20 sm:py-24">
+          <div className="container px-4 sm:px-6">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-sm font-bold uppercase text-primary">Antes e depois</p>
+              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Menos tarefas espalhadas. Mais visão para liderar.</h2>
             </div>
-            <div className="pt-8 md:pt-0">
-              <div className="text-4xl md:text-5xl font-extrabold mb-2">- 40%</div>
-              <div className="text-blue-100 font-medium">Redução média na inadimplência</div>
-            </div>
-            <div className="pt-8 md:pt-0">
-              <div className="text-4xl md:text-5xl font-extrabold mb-2">+ 20h</div>
-              <div className="text-blue-100 font-medium">Economizadas por semana</div>
+            <div className="mx-auto mt-12 grid max-w-5xl gap-6 md:grid-cols-2">
+              <Card className="border-destructive/20 bg-destructive/5 shadow-none">
+                <CardContent className="p-7 sm:p-8">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-destructive/10 text-destructive"><X className="h-5 w-5" /></span>
+                  <h3 className="mt-6 font-display text-xl">Rotina fragmentada</h3>
+                  <ul className="mt-5 space-y-4 text-muted-foreground">
+                    <li className="flex gap-3"><X className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />Informações divididas entre planilhas, papéis e conversas.</li>
+                    <li className="flex gap-3"><X className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />Equipe repete tarefas e demora para encontrar respostas.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+              <Card className="border-success/30 bg-success/5 shadow-none ring-1 ring-success/10">
+                <CardContent className="p-7 sm:p-8">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-success/15 text-success"><Check className="h-5 w-5" /></span>
+                  <h3 className="mt-6 font-display text-xl">Operação conectada</h3>
+                  <ul className="mt-5 space-y-4 text-muted-foreground">
+                    <li className="flex gap-3"><Check className="mt-0.5 h-5 w-5 shrink-0 text-success" />Dados da escola reunidos com acesso por função.</li>
+                    <li className="flex gap-3"><Check className="mt-0.5 h-5 w-5 shrink-0 text-success" />Acompanhamento mais claro do financeiro e do atendimento.</li>
+                  </ul>
+                </CardContent>
+              </Card>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA Final */}
-      <section className="py-24 bg-gradient-to-br from-slate-900 to-slate-800 relative overflow-hidden">
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-72 h-72 bg-blue-500 rounded-full blur-[100px] opacity-30"></div>
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-72 h-72 bg-indigo-500 rounded-full blur-[100px] opacity-30"></div>
-        <div className="container mx-auto px-4 relative z-10 text-center">
-          <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6">Pronto para transformar a sua escola?</h2>
-          <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto">
-            Junte-se às instituições que já estão simplificando a gestão e focando no futuro da educação com o Interagir ERP.
-          </p>
-          <a href="#contato">
-            <Button size="lg" className="bg-blue-500 hover:bg-blue-600 text-white h-14 px-10 text-lg font-bold">
-              Falar com um Especialista Agora
-            </Button>
-          </a>
-        </div>
-      </section>
+        <section id="solucoes" className="bg-accent/40 py-20 sm:py-24">
+          <div className="container px-4 sm:px-6">
+            <div className="max-w-3xl">
+              <p className="text-sm font-bold uppercase text-primary">Plataforma completa</p>
+              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Quatro frentes que trabalham juntas</h2>
+              <p className="mt-4 text-lg text-muted-foreground">Uma visão contínua da jornada da família, do primeiro contato à rotina financeira.</p>
+            </div>
+            <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+              {pillars.map(({ icon: Icon, title, description, points }) => (
+                <Card key={title} className="group border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-xl">
+                  <CardContent className="p-6">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform group-hover:scale-105"><Icon className="h-5 w-5" /></span>
+                    <h3 className="mt-6 font-display text-lg leading-snug">{title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{description}</p>
+                    <ul className="mt-5 space-y-2">
+                      {points.map((point) => <li key={point} className="flex gap-2 text-sm text-foreground"><Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />{point}</li>)}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
 
-      {/* Contact Form Section */}
-      <section id="contato" className="py-24 bg-slate-50 border-t border-slate-200">
-        <div className="container mx-auto px-4">
-          <div className="grid lg:grid-cols-2 gap-16">
+        <section id="calculadora" className="bg-background py-20 sm:py-24">
+          <div className="container px-4 sm:px-6">
+            <div className="overflow-hidden rounded-2xl bg-sidebar p-7 text-sidebar-foreground shadow-2xl sm:p-12 lg:p-16">
+              <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
+                <div>
+                  <p className="text-sm font-bold uppercase text-sidebar-primary">Estimativa operacional</p>
+                  <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Veja o potencial de uma rotina centralizada</h2>
+                  <p className="mt-4 text-sidebar-foreground/70">Ajuste o número de alunos para visualizar uma projeção ilustrativa.</p>
+                  <div className="mt-10">
+                    <div className="mb-4 flex items-end justify-between gap-4">
+                      <label htmlFor="student-range" className="text-sm font-semibold text-sidebar-foreground/75">Alunos matriculados</label>
+                      <span className="font-display text-2xl text-sidebar-primary">{studentCount}</span>
+                    </div>
+                    <input
+                      id="student-range"
+                      type="range"
+                      min="50"
+                      max="1500"
+                      step="50"
+                      value={studentCount}
+                      onChange={(event) => setStudentCount(Number(event.target.value))}
+                      className="h-2 w-full cursor-pointer accent-primary"
+                    />
+                    <div className="mt-2 flex justify-between text-xs text-sidebar-foreground/50"><span>50</span><span>1.500</span></div>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border border-sidebar-border bg-sidebar-accent p-6">
+                    <Zap className="h-6 w-6 text-sidebar-primary" />
+                    <p className="mt-7 text-xs font-bold uppercase text-sidebar-foreground/60">Tempo administrativo</p>
+                    <p className="mt-2 font-display text-4xl">{estimate.monthlyHours}h</p>
+                    <p className="mt-2 text-sm text-sidebar-foreground/60">potencial mensal estimado</p>
+                  </div>
+                  <div className="rounded-xl border border-sidebar-border bg-sidebar-accent p-6">
+                    <TrendingDown className="h-6 w-6 text-success" />
+                    <p className="mt-7 text-xs font-bold uppercase text-sidebar-foreground/60">Valor operacional</p>
+                    <p className="mt-2 font-display text-3xl">R$ {estimate.yearlyValue.toLocaleString('pt-BR')}</p>
+                    <p className="mt-2 text-sm text-sidebar-foreground/60">projeção anual ilustrativa</p>
+                  </div>
+                  <p className="sm:col-span-2 text-xs leading-relaxed text-sidebar-foreground/45">Valores são apenas uma simulação de potencial e variam conforme processos, equipe e uso da plataforma.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-y border-border bg-card py-20 sm:py-24">
+          <div className="container grid items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
             <div>
-              <h2 className="text-4xl font-extrabold text-slate-900 mb-6">
-                Solicite uma demonstração gratuita
-              </h2>
-              <p className="text-lg text-slate-600 mb-10">
-                Deixe seus dados e um de nossos consultores especialistas em gestão escolar entrará em contato para entender seus desafios e mostrar como podemos ajudar.
-              </p>
-              
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-blue-600">
-                    <Phone className="h-6 w-6" />
+              <p className="text-sm font-bold uppercase text-primary">Por que Purple Edu?</p>
+              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Tecnologia para a rotina real da escola</h2>
+              <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">A plataforma organiza dados e fluxos sem afastar sua equipe do relacionamento com alunos e famílias.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[
+                [LayoutDashboard, 'Visão unificada', 'Indicadores e rotinas importantes em um só lugar.'],
+                [Users, 'Acesso por função', 'Cada profissional visualiza o que precisa para trabalhar.'],
+                [ShieldCheck, 'Dados separados', 'As informações permanecem organizadas por escola.'],
+                [BarChart3, 'Decisões claras', 'Relatórios transformam registros em acompanhamento útil.'],
+              ].map(([Icon, title, description]) => {
+                const FeatureIcon = Icon as typeof LayoutDashboard;
+                return (
+                  <div key={title as string} className="border-l-2 border-primary/25 py-2 pl-5">
+                    <FeatureIcon className="h-5 w-5 text-primary" />
+                    <h3 className="mt-3 font-display text-base">{title as string}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description as string}</p>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Ligue para nós</p>
-                    <p className="font-bold text-slate-900 text-lg">(11) 4000-0000</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-blue-600">
-                    <Mail className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">E-mail Comercial</p>
-                    <p className="font-bold text-slate-900 text-lg">comercial@interagir.com.br</p>
-                  </div>
-                </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
 
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm border border-slate-100 text-blue-600">
-                    <ShieldCheck className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Segurança</p>
-                    <p className="font-bold text-slate-900 text-lg">Seus dados estão protegidos.</p>
-                  </div>
-                </div>
+        <section id="contato" className="bg-accent/40 py-20 sm:py-24">
+          <div className="container grid gap-12 px-4 sm:px-6 lg:grid-cols-5 lg:gap-16">
+            <div className="lg:col-span-2">
+              <p className="text-sm font-bold uppercase text-primary">Próximo passo</p>
+              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Veja a Purple Edu funcionando na sua realidade</h2>
+              <p className="mt-5 text-lg leading-relaxed text-muted-foreground">Conte um pouco sobre sua escola. Nossa equipe apresentará as áreas mais úteis para sua operação.</p>
+              <div className="mt-8 space-y-4 text-sm text-foreground">
+                <p className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-success" /> Conversa focada nas suas prioridades</p>
+                <p className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-success" /> Sem compromisso</p>
+                <p className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-success" /> Demonstração da plataforma</p>
               </div>
             </div>
 
-            <Card className="shadow-xl border-0 overflow-hidden">
-              <div className="h-2 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-              <CardContent className="p-8 md:p-10">
-                <h3 className="text-2xl font-bold text-slate-900 mb-6">Agendar uma conversa</h3>
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <div className="grid sm:grid-cols-2 gap-5">
+            <Card className="border-primary/10 shadow-xl shadow-primary/10 lg:col-span-3">
+              <CardContent className="p-6 sm:p-8">
+                <h3 className="font-display text-xl">Solicitar demonstração</h3>
+                <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="space-y-2"><Label htmlFor="schoolName">Nome da escola *</Label><Input id="schoolName" name="schoolName" required placeholder="Sua instituição" /></div>
+                    <div className="space-y-2"><Label htmlFor="contactName">Seu nome *</Label><Input id="contactName" name="contactName" required placeholder="Como podemos chamar você?" /></div>
+                    <div className="space-y-2"><Label htmlFor="email">E-mail de trabalho *</Label><Input id="email" name="email" type="email" required placeholder="voce@escola.com.br" /></div>
+                    <div className="space-y-2"><Label htmlFor="phone">WhatsApp / Telefone *</Label><Input id="phone" name="phone" type="tel" required placeholder="(00) 00000-0000" /></div>
+                    <div className="space-y-2"><Label htmlFor="city">Cidade / UF</Label><Input id="city" name="city" placeholder="Ex: Salvador, BA" /></div>
                     <div className="space-y-2">
-                      <Label htmlFor="schoolName" className="font-medium">Nome da instituição *</Label>
-                      <Input id="schoolName" name="schoolName" required className="h-12" placeholder="Sua escola" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="contactName" className="font-medium">Seu nome *</Label>
-                      <Input id="contactName" name="contactName" required className="h-12" placeholder="Como devemos chamá-lo?" />
-                    </div>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="font-medium">E-mail de trabalho *</Label>
-                      <Input id="email" name="email" type="email" required className="h-12" placeholder="voce@escola.com.br" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone" className="font-medium">WhatsApp / Telefone *</Label>
-                      <Input id="phone" name="phone" type="tel" required className="h-12" placeholder="(00) 00000-0000" />
-                    </div>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="city" className="font-medium">Cidade / UF</Label>
-                      <Input id="city" name="city" className="h-12" placeholder="Ex: São Paulo, SP" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="studentCount" className="font-medium">Nº de alunos estimado</Label>
-                      <select 
-                        id="studentCount" 
-                        name="studentCount" 
-                        className="flex h-12 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <option value="0-50">Até 50 alunos</option>
-                        <option value="51-200">De 51 a 200 alunos</option>
-                        <option value="201-500">De 201 a 500 alunos</option>
-                        <option value="501-1000">De 501 a 1000 alunos</option>
-                        <option value="1000+">Mais de 1000 alunos</option>
+                      <Label htmlFor="studentCount">Número de alunos</Label>
+                      <select id="studentCount" name="studentCount" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <option value="0-50">Até 50 alunos</option><option value="51-200">51 a 200 alunos</option><option value="201-500">201 a 500 alunos</option><option value="501-1000">501 a 1.000 alunos</option><option value="1000+">Mais de 1.000 alunos</option>
                       </select>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="message" className="font-medium">Quais os principais desafios hoje?</Label>
-                    <Textarea id="message" name="message" rows={3} className="resize-none" placeholder="Conte-nos um pouco sobre a sua realidade atual..." />
-                  </div>
-                  <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-base font-bold mt-2" disabled={isSubmitting}>
-                    {isSubmitting ? 'Enviando sua solicitação...' : 'Solicitar Demonstração Gratuita'}
+                  <div className="space-y-2"><Label htmlFor="message">Qual é o principal desafio hoje?</Label><Textarea id="message" name="message" rows={3} className="resize-none" placeholder="Conte brevemente sobre a rotina da sua escola" /></div>
+                  <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enviando...</> : <>Quero conhecer a Purple Edu <ArrowRight className="ml-2 h-4 w-4" /></>}
                   </Button>
-                  <p className="text-xs text-center text-slate-500">
-                    Ao enviar, você concorda com nossos Termos de Uso e Política de Privacidade.
-                  </p>
+                  <p className="text-center text-xs text-muted-foreground">Usaremos seus dados apenas para responder à sua solicitação.</p>
                 </form>
               </CardContent>
             </Card>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* Footer */}
-      <footer className="bg-slate-900 text-slate-300 py-12 border-t border-slate-800">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-2 mb-6">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 text-white font-bold">
-                  I
-                </div>
-                <span className="font-bold text-xl text-white">Interagir ERP</span>
-              </div>
-              <p className="text-sm text-slate-400 max-w-sm mb-6">
-                O software completo para simplificar a rotina da sua escola, reduzir a inadimplência e melhorar a comunicação com as famílias.
-              </p>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Soluções</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#" className="hover:text-blue-400">Gestão Pedagógica</a></li>
-                <li><a href="#" className="hover:text-blue-400">Gestão Financeira</a></li>
-                <li><a href="#" className="hover:text-blue-400">Comunicação</a></li>
-                <li><a href="#" className="hover:text-blue-400">Captação de Alunos</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Empresa</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#" className="hover:text-blue-400">Sobre nós</a></li>
-                <li><a href="#" className="hover:text-blue-400">Blog</a></li>
-                <li><a href="#" className="hover:text-blue-400">Contato</a></li>
-                <li><a href="#" className="hover:text-blue-400">Suporte</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-slate-500">
-              © 2026 Interagir ERP. Todos os direitos reservados.
-            </p>
-            <div className="flex gap-4 text-sm text-slate-500">
-              <a href="#" className="hover:text-white">Termos de Serviço</a>
-              <a href="#" className="hover:text-white">Política de Privacidade</a>
-            </div>
-          </div>
+      <footer className="bg-sidebar py-10 text-sidebar-foreground">
+        <div className="container flex flex-col gap-6 px-4 sm:px-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary"><span className="h-3 w-3 rotate-45 rounded-sm bg-primary-foreground" /></span><span className="font-display">Purple Edu</span></div>
+          <p className="text-sm text-sidebar-foreground/55">© 2026 Purple Edu. Gestão escolar conectada.</p>
+          <Link to="/login" className="text-sm font-semibold text-sidebar-foreground/75 transition-colors hover:text-sidebar-primary">Área do cliente</Link>
         </div>
       </footer>
     </div>
