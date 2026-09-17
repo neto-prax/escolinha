@@ -30,7 +30,7 @@ const DEFAULT_BANNER: SystemBanner = {
 export function MarketingTab() {
   const [banner, setBanner] = useState<SystemBanner>(() => {
     try {
-      const saved = localStorage.getItem('purple_edu_banner');
+      const saved = localStorage.getItem(`s_${school?.id}_purple_edu_banner`);
       return saved ? JSON.parse(saved) : DEFAULT_BANNER;
     } catch {
       return DEFAULT_BANNER;
@@ -39,7 +39,7 @@ export function MarketingTab() {
 
   const handleSave = () => {
     try {
-      localStorage.setItem('purple_edu_banner', JSON.stringify(banner));
+      localStorage.setItem(`s_${school?.id}_purple_edu_banner`, JSON.stringify(banner));
       toast.success('Banner do sistema atualizado com sucesso!');
     } catch (e) {
       toast.error('Erro ao salvar configurações do banner.');

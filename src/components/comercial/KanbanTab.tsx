@@ -447,7 +447,7 @@ export function KanbanTab({ turmas, alunos: alunosProp }: KanbanTabProps) {
 
     // Atualiza o storage de alunos
     const alunosAtualizados = [...alunos, novoAluno];
-    localStorage.setItem('escolinha_alunos', JSON.stringify(alunosAtualizados));
+    localStorage.setItem(`s_${school?.id}_escolinha_alunos`, JSON.stringify(alunosAtualizados));
 
     // Atualiza etapa do lead
     handleMoveEtapa(lead.id, lead.tipo === 'rematricula' ? 'rematriculado' : 'matriculado');

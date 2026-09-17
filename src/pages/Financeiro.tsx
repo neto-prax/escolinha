@@ -15,6 +15,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 
 const Financeiro = () => {
   const { canAccessTab } = usePermissions();
+  const { school } = useAuth();
+  const { school } = useAuth();
   const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentosStorage, setLancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);

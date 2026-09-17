@@ -44,6 +44,7 @@ export const MatriculaWizardModal: React.FC<MatriculaWizardModalProps> = ({
   onClose,
   turmas,
   onMatriculaConcluida,
+  schoolId,
 }) => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 

@@ -48,7 +48,7 @@ export const DangerZoneSettings = () => {
         const localKeys: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && key.startsWith('escolinha_')) localKeys.push(key);
+          if (key && (key.startsWith('escolinha_') || key.includes('_escolinha_'))) localKeys.push(key);
         }
         const cloudKeys = await listCloudStateKeys();
         await clearKeys(Array.from(new Set([...localKeys, ...cloudKeys])));
