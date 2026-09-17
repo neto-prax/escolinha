@@ -13,7 +13,6 @@ import {
   BarChart3,
   CheckCircle,
   ArrowRight,
-  Star,
   Building2,
   Phone,
   Mail,
@@ -79,7 +78,6 @@ const Landing = () => {
             </div>
             <nav className="hidden md:flex items-center gap-8">
               <a href="#solucoes" className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">Soluções</a>
-              <a href="#depoimentos" className="text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">Depoimentos</a>
             </nav>
             <div className="flex items-center gap-4">
               <Link to="/login" className="hidden sm:block text-sm font-medium text-slate-600 hover:text-blue-600 transition-colors">
@@ -259,66 +257,6 @@ const Landing = () => {
               <div className="text-4xl md:text-5xl font-extrabold mb-2">+ 20h</div>
               <div className="text-blue-100 font-medium">Economizadas por semana</div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section id="depoimentos" className="py-24 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl font-extrabold text-slate-900 mb-4">O que os diretores dizem</h2>
-            <p className="text-lg text-slate-600">Não acredite apenas em nós. Veja o resultado na prática nas instituições dos nossos clientes.</p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="bg-slate-50 border-0 shadow-md">
-              <CardContent className="p-8">
-                <div className="flex gap-1 mb-6">
-                  {[1,2,3,4,5].map(i => <Star key={i} className="h-5 w-5 fill-amber-400 text-amber-400" />)}
-                </div>
-                <p className="text-slate-700 mb-6 italic">"A transição para o Interagir foi a melhor decisão que tomamos este ano. O controle financeiro melhorou drasticamente e os pais adoram receber notificações pelo WhatsApp."</p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-xl">M</div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Mariana Costa</h4>
-                    <p className="text-sm text-slate-500">Diretora Pedagógica</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-slate-50 border-0 shadow-md">
-              <CardContent className="p-8">
-                <div className="flex gap-1 mb-6">
-                  {[1,2,3,4,5].map(i => <Star key={i} className="h-5 w-5 fill-amber-400 text-amber-400" />)}
-                </div>
-                <p className="text-slate-700 mb-6 italic">"O suporte é excepcional. O sistema é muito intuitivo, o que facilitou o treinamento da nossa secretaria. Hoje geramos boletos e diários de forma 100% automatizada."</p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-xl">R</div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Roberto Almeida</h4>
-                    <p className="text-sm text-slate-500">Gestor Financeiro</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-slate-50 border-0 shadow-md">
-              <CardContent className="p-8">
-                <div className="flex gap-1 mb-6">
-                  {[1,2,3,4,5].map(i => <Star key={i} className="h-5 w-5 fill-amber-400 text-amber-400" />)}
-                </div>
-                <p className="text-slate-700 mb-6 italic">"Centralizar a captação de matrículas no CRM do sistema nos ajudou a aumentar o número de novos alunos em 25% já no primeiro semestre de uso."</p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold text-xl">F</div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Fernanda Lima</h4>
-                    <p className="text-sm text-slate-500">Mantenedora</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </section>
