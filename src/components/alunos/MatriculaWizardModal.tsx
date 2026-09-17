@@ -12,6 +12,7 @@ import { Aluno, Mensalidade } from '@/types/aluno';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { DocumentoEscolarTemplate, DEFAULT_DOCUMENTOS_ESCOLARES } from '@/types/documentoEscolar';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useAuth } from '@/contexts/AuthContext';
 import { ReciboMatriculaModal, ItemPagamentoRecibo } from './ReciboMatriculaModal';
 import { DocumentosImpressaoModal } from './DocumentosImpressaoModal';
 import {
@@ -44,7 +45,6 @@ export const MatriculaWizardModal: React.FC<MatriculaWizardModalProps> = ({
   onClose,
   turmas,
   onMatriculaConcluida,
-  schoolId,
 }) => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const { school } = useAuth();

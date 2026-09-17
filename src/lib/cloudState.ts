@@ -1,27 +1,39 @@
 import { supabase } from '@/integrations/supabase/client';
 
 let schoolIdPromise: Promise<string | null> | null = null;
+let cachedUserId: string | null = null;
 
 /** Resolve (and cache) the school of the logged user. */
 export function getSchoolId(): Promise<string | null> {
-  if (!schoolIdPromise) {
-    schoolIdPromise = (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth?.user?.id;
-      if (!userId) return null;
+  return (async () => {
+    const { data: auth } = await supabase.auth.getUser();
+    const userId = auth?.user?.id ?? null;
+    if (cachedUserId !== userId) {
+      cachedUserId = userId;
+      schoolIdPromise = null;
+    }
+    if (!userId) return null;
+    if (!schoolIdPromise) {
+      schoolIdPromise = (async () => {
       const { data } = await supabase
         .from('profiles')
         .select('school_id')
         .eq('id', userId)
         .maybeSingle();
       return data?.school_id ?? null;
-    })();
-  }
-  return schoolIdPromise;
+      })();
+    }
+    return schoolIdPromise;
+  })();
 }
 
 export function resetSchoolIdCache() {
   schoolIdPromise = null;
+  cachedUserId = null;
+}
+
+export function getSchoolStorageKey(key: string, schoolId: string): string {
+  return `s_${schoolId}_${key}`;
 }
 
 /** Read a persisted value from the cloud. Returns undefined when there is no row. */

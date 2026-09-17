@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Image, Upload, Save, Sparkles, Megaphone, Link as LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface SystemBanner {
   title: string;
@@ -28,6 +29,7 @@ const DEFAULT_BANNER: SystemBanner = {
 };
 
 export function MarketingTab() {
+  const { school } = useAuth();
   const [banner, setBanner] = useState<SystemBanner>(() => {
     try {
       const saved = localStorage.getItem(`s_${school?.id}_purple_edu_banner`);

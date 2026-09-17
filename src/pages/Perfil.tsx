@@ -62,7 +62,7 @@ export const Perfil: React.FC = () => {
     } catch {
       // fallback
     }
-  }, []);
+  }, [profile?.school_id]);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
