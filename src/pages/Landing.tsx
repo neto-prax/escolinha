@@ -8,7 +8,6 @@ import {
   CircleDollarSign,
   GraduationCap,
   LayoutDashboard,
-  Loader2,
   Menu,
   MessageCircle,
   ShieldCheck,
@@ -20,11 +19,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import directorImage from '@/assets/diretora-purple-edu.jpg';
 
 const pillars = [
@@ -49,45 +43,14 @@ const pillars = [
 ];
 
 const Landing = () => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [studentCount, setStudentCount] = useState(450);
-  const { toast } = useToast();
 
   const estimate = useMemo(() => {
     const monthlyHours = Math.round(studentCount * 0.12);
     const yearlyValue = Math.round(studentCount * 120);
     return { monthlyHours, yearlyValue };
   }, [studentCount]);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsSubmitting(true);
-
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const leadData = {
-      school_name: formData.get('schoolName') as string,
-      contact_name: formData.get('contactName') as string,
-      email: formData.get('email') as string,
-      phone: formData.get('phone') as string,
-      city: formData.get('city') as string,
-      student_count: formData.get('studentCount') as string,
-      message: formData.get('message') as string,
-      source: 'landing_page',
-    };
-
-    try {
-      const { error } = await supabase.from('leads').insert([leadData]);
-      if (error) throw error;
-      toast({ title: 'Solicitação enviada!', description: 'Em breve nossa equipe entrará em contato.' });
-      form.reset();
-    } catch {
-      toast({ variant: 'destructive', title: 'Erro ao enviar', description: 'Tente novamente mais tarde.' });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const scrollToContact = () => document.querySelector('#contato')?.scrollIntoView({ behavior: 'smooth' });
 
@@ -326,46 +289,6 @@ const Landing = () => {
           </div>
         </section>
 
-        <section id="contato" className="bg-accent/40 py-20 sm:py-24">
-          <div className="container grid gap-12 px-4 sm:px-6 lg:grid-cols-5 lg:gap-16">
-            <div className="lg:col-span-2">
-              <p className="text-sm font-bold uppercase text-primary">Próximo passo</p>
-              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Veja a Purple Edu funcionando na sua realidade</h2>
-              <p className="mt-5 text-lg leading-relaxed text-muted-foreground">Conte um pouco sobre sua escola. Nossa equipe apresentará as áreas mais úteis para sua operação.</p>
-              <div className="mt-8 space-y-4 text-sm text-foreground">
-                <p className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-success" /> Conversa focada nas suas prioridades</p>
-                <p className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-success" /> Sem compromisso</p>
-                <p className="flex items-center gap-3"><CheckCircle2 className="h-5 w-5 text-success" /> Demonstração da plataforma</p>
-              </div>
-            </div>
-
-            <Card className="border-primary/10 shadow-xl shadow-primary/10 lg:col-span-3">
-              <CardContent className="p-6 sm:p-8">
-                <h3 className="font-display text-xl">Solicitar demonstração</h3>
-                <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <div className="space-y-2"><Label htmlFor="schoolName">Nome da escola *</Label><Input id="schoolName" name="schoolName" required placeholder="Sua instituição" /></div>
-                    <div className="space-y-2"><Label htmlFor="contactName">Seu nome *</Label><Input id="contactName" name="contactName" required placeholder="Como podemos chamar você?" /></div>
-                    <div className="space-y-2"><Label htmlFor="email">E-mail de trabalho *</Label><Input id="email" name="email" type="email" required placeholder="voce@escola.com.br" /></div>
-                    <div className="space-y-2"><Label htmlFor="phone">WhatsApp / Telefone *</Label><Input id="phone" name="phone" type="tel" required placeholder="(00) 00000-0000" /></div>
-                    <div className="space-y-2"><Label htmlFor="city">Cidade / UF</Label><Input id="city" name="city" placeholder="Ex: Salvador, BA" /></div>
-                    <div className="space-y-2">
-                      <Label htmlFor="studentCount">Número de alunos</Label>
-                      <select id="studentCount" name="studentCount" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                        <option value="0-50">Até 50 alunos</option><option value="51-200">51 a 200 alunos</option><option value="201-500">201 a 500 alunos</option><option value="501-1000">501 a 1.000 alunos</option><option value="1000+">Mais de 1.000 alunos</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-2"><Label htmlFor="message">Qual é o principal desafio hoje?</Label><Textarea id="message" name="message" rows={3} className="resize-none" placeholder="Conte brevemente sobre a rotina da sua escola" /></div>
-                  <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enviando...</> : <>Quero conhecer a Purple Edu <ArrowRight className="ml-2 h-4 w-4" /></>}
-                  </Button>
-                  <p className="text-center text-xs text-muted-foreground">Usaremos seus dados apenas para responder à sua solicitação.</p>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
       </main>
 
       <footer className="bg-sidebar py-10 text-sidebar-foreground">
