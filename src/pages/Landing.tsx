@@ -191,12 +191,11 @@ const Landing = () => {
         </section>
 
         <section className="border-y border-border bg-card py-8">
-          <div className="container grid grid-cols-2 gap-6 px-4 text-center sm:px-6 lg:grid-cols-4">
+          <div className="container grid grid-cols-1 gap-6 px-4 text-center sm:grid-cols-3 sm:px-6">
             {[
               ['Financeiro', 'mensalidades e caixa'],
               ['Alunos', 'cadastros centralizados'],
               ['Comercial', 'captação organizada'],
-              ['Famílias', 'portal de acesso'],
             ].map(([title, text]) => (
               <div key={title}>
                 <p className="font-display text-lg text-foreground">{title}</p>
