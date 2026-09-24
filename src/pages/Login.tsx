@@ -13,6 +13,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { resetSchoolIdCache } from '@/lib/cloudState';
+import { Logo } from '@/components/common/Logo';
+import { usePlatformBillingSettings } from '@/hooks/usePlatformBillingSettings';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -46,6 +48,7 @@ const Login = () => {
   const navigate = useNavigate();
   const { signIn, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const { globalSettings, plans, registerSchoolSubscription } = usePlatformBillingSettings();
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -133,6 +136,29 @@ const Login = () => {
         throw new Error(result.error);
       }
 
+      // Se a plataforma exigir pagamento no cadastro, registra a assinatura da escola como pendente
+      if (globalSettings.exigirPagamentoCadastro && result?.schoolId) {
+        const defaultPlan = plans[0] || {
+          id: 'plan-start',
+          name: 'Start',
+          base_price: 149,
+          included_modules: ['alunos', 'pedagogico'],
+        };
+
+        registerSchoolSubscription({
+          school_id: result.schoolId,
+          school_name: data.schoolName,
+          plan_id: defaultPlan.id,
+          plan_name: defaultPlan.name,
+          estimated_students: 150,
+          selected_modules: (defaultPlan.included_modules as any) || ['alunos', 'pedagogico'],
+          total_monthly_amount: defaultPlan.base_price,
+          status: 'pending',
+          payment_method: 'PIX',
+          created_at: new Date().toISOString(),
+        });
+      }
+
       toast({
         title: 'Conta criada com sucesso!',
         description: 'Sua escola foi cadastrada. Entrando...',
@@ -174,19 +200,20 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex">
-      {/* Left side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-primary items-center justify-center p-12">
-        <div className="max-w-md text-primary-foreground">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary-foreground/20 text-primary-foreground font-bold text-2xl">
-              I
-            </div>
-            <span className="text-2xl font-bold">Interagir ERP</span>
+      {/* Left side - Branding (#6b26d9) */}
+      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#6b26d9] via-[#581c87] to-[#3b0764] items-center justify-center p-12 relative overflow-hidden">
+        {/* Elementos decorativos de fundo */}
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-[#6b26d9]/40 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="max-w-md text-white relative z-10">
+          <div className="mb-8">
+            <Logo size="lg" lightText />
           </div>
-          <h1 className="text-4xl font-bold mb-4">
+          <h1 className="text-4xl font-bold mb-4 tracking-tight">
             Gestão escolar completa em um só lugar
           </h1>
-          <p className="text-lg opacity-90">
+          <p className="text-lg text-white/90 leading-relaxed">
             Simplifique a administração da sua escola com nossa plataforma integrada.
             Pedagógico, financeiro, comunicação e muito mais.
           </p>
@@ -195,14 +222,12 @@ const Login = () => {
 
       {/* Right side - Form */}
       <div className="flex-1 flex items-center justify-center p-6 bg-background overflow-y-auto">
-        <Card className="w-full max-w-md border-0 shadow-lg my-4">
+        <Card className="w-full max-w-md border-0 shadow-xl my-4">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4 lg:hidden">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-2xl">
-                I
-              </div>
+              <Logo size="md" />
             </div>
-            <CardTitle className="text-2xl">Acesse sua conta</CardTitle>
+            <CardTitle className="text-2xl font-bold">Acesse sua conta</CardTitle>
             <CardDescription>
               Entre ou crie uma conta para acessar o sistema
             </CardDescription>
@@ -210,8 +235,8 @@ const Login = () => {
           <CardContent>
             <Tabs defaultValue="login" className="w-full" onValueChange={() => setSignupStep('school')}>
               <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="login">Entrar</TabsTrigger>
-                <TabsTrigger value="signup">Criar conta</TabsTrigger>
+                <TabsTrigger value="login" className="data-[state=active]:bg-[#6b26d9] data-[state=active]:text-white">Entrar</TabsTrigger>
+                <TabsTrigger value="signup" className="data-[state=active]:bg-[#6b26d9] data-[state=active]:text-white">Criar conta</TabsTrigger>
               </TabsList>
 
               <TabsContent value="login">
@@ -257,7 +282,7 @@ const Login = () => {
                     )}
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
+                  <Button type="submit" className="w-full bg-[#6b26d9] hover:bg-[#5b21b6] text-white shadow-md shadow-[#6b26d9]/25 font-bold transition-all" disabled={isLoading}>
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -344,7 +369,7 @@ const Login = () => {
 
                       <Button 
                         type="button" 
-                        className="w-full" 
+                        className="w-full bg-[#6b26d9] hover:bg-[#5b21b6] text-white shadow-md shadow-[#6b26d9]/25 font-bold transition-all" 
                         onClick={handleNextStep}
                       >
                         Continuar
@@ -462,7 +487,7 @@ const Login = () => {
                         >
                           Voltar
                         </Button>
-                        <Button type="submit" className="flex-1" disabled={isLoading}>
+                        <Button type="submit" className="flex-1 bg-[#6b26d9] hover:bg-[#5b21b6] text-white shadow-md shadow-[#6b26d9]/25 font-bold transition-all" disabled={isLoading}>
                           {isLoading ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

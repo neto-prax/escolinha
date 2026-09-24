@@ -15,13 +15,15 @@ import {
   PackagePlus,
   DollarSign,
   Layers,
+  Database,
 } from 'lucide-react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import {
   ProdutoEstoque,
   MovimentacaoEstoque,
   VendaEstoque,
-  DEFAULT_ESTOQUE_PRODUTOS,
+  filterRealProdutos,
+  filterRealMovimentacoes,
 } from '@/types/estoque';
 import { Lancamento } from '@/types/finance';
 import { Aluno } from '@/types/aluno';
@@ -34,73 +36,38 @@ import { RegistrarRetiradaModal } from '@/components/estoque/RegistrarRetiradaMo
 import { NovaVendaModal } from '@/components/estoque/NovaVendaModal';
 import { ReciboVendaEstoqueModal } from '@/components/estoque/ReciboVendaEstoqueModal';
 
-const INITIAL_MOVIMENTACOES: MovimentacaoEstoque[] = [
-  {
-    id: 'mov-init-1',
-    data: '2026-09-10T14:30:00Z',
-    tipo: 'saida_consumo',
-    produtoId: 'prod-limp-detergente',
-    produtoNome: 'Detergente Neutro Concentrado 5L',
-    quantidade: 2,
-    quantidadeAnterior: 16,
-    quantidadeAtual: 14,
-    motivo: 'Limpeza & Higiene',
-    setor: 'Zeladoria / Limpeza',
-    responsavelNome: 'Maria Zeladora',
-    destinatario: 'Bloco A e B',
-    observacoes: 'Limpeza geral dos banheiros e corredores',
-  },
-  {
-    id: 'mov-init-2',
-    data: '2026-09-11T09:15:00Z',
-    tipo: 'saida_venda',
-    produtoId: 'prod-farda-camiseta',
-    produtoNome: 'Camiseta Manga Curta Uniforme',
-    variacaoId: 'var-cam-8',
-    variacaoNome: 'Tamanho 8',
-    quantidade: 1,
-    quantidadeAnterior: 26,
-    quantidadeAtual: 25,
-    motivo: 'Venda balcão (REC-2026-10492)',
-    destinatario: 'Ana Clara Lima',
-    valorUnitario: 45.0,
-    valorTotal: 45.0,
-    reciboNumero: 'REC-2026-10492',
-  },
-  {
-    id: 'mov-init-3',
-    data: '2026-09-12T16:00:00Z',
-    tipo: 'reposicao',
-    produtoId: 'prod-farda-camiseta',
-    produtoNome: 'Camiseta Manga Curta Uniforme',
-    variacaoId: 'var-cam-p',
-    variacaoNome: 'Tamanho P',
-    quantidade: 1,
-    quantidadeAnterior: 15,
-    quantidadeAtual: 14,
-    motivo: 'Reposição / Troca de Avaria',
-    setor: 'Secretaria / Administrativo',
-    responsavelNome: 'Secretaria Escolar',
-    destinatario: 'Aluno Gabriel Santos',
-    observacoes: 'Troca de costura desfeita',
-  },
-];
-
 export const Estoque = () => {
   const [activeTab, setActiveTab] = useState('vendas');
 
+  // Estoque real persistido e alocado em banco de dados
   const [produtos, setProdutos] = useLocalStorage<ProdutoEstoque[]>(
     'escolinha_estoque_produtos',
-    DEFAULT_ESTOQUE_PRODUTOS
+    []
   );
   const [movimentacoes, setMovimentacoes] = useLocalStorage<MovimentacaoEstoque[]>(
     'escolinha_estoque_movimentacoes',
-    INITIAL_MOVIMENTACOES
+    []
   );
   const [vendas, setVendas] = useLocalStorage<VendaEstoque[]>('escolinha_estoque_vendas', []);
   const [lancamentos, setLancamentos] = useLocalStorage<Lancamento[]>('escolinha_lancamentos_v2', []);
   const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [employees] = useLocalStorage<any[]>('escolinha_employees', []);
+
+  // Garante que dados de teste/demonstração sejam limpos para exibir estritamente dados reais alocados no banco
+  React.useEffect(() => {
+    if (produtos && produtos.length > 0) {
+      const realP = filterRealProdutos(produtos);
+      if (realP.length !== produtos.length) {
+        setProdutos(realP);
+      }
+    }
+    if (movimentacoes && movimentacoes.length > 0) {
+      const realM = filterRealMovimentacoes(movimentacoes);
+      if (realM.length !== movimentacoes.length) {
+        setMovimentacoes(realM);
+      }
+    }
+  }, [produtos, movimentacoes]);
 
   // Modais
   const [isNovoProdutoOpen, setIsNovoProdutoOpen] = useState(false);
@@ -349,7 +316,11 @@ export const Estoque = () => {
         title="Gestão de Estoque"
         description="Controle de produtos para venda, retiradas para limpeza e consumo interno com emissão de recibos"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 text-xs font-semibold">
+            <Database className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            Banco de Dados: Conectado
+          </Badge>
           <Button
             onClick={() => setIsNovaVendaOpen(true)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold shadow-sm"

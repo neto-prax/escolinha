@@ -25,6 +25,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
+import { Logo } from '@/components/common/Logo';
+import { useSedes } from '@/hooks/useSedes';
 import {
   Sidebar,
   SidebarContent,
@@ -65,7 +67,6 @@ const navigationGroups: NavGroup[] = [
       { title: 'Comercial', url: '/app/comercial', icon: Target, module: 'comercial' },
       { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
       { title: 'Pedagógico', url: '/app/pedagogico', icon: BookOpen, module: 'pedagogico' },
-      { title: 'Comissão', url: '/app/vendas', icon: Briefcase, module: 'vendas' },
     ],
   },
   {
@@ -88,6 +89,7 @@ const navigationGroups: NavGroup[] = [
 
 export const AppSidebar = () => {
   const { hasPermission, school, roles, user } = useAuth();
+  const { activeSede } = useSedes();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
@@ -130,22 +132,13 @@ export const AppSidebar = () => {
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <div className={cn('flex items-center gap-3', isCollapsed && 'justify-center')}>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-600 text-white font-bold text-xl shadow-sm">
-            P
-          </div>
-          {!isCollapsed && (
-            <div className="flex flex-col overflow-hidden">
-              <span className="font-semibold text-sidebar-foreground truncate">
-                Purple Edu
-              </span>
-              {school && (
-                <span className="text-xs text-sidebar-muted truncate">
-                  {school.name}
-                </span>
-              )}
-            </div>
-          )}
+        <div className={cn('flex items-center', isCollapsed ? 'justify-center' : 'gap-3')}>
+          <Logo
+            size="md"
+            iconOnly={isCollapsed}
+            showText={!isCollapsed}
+            subtitle={activeSede ? activeSede.nome : (school?.name || 'Rede de Ensino')}
+          />
         </div>
       </SidebarHeader>
 

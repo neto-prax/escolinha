@@ -8,6 +8,14 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      '/api/asaas': {
+        target: 'https://api.asaas.com/v3',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/asaas/, ''),
+        secure: true,
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

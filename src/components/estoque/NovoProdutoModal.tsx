@@ -27,6 +27,7 @@ import {
   DestinoProduto,
   CATEGORIAS_PRODUTO,
 } from '@/types/estoque';
+import { useSedes } from '@/hooks/useSedes';
 
 interface NovoProdutoModalProps {
   isOpen: boolean;
@@ -44,13 +45,14 @@ export const NovoProdutoModal: React.FC<NovoProdutoModalProps> = ({
   onSaveProduto,
   produtoEdicao,
 }) => {
+  const { sedes, activeSede } = useSedes();
   const [nome, setNome] = useState('');
   const [codigo, setCodigo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_PRODUTO[0]);
   const [destino, setDestino] = useState<DestinoProduto>('venda');
   const [unidadeMedida, setUnidadeMedida] = useState('un');
-  const [unidadeEscolar, setUnidadeEscolar] = useState<'Senador' | 'Papagaio' | 'Todas'>('Todas');
+  const [unidadeEscolar, setUnidadeEscolar] = useState<string>(activeSede?.nome || 'Todas');
 
   // Sem variações
   const [temVariacoes, setTemVariacoes] = useState(false);
@@ -86,7 +88,7 @@ export const NovoProdutoModal: React.FC<NovoProdutoModalProps> = ({
       setCategoria(CATEGORIAS_PRODUTO[0]);
       setDestino('venda');
       setUnidadeMedida('un');
-      setUnidadeEscolar('Todas');
+      setUnidadeEscolar(activeSede?.nome || 'Todas');
       setTemVariacoes(false);
       setQuantidadeEstoque(0);
       setEstoqueMinimo(5);
@@ -216,7 +218,7 @@ export const NovoProdutoModal: React.FC<NovoProdutoModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Destino do Produto *</Label>
               <Select value={destino} onValueChange={(val: DestinoProduto) => setDestino(val)}>
@@ -261,6 +263,23 @@ export const NovoProdutoModal: React.FC<NovoProdutoModalProps> = ({
                   <SelectItem value="resma">Resma (500fls)</SelectItem>
                   <SelectItem value="fardo">Fardo</SelectItem>
                   <SelectItem value="cx">Caixa (cx)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Sede / Unidade</Label>
+              <Select value={unidadeEscolar} onValueChange={setUnidadeEscolar}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Todas">Todas as Sedes</SelectItem>
+                  {sedes.filter((s) => s.ativa).map((s) => (
+                    <SelectItem key={s.id} value={s.nome}>
+                      {s.nome} ({s.tipo})
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

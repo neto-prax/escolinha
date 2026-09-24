@@ -6,7 +6,7 @@ import { getSchoolStorageKey, loadCloudState, saveCloudState } from '@/lib/cloud
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
   const { profile, school } = useAuth();
   const schoolId = profile?.school_id ?? school?.id ?? null;
-  const scopedKey = schoolId ? getSchoolStorageKey(key, schoolId) : null;
+  const scopedKey = schoolId ? getSchoolStorageKey(key, schoolId) : key;
   const [storedValue, setStoredValue] = useState<T>(initialValue);
   const [valueScope, setValueScope] = useState<string | null>(null);
   const latestValue = useRef(storedValue);
@@ -16,8 +16,6 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   latestValue.current = storedValue;
 
   const setValue = (value: T | ((val: T) => T)) => {
-    if (!scopedKey) return;
-
     try {
       const valueToStore = value instanceof Function ? value(latestValue.current) : value;
       latestValue.current = valueToStore;
@@ -28,14 +26,16 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
         detail: { key: scopedKey, newValue: valueToStore },
       }));
 
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      const targetSchoolId = schoolId;
-      const targetScope = scopedKey;
-      saveTimer.current = setTimeout(() => {
-        if (activeScope.current === targetScope) {
-          void saveCloudState(key, valueToStore, targetSchoolId);
-        }
-      }, 400);
+      if (schoolId) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        const targetSchoolId = schoolId;
+        const targetScope = scopedKey;
+        saveTimer.current = setTimeout(() => {
+          if (activeScope.current === targetScope) {
+            void saveCloudState(key, valueToStore, targetSchoolId);
+          }
+        }, 400);
+      }
     } catch (error) {
       console.warn(`Erro ao salvar "${scopedKey}":`, error);
     }
@@ -43,13 +43,6 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 
   useEffect(() => {
     activeScope.current = scopedKey;
-
-    if (!scopedKey) {
-      latestValue.current = initialValue;
-      setStoredValue(initialValue);
-      setValueScope(null);
-      return;
-    }
 
     let cancelled = false;
 

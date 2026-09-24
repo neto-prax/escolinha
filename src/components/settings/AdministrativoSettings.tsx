@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,13 +6,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { FileText, Users, Loader2, Trash2 } from 'lucide-react';
+import { FileText, Users, Loader2, Trash2, Sparkles, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { supabase } from '@/integrations/supabase/client';
 import { TurmaConfig, Lancamento } from '@/types/finance';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatDate } from '@/lib/utils';
+import { DEFAULT_TURMAS_CONFIG, ensureDefaultTurmas, normalizeAllAlunos, addLetraToClasse, registerTurmaExcluida, unmarkTurmaExcluida } from '@/constants/turmas';
+import { TurmaPedagogica } from '@/types/pedagogico';
+
 export function AdministrativoSettings() {
   const { profile } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -22,14 +25,9 @@ export function AdministrativoSettings() {
   const [alunos, setAlunos] = useLocalStorage<any[]>('escolinha_alunos', []);
   const [lancamentosStorage] = useLocalStorage<Lancamento[]>('escolinha_lancamentos', []);
   
-  const defaultTurmas: TurmaConfig[] = [
-    { setor: 'Educação Infantil', nome: 'Maternal', letras: ['A', 'B'] },
-    { setor: 'Ensino Fundamental 1', nome: '1º Ano', letras: ['A', 'B'] },
-    { setor: 'Ensino Fundamental 2', nome: '6º Ano', letras: ['A'] },
-    { setor: 'Ensino Médio', nome: '1º Ano EM', letras: [] }
-  ];
-  
-  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', defaultTurmas);
+  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', DEFAULT_TURMAS_CONFIG);
+  const [turmasExcluidas, setTurmasExcluidas] = useLocalStorage<string[]>('escolinha_turmas_excluidas_v1', []);
+  const [turmasPedagogico, setTurmasPedagogico] = useLocalStorage<TurmaPedagogica[]>('escolinha_turmas_pedagogico_v1', []);
   
   const [novaTurma, setNovaTurma] = useState('');
   const [novoValorPadrao, setNovoValorPadrao] = useState('');
@@ -73,21 +71,26 @@ _Acesse o painel para mais detalhes: {{link_caixa}}_`;
     let novasTurmas = [...turmas];
     const index = novasTurmas.findIndex(t => t.nome === baseName && t.setor === selectedSetor);
     
+    // Se o usuário não selecionou nenhuma letra, garante a inclusão da Turma 'A' padrão
+    const lettersToAssign = selectedLetters.length > 0 ? selectedLetters : ['A'];
+
     if (index !== -1) {
       const existingLetters = [...novasTurmas[index].letras];
-      selectedLetters.forEach(l => {
+      lettersToAssign.forEach(l => {
         if (!existingLetters.includes(l)) existingLetters.push(l);
       });
       novasTurmas[index].letras = existingLetters.sort();
       novasTurmas[index].valorPadrao = novoValorPadrao ? parseFloat(novoValorPadrao) : undefined;
     } else {
-      novasTurmas.push({ setor: selectedSetor, nome: baseName, letras: [...selectedLetters].sort(), valorPadrao: novoValorPadrao ? parseFloat(novoValorPadrao) : undefined });
+      novasTurmas.push({ setor: selectedSetor, nome: baseName, letras: [...lettersToAssign].sort(), valorPadrao: novoValorPadrao ? parseFloat(novoValorPadrao) : undefined });
     }
     
     setTurmas(novasTurmas);
+    setTurmasExcluidas(prev => unmarkTurmaExcluida(baseName, prev));
     setNovaTurma('');
     setNovoValorPadrao('');
     setSelectedLetters([]);
+    toast.success(`Classe "${baseName}" cadastrada com Turma(s) [${lettersToAssign.join(', ')}]!`);
   };
 
   const getLocalFinancialData = () => {
@@ -267,14 +270,38 @@ ${mensagemRelatorio}`;
                 <CardTitle>Turmas e Classes</CardTitle>
                 <CardDescription>Gerencie as turmas disponíveis para marcação de lançamentos no sistema</CardDescription>
               </div>
-              <Button 
-                variant={sortAlphabetically ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSortAlphabetically(!sortAlphabetically)}
-                title="Ordenar de A a Z"
-              >
-                A-Z
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const padronizadas = ensureDefaultTurmas(turmas, turmasExcluidas, true);
+                    setTurmas(padronizadas);
+                    if (alunos && alunos.length > 0) {
+                      const { alunos: normalized, countChanged } = normalizeAllAlunos(alunos, padronizadas);
+                      if (countChanged > 0) {
+                        setAlunos(normalized);
+                      }
+                      toast.success(`Classes padronizadas com Turma A e ${countChanged} aluno(s) normalizados!`);
+                    } else {
+                      toast.success('Classes padronizadas com Turma A padrão com sucesso!');
+                    }
+                  }}
+                  className="text-xs flex items-center gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  title="Padroniza todas as classes da Educação Infantil ao Ensino Médio com Turma A padrão e normaliza alunos"
+                >
+                  <Sparkles size={14} className="text-emerald-600" />
+                  Padronizar Classes & Turma A
+                </Button>
+                <Button 
+                  variant={sortAlphabetically ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSortAlphabetically(!sortAlphabetically)}
+                  title="Ordenar de A a Z"
+                >
+                  A-Z
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-6 max-w-lg">
@@ -429,11 +456,26 @@ ${mensagemRelatorio}`;
                                           {setoresOpcoes.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                                         </SelectContent>
                                       </Select>
-                                      <Button variant="ghost" size="sm" className="text-destructive h-7 w-7 p-0 hover:bg-destructive/10" onClick={() => {
-                                        setTurmas(turmas.filter(t => !(t.nome === turma.nome && t.setor === setor)));
-                                      }} title="Excluir classe">
-                                        X
-                                      </Button>
+                                       <Button
+                                         variant="ghost"
+                                         size="sm"
+                                         className="text-destructive h-7 w-7 p-0 hover:bg-destructive/10"
+                                         onClick={() => {
+                                           if (window.confirm(`Deseja realmente excluir a classe "${turma.nome}"? Ela não voltará a aparecer.`)) {
+                                             setTurmas(turmas.filter(t => !(t.nome === turma.nome && t.setor === setor)));
+                                             setTurmasPedagogico(prev => prev.filter(tp => !(tp.setor === setor && (tp.nome.toLowerCase().startsWith(turma.nome.toLowerCase()) || tp.nome.toLowerCase() === turma.nome.toLowerCase()))));
+                                             let next = registerTurmaExcluida(turma.nome, undefined, turmasExcluidas);
+                                             (turma.letras || ['A']).forEach(l => {
+                                               next = registerTurmaExcluida(`${turma.nome} ${l}`, undefined, next);
+                                             });
+                                             setTurmasExcluidas(next);
+                                             toast.success(`Classe "${turma.nome}" excluída com sucesso.`);
+                                           }
+                                         }}
+                                         title="Excluir classe"
+                                       >
+                                         X
+                                       </Button>
                                     </div>
                                   </>
                                 )}
@@ -469,12 +511,34 @@ ${mensagemRelatorio}`;
                                     <span className="text-xs font-medium text-muted-foreground">Valor Padrão: {(turma.valorPadrao).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                                   )}
                                   {turma.letras.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                       {turma.letras.map(l => (
                                         <span key={l} className="text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-full font-medium shadow-sm">
                                           {turma.nome} {l}
                                         </span>
                                       ))}
+                                      {(() => {
+                                        const letrasDisponiveis = ['B', 'C', 'D', 'E'];
+                                        const proximaLetra = letrasDisponiveis.find(l => !turma.letras.includes(l));
+                                        if (!proximaLetra) return null;
+                                        return (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                              const { updatedTurmas, changed } = addLetraToClasse(turmas, turma.setor, turma.nome, proximaLetra);
+                                              if (changed) {
+                                                setTurmas(updatedTurmas);
+                                                toast.success(`Turma ${proximaLetra} adicionada à classe ${turma.nome}!`);
+                                              }
+                                            }}
+                                            className="h-6 text-[11px] px-2 text-primary hover:bg-primary/10 border border-dashed border-primary/30 rounded-full font-medium"
+                                            title={`Adicionar Turma ${proximaLetra} na classe ${turma.nome}`}
+                                          >
+                                            <Plus size={11} className="mr-0.5" /> Turma {proximaLetra}
+                                          </Button>
+                                        );
+                                      })()}
                                     </div>
                                   )}
                                 </div>

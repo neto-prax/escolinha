@@ -1,12 +1,15 @@
 import { Outlet, Navigate } from 'react-router-dom';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { Topbar } from './Topbar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { PlanSelectorModal } from '@/components/onboarding/PlanSelectorModal';
+import { usePlatformBillingSettings } from '@/hooks/usePlatformBillingSettings';
 
 export const AppLayout = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, school, roles, user, profile } = useAuth();
+  const { schoolSubscriptions, markSchoolAsPaid } = usePlatformBillingSettings();
 
   if (isLoading) {
     return (
@@ -23,9 +26,16 @@ export const AppLayout = () => {
     return <Navigate to="/login" replace />;
   }
 
+  const isSuperAdmin = roles?.includes('superadmin') || user?.email === 'sport@gmail.com';
+  const schoolId = school?.id || profile?.school_id;
+  const currentSub = schoolId ? schoolSubscriptions[schoolId] : null;
+
+  // Só bloqueia se houver assinatura pendente registrada e não for superadmin
+  const isPendingPayment = !isSuperAdmin && currentSub?.status === 'pending';
+
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="min-h-screen flex w-full relative">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           <Topbar />
@@ -35,6 +45,20 @@ export const AppLayout = () => {
             </div>
           </main>
         </SidebarInset>
+
+        {isPendingPayment && schoolId && (
+          <PlanSelectorModal
+            isOpen={true}
+            isPaywall={true}
+            schoolId={schoolId}
+            schoolName={school?.name || 'Sua Escola'}
+            adminName={profile?.full_name || 'Diretoria'}
+            adminEmail={user?.email || ''}
+            onPaymentSuccess={() => {
+              markSchoolAsPaid(schoolId);
+            }}
+          />
+        )}
       </div>
     </SidebarProvider>
   );

@@ -5,14 +5,17 @@ import { LancamentosTab } from '@/components/financeiro/LancamentosTab';
 import { OrcamentosTab } from '@/components/financeiro/OrcamentosTab';
 import { SalariosTab } from '@/components/financeiro/SalariosTab';
 import { CartoesTab } from '@/components/financeiro/CartoesTab';
+import { AsaasBankTab } from '@/components/financeiro/AsaasBankTab';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao, TurmaConfig } from '@/types/finance';
 import { Aluno, Mensalidade } from '@/types/aluno';
 import { getIntegratedLancamentos } from '@/lib/financeUtils';
 import { mockExpenses, mockCaixas, mockCartoes } from '@/data/mockData';
-import { Wallet, Calculator, Users, LayoutDashboard, CreditCard } from 'lucide-react';
+import { Wallet, Calculator, Users, LayoutDashboard, CreditCard, Landmark } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useAuth } from '@/contexts/AuthContext';
+
+import { DEFAULT_TURMAS_CONFIG } from '@/constants/turmas';
 
 const Financeiro = () => {
   const { canAccessTab } = usePermissions();
@@ -25,12 +28,7 @@ const Financeiro = () => {
   const [salarios, setSalarios] = useLocalStorage<Salario[]>('escolinha_salarios', []);
   const [caixas, setCaixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
   const [cartoes, setCartoes] = useLocalStorage<Cartao[]>('escolinha_cartoes', mockCartoes);
-  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', [
-    { setor: 'Educação Infantil', nome: 'Maternal', letras: ['A', 'B'] },
-    { setor: 'Ensino Fundamental 1', nome: '1º Ano', letras: ['A', 'B'] },
-    { setor: 'Ensino Fundamental 2', nome: '6º Ano', letras: ['A'] },
-    { setor: 'Ensino Médio', nome: '1º Ano EM', letras: [] }
-  ]);
+  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', DEFAULT_TURMAS_CONFIG);
   
   const [categorias, setCategorias] = useLocalStorage<string[]>('escolinha_categorias', [
     'Administrativo',
@@ -53,6 +51,16 @@ const Financeiro = () => {
     const customOnly = novosLancamentos.filter(l => !l.id.startsWith('mensalidade-'));
     setLancamentosStorage(customOnly);
   };
+
+  useEffect(() => {
+    const hasAsaas = caixas.some(c => c.id === 'c-asaas' || c.nome.toLowerCase().includes('asaas'));
+    if (!hasAsaas) {
+      setCaixas([
+        { id: 'c-asaas', nome: 'Asaas Bank (Conta Principal)', saldoInicial: 0.13 },
+        ...caixas,
+      ]);
+    }
+  }, [caixas, setCaixas]);
 
   useEffect(() => {
     const isFixed = window.localStorage.getItem(`s_${school?.id}_fix_lancamento_dates_v1`);
@@ -209,6 +217,15 @@ const Financeiro = () => {
           onUpdateCartao={handleUpdateCartao}
         />
       ),
+    },
+    {
+      id: 'asaas',
+      label: (
+        <span className="flex items-center gap-2 font-semibold text-[#6b26d9]">
+          <Landmark size={16} /> Banco Asaas
+        </span>
+      ),
+      content: <AsaasBankTab />,
     }
   ];
 

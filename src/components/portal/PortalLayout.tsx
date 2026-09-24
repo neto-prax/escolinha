@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGuardianPortalAccess } from '@/hooks/useGuardianPortal';
 import { Loader2, GraduationCap, Home, BookOpen, AlertTriangle, DollarSign, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/common/Logo';
 
 export const PortalLayout = () => {
   const { isAuthenticated, isLoading, signOut, profile } = useAuth();
@@ -50,9 +51,8 @@ export const PortalLayout = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <GraduationCap className="h-6 w-6 text-primary" />
-            <span className="font-semibold text-lg">Portal do Responsável</span>
+          <div className="flex items-center">
+            <Logo size="sm" subtitle="Portal do Responsável" />
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground hidden sm:inline">Olá, {guardianName}</span>

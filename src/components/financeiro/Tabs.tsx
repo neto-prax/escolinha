@@ -9,10 +9,13 @@ export interface Tab {
 interface TabsProps {
   tabs: Tab[];
   defaultTabId?: string;
+  activeTabId?: string;
+  onTabChange?: (id: string) => void;
 }
 
-export function Tabs({ tabs, defaultTabId }: TabsProps) {
-  const [activeTabId, setActiveTabId] = useState(defaultTabId || tabs[0]?.id);
+export function Tabs({ tabs, defaultTabId, activeTabId: controlledActiveId, onTabChange }: TabsProps) {
+  const [internalActiveTabId, setInternalActiveTabId] = useState(defaultTabId || tabs[0]?.id);
+  const currentActiveId = controlledActiveId !== undefined ? controlledActiveId : internalActiveTabId;
 
   if (!tabs || tabs.length === 0) {
     return (
@@ -22,9 +25,14 @@ export function Tabs({ tabs, defaultTabId }: TabsProps) {
     );
   }
 
-  const effectiveActiveTabId = tabs.some((tab) => tab.id === activeTabId)
-    ? activeTabId
+  const effectiveActiveTabId = tabs.some((tab) => tab.id === currentActiveId)
+    ? currentActiveId
     : tabs[0]?.id;
+
+  const handleSelect = (id: string) => {
+    if (onTabChange) onTabChange(id);
+    if (controlledActiveId === undefined) setInternalActiveTabId(id);
+  };
 
   return (
     <div className="w-full">
@@ -32,7 +40,7 @@ export function Tabs({ tabs, defaultTabId }: TabsProps) {
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTabId(tab.id)}
+            onClick={() => handleSelect(tab.id)}
             className={`py-2 px-6 font-medium text-sm transition-colors duration-200 focus:outline-none whitespace-nowrap ${
               effectiveActiveTabId === tab.id
                 ? 'border-b-2 border-purple-600 text-purple-600'

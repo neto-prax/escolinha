@@ -3,9 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Save } from 'lucide-react';
+import { Save, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { BrandSettingsManager } from './BrandSettingsManager';
+import { PlanManager } from './PlanManager';
 
 export function ConfiguracoesTab() {
   const [cupomComissao, setCupomComissao] = useLocalStorage('escolinha_cupom_comissao', '');
@@ -22,6 +24,13 @@ export function ConfiguracoesTab() {
 
   return (
     <div className="space-y-6">
+      {/* Gestão de Planos, Módulos e 1ª Mensalidade da Plataforma */}
+      <PlanManager />
+
+      {/* Gestão de Logo & Favicon da Plataforma */}
+      <BrandSettingsManager />
+
+      {/* Configurações Financeiras da Plataforma */}
       <Card>
         <CardHeader>
           <CardTitle>Configurações Financeiras</CardTitle>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" fill="none" width="240" height="64">
+  <defs>
+    <linearGradient id="purpleLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6b26d9" />
+    </linearGradient>
+    <filter id="logoShadow" x="-10%" y="-10%" width="120%" height="130%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#6b26d9" flood-opacity="0.25" />
+    </filter>
+  </defs>
+  <!-- Icon -->
+  <rect x="4" y="6" width="52" height="52" rx="15" fill="url(#purpleLogoGrad)" filter="url(#logoShadow)" />
+  <rect x="21" y="23" width="18" height="18" rx="4" fill="#ffffff" transform="rotate(45 30 32)" />
+  
+  <!-- Typography -->
+  <text x="70" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="900" fill="#1e293b" letter-spacing="-0.5">Purple</text>
+  <text x="166" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="900" fill="#6b26d9" letter-spacing="-0.5">Edu</text>
+</svg>
+

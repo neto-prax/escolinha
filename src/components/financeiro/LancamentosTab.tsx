@@ -7,9 +7,10 @@ import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn, formatDate } from '@/lib/utils';
-import { ProdutoEstoque, MovimentacaoEstoque, ItemVendaEstoque, DEFAULT_ESTOQUE_PRODUTOS } from '@/types/estoque';
+import { ProdutoEstoque, MovimentacaoEstoque, ItemVendaEstoque, filterRealProdutos } from '@/types/estoque';
 import { ReciboVendaEstoqueModal } from '@/components/estoque/ReciboVendaEstoqueModal';
 import { SearchableProdutoSelect } from '@/components/estoque/SearchableProdutoSelect';
+import { useSedes } from '@/hooks/useSedes';
 
 interface LancamentosTabProps {
   lancamentos: Lancamento[];
@@ -26,12 +27,13 @@ interface LancamentosTabProps {
 }
 
 export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categorias, turmas, onAddLancamento, onUpdateLancamento, onAddCategoria, onFecharCaixa, onImportLancamentos }: LancamentosTabProps) {
+  const { sedes, activeSede } = useSedes();
   const [tipo, setTipo] = useState<TipoLancamento>('Entrada');
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState<number | ''>('');
   const [data, setData] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('Administrativo');
-  const [unidade, setUnidade] = useState<Unidade>('Todas');
+  const [unidade, setUnidade] = useState<Unidade>(activeSede?.nome || 'Todas');
   const [turmasSelecionadas, setTurmasSelecionadas] = useState<TurmaConfig[]>([]);
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('PIX');
   const [status, setStatus] = useState<'Pago' | 'Em Aberto'>('Pago');
@@ -43,9 +45,18 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
   const [openAluno, setOpenAluno] = useState(false);
   const [alunos] = useLocalStorage<any[]>('escolinha_alunos', []);
 
-  // Integração com Estoque
-  const [produtos, setProdutos] = useLocalStorage<ProdutoEstoque[]>('escolinha_estoque_produtos', DEFAULT_ESTOQUE_PRODUTOS);
+  // Integração com Estoque (Apenas dados reais alocados em banco)
+  const [produtos, setProdutos] = useLocalStorage<ProdutoEstoque[]>('escolinha_estoque_produtos', []);
   const [movimentacoes, setMovimentacoes] = useLocalStorage<MovimentacaoEstoque[]>('escolinha_estoque_movimentacoes', []);
+
+  useEffect(() => {
+    if (produtos && produtos.length > 0) {
+      const real = filterRealProdutos(produtos);
+      if (real.length !== produtos.length) {
+        setProdutos(real);
+      }
+    }
+  }, [produtos]);
   const [venderItensEstoque, setVenderItensEstoque] = useState(false);
   const [itensEstoqueVenda, setItensEstoqueVenda] = useState<{
     idTemp: string;
@@ -147,13 +158,17 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
             }
           }
           
+          const matchedSede = sedes.find(
+            (s) => s.nome.toLowerCase() === (row.Unidade || '').toString().trim().toLowerCase()
+          );
+
           return {
             tipo: row.Tipo === 'Saída' ? 'Saída' : 'Entrada',
             descricao: row.Descricao || 'Importado',
             valor: Number(row.Valor) || 0,
             data: parsedDate,
             categoria: categorias.includes(row.Categoria) ? row.Categoria : categorias[0],
-            unidade: row.Unidade === 'Senador' || row.Unidade === 'Papagaio' ? row.Unidade : 'Todas',
+            unidade: matchedSede ? matchedSede.nome : (row.Unidade === 'Todas' ? 'Todas' : 'Todas'),
             formaPagamento: row['Forma de Pagamento'] || 'PIX',
             status: row.Status === 'Em Aberto' ? 'Em Aberto' : 'Pago',
             tipoCusto: 'Variável',
@@ -749,6 +764,22 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
             </select>
           </div>
 
+          <div className="flex flex-col lg:col-span-2">
+            <label className="text-sm font-medium text-gray-700 mb-1">Sede / Unidade</label>
+            <select 
+              value={unidade} 
+              onChange={(e) => setUnidade(e.target.value as Unidade)}
+              className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm"
+            >
+              <option value="Todas">Todas as Sedes</option>
+              {sedes.filter((s) => s.ativa).map((s) => (
+                <option key={s.id} value={s.nome}>
+                  {s.nome} ({s.tipo})
+                </option>
+              ))}
+            </select>
+          </div>
+
           {tipo === 'Entrada' && (
             <div className="flex flex-col lg:col-span-2">
               <label className="text-sm font-medium text-gray-700 mb-1">Aluno (Opcional)</label>
@@ -1118,6 +1149,11 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
                           )}
                         </span>
                       ))}
+                      {lanc.unidade && lanc.unidade !== 'Todas' && (
+                        <span className="ml-2 inline-flex items-center gap-0.5 text-xs bg-purple-50 text-[#6b26d9] border border-purple-200 px-2 py-0.5 rounded-full font-medium">
+                          📍 {lanc.unidade}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-xs">{lanc.categoria}</td>
                     <td className="py-3 px-4">

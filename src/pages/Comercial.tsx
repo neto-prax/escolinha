@@ -11,18 +11,13 @@ import { Aluno } from '@/types/aluno';
 import { Target, Kanban as KanbanIcon, ShieldAlert } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
-const defaultTurmas: TurmaConfig[] = [
-  { setor: 'Educação Infantil', nome: 'Maternal', letras: ['A', 'B'] },
-  { setor: 'Ensino Fundamental 1', nome: '1º Ano', letras: ['A', 'B'] },
-  { setor: 'Ensino Fundamental 2', nome: '6º Ano', letras: ['A'] },
-  { setor: 'Ensino Médio', nome: '1º Ano EM', letras: [] },
-];
+import { DEFAULT_TURMAS_CONFIG } from '@/constants/turmas';
 
 export default function Comercial() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'kanban';
 
-  const [turmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', defaultTurmas);
+  const [turmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', DEFAULT_TURMAS_CONFIG);
   const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const { canAccessScreen, canAccessTab } = usePermissions();
 

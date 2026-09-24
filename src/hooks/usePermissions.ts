@@ -66,6 +66,7 @@ export const APP_SCREENS: ScreenDefinition[] = [
       { id: 'orcamentos', label: 'Orçamentos' },
       { id: 'salarios', label: 'Salários' },
       { id: 'cartoes', label: 'Cartões' },
+      { id: 'asaas', label: 'Banco Asaas' },
       { id: 'dashboard', label: 'Dashboard Financeiro' },
       { id: 'turmas', label: 'Turmas' },
     ],
@@ -96,6 +97,7 @@ export const APP_SCREENS: ScreenDefinition[] = [
     label: 'Configurações',
     tabs: [
       { id: 'geral', label: 'Geral' },
+      { id: 'sedes', label: 'Sedes & Unidades' },
       { id: 'whatsapp', label: 'WhatsApp' },
       { id: 'financeiro', label: 'Financeiro' },
       { id: 'pedagogico', label: 'Pedagógico' },

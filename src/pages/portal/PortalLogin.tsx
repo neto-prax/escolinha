@@ -8,6 +8,7 @@ import { GraduationCap, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { Logo } from '@/components/common/Logo';
 
 const PortalLogin = () => {
   const [email, setEmail] = useState('');
@@ -47,8 +48,8 @@ const PortalLogin = () => {
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
-          <div className="mx-auto bg-primary/10 p-3 rounded-full w-fit">
-            <GraduationCap className="h-8 w-8 text-primary" />
+          <div className="flex justify-center mb-2">
+            <Logo size="lg" />
           </div>
           <CardTitle className="text-2xl">Portal do Responsável</CardTitle>
           <CardDescription>Acesse os dados acadêmicos e financeiros do seu filho</CardDescription>

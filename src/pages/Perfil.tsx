@@ -7,17 +7,31 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROLE_LABELS } from '@/types/auth';
 import { toast } from 'sonner';
-import { User, Mail, Shield, KeyRound, Bell, Camera, Save, CheckCircle2, Building2, Sparkles, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { User, Mail, Shield, KeyRound, Bell, Camera, Save, CheckCircle2, Building2, Sparkles, ArrowRight, Briefcase } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ComissaoTab } from '@/components/perfil/ComissaoTab';
+import { useSedes } from '@/hooks/useSedes';
 
 export const Perfil: React.FC = () => {
   const { user, profile, roles, school } = useAuth();
+  const { activeSede, sedes } = useSedes();
+  const matrizSede = sedes.find(s => s.tipo === 'Matriz') || sedes[0];
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const primaryRole = roles[0] || 'director';
+  const isDirector = roles.includes('director') || roles.length === 0 || (profile as any)?.role === 'director';
+
+  const requestedTab = searchParams.get('tab');
+  const activeTab = (requestedTab === 'comissao' && isDirector) ? 'comissao' : 'dados';
+
+  const handleTabChange = (val: string) => {
+    setSearchParams({ tab: val });
+  };
 
   // Form states
   const [fullName, setFullName] = useState(profile?.full_name || 'Neto Oliver');
@@ -127,7 +141,8 @@ export const Perfil: React.FC = () => {
               </p>
 
               <p className="text-xs text-purple-300/80 flex items-center justify-center md:justify-start gap-1.5">
-                <Building2 className="h-3.5 w-3.5 text-purple-300" /> {school?.name || 'Colégio Interagir - Unidade Papagaio'}
+                <Building2 className="h-3.5 w-3.5 text-purple-300" />{' '}
+                {school?.name || 'Colégio Interagir'} • {activeSede ? activeSede.nome : (matrizSede?.nome || 'Matriz')}
               </p>
             </div>
           </div>
@@ -143,11 +158,37 @@ export const Perfil: React.FC = () => {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* COLUNA ESQUERDA (PRINCIPAL) - 2 COLUNAS DE LARGURA */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* DADOS PESSOAIS */}
-          <Card className="border-purple-100 shadow-sm rounded-xl">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+        {isDirector && (
+          <div className="flex items-center justify-between border-b pb-2">
+            <TabsList className="bg-muted/70 p-1 rounded-xl h-11 border">
+              <TabsTrigger
+                value="dados"
+                className="gap-2 px-5 h-9 font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+              >
+                <User className="h-4 w-4" />
+                Dados & Segurança
+              </TabsTrigger>
+              <TabsTrigger
+                value="comissao"
+                className="gap-2 px-5 h-9 font-semibold text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+              >
+                <Briefcase className="h-4 w-4 text-purple-600" />
+                Comissão & Indicações
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                  Diretor
+                </Badge>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        )}
+
+        <TabsContent value="dados" className="space-y-6 mt-0">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* COLUNA ESQUERDA (PRINCIPAL) - 2 COLUNAS DE LARGURA */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* DADOS PESSOAIS */}
+              <Card className="border-purple-100 shadow-sm rounded-xl">
             <CardHeader className="border-b border-purple-50 pb-4">
               <CardTitle className="text-base font-bold text-purple-950 flex items-center gap-2">
                 <User className="h-5 w-5 text-purple-600" /> Dados Pessoais
@@ -354,8 +395,16 @@ export const Perfil: React.FC = () => {
           )}
         </div>
       </div>
-    </div>
-  );
+    </TabsContent>
+
+    {isDirector && (
+      <TabsContent value="comissao" className="space-y-6 mt-0">
+        <ComissaoTab />
+      </TabsContent>
+    )}
+  </Tabs>
+</div>
+);
 };
 
 export default Perfil;

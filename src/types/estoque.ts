@@ -27,7 +27,7 @@ export interface ProdutoEstoque {
   precoVenda?: number; // Preço à vista
   precoVendaCredito?: number; // Preço no crédito
   unidadeMedida?: string; // un, pct, kit, litro, cx, resma
-  unidadeEscolar?: 'Senador' | 'Papagaio' | 'Todas';
+  unidadeEscolar?: 'Senador' | 'Papagaio' | 'Todas' | string;
   ativo: boolean;
   criadoEm: string;
   atualizadoEm: string;
@@ -122,7 +122,33 @@ export const SETORES_ESCOLA = [
   'Outro Setor',
 ];
 
-export const DEFAULT_ESTOQUE_PRODUTOS: ProdutoEstoque[] = [
+export function isDemoProduto(p: ProdutoEstoque): boolean {
+  if (!p || !p.id) return false;
+  return (
+    p.id.startsWith('prod-farda-') ||
+    p.id.startsWith('prod-limp-') ||
+    p.id.startsWith('prod-escrit-') ||
+    p.id.startsWith('prod-ped-')
+  );
+}
+
+export function isDemoMovimentacao(m: MovimentacaoEstoque): boolean {
+  if (!m || !m.id) return false;
+  return m.id.startsWith('mov-init-');
+}
+
+export function filterRealProdutos(produtos: ProdutoEstoque[]): ProdutoEstoque[] {
+  return (produtos || []).filter(p => !isDemoProduto(p));
+}
+
+export function filterRealMovimentacoes(movimentacoes: MovimentacaoEstoque[]): MovimentacaoEstoque[] {
+  return (movimentacoes || []).filter(m => !isDemoMovimentacao(m));
+}
+
+// O estoque padrão agora inicia vazio para garantir apenas dados reais alocados em banco
+export const DEFAULT_ESTOQUE_PRODUTOS: ProdutoEstoque[] = [];
+
+export const SAMPLE_DEMO_PRODUTOS: ProdutoEstoque[] = [
   {
     id: 'prod-farda-camiseta',
     codigo: 'UNI-CAM-01',

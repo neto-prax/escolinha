@@ -31,14 +31,21 @@ import Pedagogico from "./pages/Pedagogico";
 import Perfil from "./pages/Perfil";
 import Comercial from "./pages/Comercial";
 import Estoque from "./pages/Estoque";
+import { useSystemBranding } from "@/hooks/useSystemBranding";
 
 const queryClient = new QueryClient();
+
+const BrandingInitializer = () => {
+  useSystemBranding();
+  return null;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <BrandingInitializer />
       <BrowserRouter>
         <AuthProvider>
           <ErrorBoundary>

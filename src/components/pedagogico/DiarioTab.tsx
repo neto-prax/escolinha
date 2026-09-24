@@ -863,7 +863,7 @@ export const DiarioTab: React.FC = () => {
             </Button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div data-tour="seletor-turma-diario" className="flex items-center gap-2">
             <Select value={selectedTurmaFilter} onValueChange={setSelectedTurmaFilter}>
               <SelectTrigger className="w-[180px] h-9 text-xs font-medium">
                 <SelectValue placeholder="Turma" />

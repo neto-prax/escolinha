@@ -1,4 +1,4 @@
-export type Unidade = 'Senador' | 'Papagaio' | 'Todas';
+export type Unidade = 'Senador' | 'Papagaio' | 'Todas' | string;
 
 export type Categoria = string;
 

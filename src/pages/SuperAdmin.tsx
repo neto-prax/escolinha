@@ -13,11 +13,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone, Plus, Image as ImageIcon } from 'lucide-react';
+import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone, Plus, Image as ImageIcon, Unlock } from 'lucide-react';
 import { BillingTab } from '@/components/superadmin/BillingTab';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { ConfiguracoesTab } from '@/components/superadmin/ConfiguracoesTab';
 import { MarketingTab } from '@/components/superadmin/MarketingTab';
+import { usePlatformBillingSettings } from '@/hooks/usePlatformBillingSettings';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -76,6 +77,7 @@ const ROLE_COLORS: Record<string, string> = {
 export default function SuperAdmin() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
+  const { schoolSubscriptions, markSchoolAsManualFree } = usePlatformBillingSettings();
   
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -551,6 +553,7 @@ export default function SuperAdmin() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Escola</TableHead>
+                      <TableHead>1ª Mensalidade / Plano</TableHead>
                       <TableHead>Usuários</TableHead>
                       <TableHead>Alunos</TableHead>
                       <TableHead>Criada em</TableHead>
@@ -558,52 +561,100 @@ export default function SuperAdmin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredSchools.map((school) => (
-                      <TableRow key={school.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarImage src={school.logo_url || ''} />
-                              <AvatarFallback>{getInitials(school.name)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium">{school.name}</p>
-                              <p className="text-sm text-muted-foreground">{school.slug}</p>
+                    {filteredSchools.map((school) => {
+                      const sub = schoolSubscriptions[school.id];
+                      return (
+                        <TableRow key={school.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-10 w-10">
+                                <AvatarImage src={school.logo_url || ''} />
+                                <AvatarFallback>{getInitials(school.name)}</AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="font-medium">{school.name}</p>
+                                <p className="text-sm text-muted-foreground">{school.slug}</p>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{school.user_count}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{school.student_count}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(school.created_at), "dd/MM/yyyy", { locale: ptBR })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenSettings(school)}
-                            >
-                              <Settings className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => setDeleteSchoolDialog(school)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>
+                            {sub ? (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {sub.status === 'paid' && (
+                                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-200">
+                                      ✓ 1ª Paga
+                                    </Badge>
+                                  )}
+                                  {sub.status === 'manual_free' && (
+                                    <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 border-purple-200">
+                                      Liberado Manual
+                                    </Badge>
+                                  )}
+                                  {sub.status === 'pending' && (
+                                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200 animate-pulse">
+                                      Aguardando 1ª Mensalidade
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Plano: <span className="font-semibold text-foreground">{sub.plan_name}</span> (
+                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                                    sub.total_monthly_amount
+                                  )}
+                                  )
+                                </div>
+                              </div>
+                            ) : (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                Ativa / Padrão
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{school.user_count}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{school.student_count}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(school.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2 items-center">
+                              {sub?.status === 'pending' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => markSchoolAsManualFree(school.id)}
+                                  title="Liberar acesso imediatamente"
+                                  className="border-emerald-500 text-emerald-600 hover:bg-emerald-50 text-xs gap-1 h-8"
+                                >
+                                  <Unlock className="h-3.5 w-3.5" /> Liberar
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenSettings(school)}
+                              >
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setDeleteSchoolDialog(school)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                     {filteredSchools.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">
                           Nenhuma escola encontrada
                         </TableCell>
                       </TableRow>

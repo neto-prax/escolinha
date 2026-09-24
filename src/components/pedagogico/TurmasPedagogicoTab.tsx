@@ -11,7 +11,7 @@ import {
   INTERVALOS_PADRAO,
 } from '@/types/pedagogico';
 import { TurmaConfig } from '@/types/finance';
-import { Aluno } from '@/types/aluno';
+import { Aluno, Mensalidade } from '@/types/aluno';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { TransferirTurmaModal } from '@/components/alunos/TransferirTurmaModal';
+import {
+  DEFAULT_TURMAS_CONFIG,
+  ensureDefaultTurmas,
+  addLetraToClasse,
+  normalizeAllAlunos,
+  syncTurmasPedagogicasComGlobais,
+  matchesAlunoTurma,
+  isTurmaExcluida,
+  registerTurmaExcluida,
+  unmarkTurmaExcluida,
+} from '@/constants/turmas';
 import {
   GraduationCap,
   Users,
@@ -44,8 +65,16 @@ import {
   ArrowUp,
   ArrowDown,
   Wand2,
+  Eye,
+  ArrowRightLeft,
+  MessageSquare,
+  Phone,
+  RefreshCw,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { AnoLetivoSelector } from '@/components/pedagogico/AnoLetivoSelector';
+import { TutorialTour, TutorialButton } from '@/components/common/TutorialTour';
 
 function addMinutesToTime(timeStr: string, minutesToAdd: number): string {
   const cleaned = timeStr.replace(/[^\d:]/g, '');
@@ -68,14 +97,33 @@ export const TurmasPedagogicoTab: React.FC = () => {
   );
 
   // Turmas do financeiro/sistema global para sincronização
-  const [turmasGlobais, setTurmasGlobais] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', []);
+  const [turmasGlobais, setTurmasGlobais] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', DEFAULT_TURMAS_CONFIG);
   const [alunos, setAlunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
+  const [mensalidades, setMensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [employees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
   const [materias] = useLocalStorage<Materia[]>('escolinha_materias_v1', DEFAULT_MATERIAS);
+
+  // Estados para Modal de Ver Alunos da Turma
+  const [selectedTurmaParaAlunos, setSelectedTurmaParaAlunos] = useState<TurmaPedagogica | null>(null);
+  const [termoBuscaAlunosTurma, setTermoBuscaAlunosTurma] = useState('');
+  const [selectedModalAlunoIds, setSelectedModalAlunoIds] = useState<string[]>([]);
+
+  // Estados para Transferência Facilitada de Turma
+  const [transferAlunoIds, setTransferAlunoIds] = useState<string[]>([]);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
   // Filtro e Busca
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSetorFilter, setSelectedSetorFilter] = useState('todos');
+  const [anoLetivoAtivo, setAnoLetivoAtivo] = useLocalStorage<string>(
+    'escolinha_ano_letivo_ativo',
+    String(new Date().getFullYear())
+  );
+  const [turmasExcluidas, setTurmasExcluidas] = useLocalStorage<string[]>(
+    'escolinha_turmas_excluidas_v1',
+    []
+  );
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
   // Estados de Modais
   const [isTurmaModalOpen, setIsTurmaModalOpen] = useState(false);
@@ -126,90 +174,171 @@ export const TurmasPedagogicoTab: React.FC = () => {
   const [genRecreioAposAula, setGenRecreioAposAula] = useState<number>(2);
   const [genDuracaoRecreio, setGenDuracaoRecreio] = useState<number>(20);
 
-  // Sincronizar turmas pré-existentes dos alunos e do sistema global
+  // Normalização segura sem recriar turmas excluídas
   useEffect(() => {
-    setTurmasPedagogico((prev) => {
-      let updated = [...prev];
-      let hasChanges = false;
-
-      // 1. Sincroniza a partir dos alunos cadastrados/importados
-      if (alunos && alunos.length > 0) {
-        alunos.forEach((a) => {
-          if (!a.classe) return;
-          const classe = a.classe.trim();
-          const turmaLetra = (a.turma || '').trim();
-          const fullName = turmaLetra ? `${classe} ${turmaLetra}`.trim() : classe;
-          const setor = a.setor || 'Ensino Fundamental 1';
-
-          const exists = updated.some(
-            (tp) =>
-              tp.nome.toLowerCase() === fullName.toLowerCase() ||
-              tp.nome.toLowerCase() === classe.toLowerCase()
-          );
-
-          if (!exists) {
-            updated.push({
-              id: `turma-aluno-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-              nome: fullName,
-              setor: setor,
-              anoLetivo: '2026',
-              turno: 'Matutino',
-              valorMensalidade: parseFloat(a.valorBase || '850') || 850,
-              maxAlunos: 25,
-              sala: 'Sala Regular',
-              status: 'Ativa',
-            });
-            hasChanges = true;
-          }
-        });
+    if (alunos && alunos.length > 0) {
+      const { alunos: alunosNormalizados, changed } = normalizeAllAlunos(alunos, turmasGlobais);
+      if (changed) {
+        setAlunos(alunosNormalizados);
       }
+    }
+  }, []);
 
-      // 2. Sincroniza a partir de turmasGlobais
-      if (turmasGlobais && turmasGlobais.length > 0) {
-        turmasGlobais.forEach((tg) => {
-          if (tg.letras && tg.letras.length > 0) {
-            tg.letras.forEach((letra) => {
-              const fullName = `${tg.nome} ${letra}`.trim();
-              const exists = updated.some((tp) => tp.nome.toLowerCase() === fullName.toLowerCase());
-              if (!exists) {
-                updated.push({
-                  id: `turma-sync-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                  nome: fullName,
-                  setor: tg.setor || 'Ensino Fundamental 1',
-                  anoLetivo: '2026',
-                  turno: 'Matutino',
-                  valorMensalidade: tg.valorPadrao || 850,
-                  maxAlunos: 25,
-                  sala: 'Sala Regular',
-                  status: 'Ativa',
-                });
-                hasChanges = true;
-              }
-            });
-          } else {
-            const fullName = tg.nome.trim();
-            const exists = updated.some((tp) => tp.nome.toLowerCase() === fullName.toLowerCase());
-            if (!exists) {
-              updated.push({
-                id: `turma-sync-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                nome: fullName,
-                setor: tg.setor || 'Ensino Fundamental 1',
-                anoLetivo: '2026',
-                turno: 'Matutino',
-                valorMensalidade: tg.valorPadrao || 850,
-                maxAlunos: 25,
-                sala: 'Sala Regular',
-                status: 'Ativa',
-              });
-              hasChanges = true;
-            }
-          }
-        });
+  // Sincronização manual completa respeitando exclusões do usuário
+  const handleSyncCompleto = () => {
+    const globaisPadrao = ensureDefaultTurmas(turmasGlobais, turmasExcluidas, true);
+    setTurmasGlobais(globaisPadrao);
+
+    let countAlunosNormalizados = 0;
+    if (alunos && alunos.length > 0) {
+      const { alunos: alunosNormalizados, countChanged } = normalizeAllAlunos(alunos, globaisPadrao);
+      if (countChanged > 0) {
+        setAlunos(alunosNormalizados);
+        countAlunosNormalizados = countChanged;
       }
+    }
 
-      return hasChanges ? updated : prev;
-    });
-  }, [turmasGlobais, alunos]);
+    const { updatedTurmasPedagogico, createdCount } = syncTurmasPedagogicasComGlobais(
+      globaisPadrao,
+      turmasPedagogico,
+      turmasExcluidas
+    );
+    setTurmasPedagogico(updatedTurmasPedagogico);
+
+    toast.success(
+      `Sincronização concluída! ${createdCount} turma(s) atualizada(s) e turmas excluídas foram respeitadas.`
+    );
+  };
+
+  // Criação rápida de turma adicional (ex: Turma B, Turma C)
+  const handleAddTurmaAdicional = (baseClasse: string, setor: string, novaLetra: string) => {
+    const letraUpper = novaLetra.trim().toUpperCase() || 'B';
+    const nomeNovaTurma = `${baseClasse} ${letraUpper}`.trim();
+
+    const exists = turmasPedagogico.some(
+      (t) => t.nome.toLowerCase() === nomeNovaTurma.toLowerCase()
+    );
+    if (exists) {
+      toast.info(`A turma "${nomeNovaTurma}" já existe!`);
+      return;
+    }
+
+    const { updatedTurmas, changed } = addLetraToClasse(turmasGlobais, setor, baseClasse, letraUpper);
+    if (changed) {
+      setTurmasGlobais(updatedTurmas);
+    }
+
+    const novaTurmaPed: TurmaPedagogica = {
+      id: `turma-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      nome: nomeNovaTurma,
+      setor: setor,
+      anoLetivo: '2026',
+      turno: 'Matutino',
+      valorMensalidade: 850,
+      maxAlunos: 25,
+      sala: `Sala ${baseClasse} ${letraUpper}`,
+      status: 'Ativa',
+      gradeHoraria: {
+        dias: DIAS_SEMANA_PADRAO,
+        intervalos: INTERVALOS_PADRAO,
+        slots: {},
+      },
+    };
+
+    setTurmasPedagogico((prev) => [...prev, novaTurmaPed]);
+    toast.success(`Turma adicional "${nomeNovaTurma}" criada com sucesso!`);
+  };
+
+  // Confirmação de transferência facilitada de aluno(s)
+  const handleConfirmTransfer = (params: {
+    alunoIds: string[];
+    novoSetor: string;
+    novaClasse: string;
+    novaTurma: string;
+    ajustarMensalidades: boolean;
+  }) => {
+    const turmaDestinoObj = turmasGlobais.find(
+      (t) => t.setor.trim() === params.novoSetor.trim() && t.nome.trim() === params.novaClasse.trim()
+    );
+    const novoValorPadrao = turmaDestinoObj?.valorPadrao;
+
+    setAlunos((prevAlunos) =>
+      prevAlunos.map((a) => {
+        if (params.alunoIds.includes(a.id)) {
+          return {
+            ...a,
+            setor: params.novoSetor,
+            classe: params.novaClasse,
+            turma: params.novaTurma,
+            valorBase: (params.ajustarMensalidades && novoValorPadrao !== undefined) ? String(novoValorPadrao) : a.valorBase,
+          };
+        }
+        return a;
+      })
+    );
+
+    if (params.ajustarMensalidades && novoValorPadrao !== undefined) {
+      setMensalidades((prev) =>
+        prev.map((m) => {
+          if (params.alunoIds.includes(m.alunoId) && m.status === 'Pendente') {
+            const aluno = alunos.find((a) => a.id === m.alunoId);
+            const desc = parseFloat(aluno?.descontoMensalidade || '0');
+            const novoValorFinal = Math.max(0, novoValorPadrao - desc);
+            return {
+              ...m,
+              valorFinal: novoValorFinal,
+              valorOriginalBase: novoValorPadrao,
+            };
+          }
+          return m;
+        })
+      );
+    }
+
+    const targetTurmaNome = `${params.novaClasse} ${params.novaTurma}`.trim();
+    const existsInPedag = turmasPedagogico.some(
+      (t) => t.nome.toLowerCase() === targetTurmaNome.toLowerCase()
+    );
+
+    if (!existsInPedag) {
+      const novaTurmaPed: TurmaPedagogica = {
+        id: `turma-${Date.now()}`,
+        nome: targetTurmaNome,
+        setor: params.novoSetor,
+        anoLetivo: '2026',
+        turno: 'Matutino',
+        valorMensalidade: novoValorPadrao || 850,
+        maxAlunos: 25,
+        sala: `Sala ${targetTurmaNome}`,
+        status: 'Ativa',
+        gradeHoraria: {
+          dias: DIAS_SEMANA_PADRAO,
+          intervalos: INTERVALOS_PADRAO,
+          slots: {},
+        },
+      };
+      setTurmasPedagogico((prev) => [...prev, novaTurmaPed]);
+    }
+
+    const { updatedTurmas, changed } = addLetraToClasse(
+      turmasGlobais,
+      params.novoSetor,
+      params.novaClasse,
+      params.novaTurma
+    );
+    if (changed) {
+      setTurmasGlobais(updatedTurmas);
+    }
+
+    setIsTransferModalOpen(false);
+    setTransferAlunoIds([]);
+    setSelectedModalAlunoIds([]);
+    toast.success(
+      params.alunoIds.length > 1
+        ? `${params.alunoIds.length} alunos transferidos em massa para ${targetTurmaNome} com sucesso!`
+        : `Aluno transferido para ${targetTurmaNome} com sucesso!`
+    );
+  };
 
   // Lista de Professores
   const professores = employees.filter((emp) => {
@@ -223,7 +352,7 @@ export const TurmasPedagogicoTab: React.FC = () => {
     setEditingTurma(null);
     setFormNome('');
     setFormSetor('Ensino Fundamental 1');
-    setFormAnoLetivo('2026');
+    setFormAnoLetivo(anoLetivoAtivo === 'todos' ? String(new Date().getFullYear()) : anoLetivoAtivo);
     setFormTurno('Matutino');
     setFormValorMensalidade(850);
     setFormMaxAlunos(25);
@@ -232,6 +361,25 @@ export const TurmasPedagogicoTab: React.FC = () => {
     setFormStatus('Ativa');
     setFormObservacoes('');
     setIsTurmaModalOpen(true);
+  };
+
+  // Copiar/clonar turmas de um ano de origem para um novo ano letivo
+  const handleClonarTurmasParaAno = (anoOrigem: string, anoDestino: string) => {
+    const turmasOrigem = turmasPedagogico.filter((t) => (t.anoLetivo || '2026') === anoOrigem);
+    if (turmasOrigem.length === 0) {
+      toast.error(`Não foram encontradas turmas no ano de ${anoOrigem} para copiar.`);
+      return;
+    }
+
+    const novasTurmas: TurmaPedagogica[] = turmasOrigem.map((t) => ({
+      ...t,
+      id: `turma-${anoDestino}-${t.nome.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      anoLetivo: anoDestino,
+      status: 'Planejamento',
+    }));
+
+    setTurmasPedagogico((prev) => [...prev, ...novasTurmas]);
+    toast.success(`${novasTurmas.length} turmas copiadas de ${anoOrigem} para ${anoDestino} com sucesso!`);
   };
 
   // Abrir Modal de Edição de Turma Existente
@@ -353,14 +501,63 @@ export const TurmasPedagogicoTab: React.FC = () => {
       toast.success(`Turma "${formNome}" cadastrada com sucesso!`);
     }
 
+    setTurmasExcluidas((prev) => unmarkTurmaExcluida(formNome.trim(), prev));
     setIsTurmaModalOpen(false);
   };
 
-  // Excluir Turma
+  // Excluir Turma com persistência definitiva
   const handleDeleteTurma = (id: string, nomeTurma: string) => {
-    if (window.confirm(`Deseja realmente remover a turma "${nomeTurma}"?`)) {
+    if (window.confirm(`Deseja realmente remover a turma "${nomeTurma}"? Ela não voltará a aparecer.`)) {
+      // 1. Remove de turmas pedagógicas
       setTurmasPedagogico((prev) => prev.filter((t) => t.id !== id));
-      toast.success('Turma excluída com sucesso.');
+
+      // 2. Extrai base e letra (ex: "Grupo 2 A" -> base: "Grupo 2", letra: "A")
+      const match = nomeTurma.trim().match(/^(.*?)\s+([A-Za-z])$/);
+      const baseNome = match ? match[1].trim() : nomeTurma.trim();
+      const letra = match ? match[2].toUpperCase() : 'A';
+
+      // 3. Atualiza ou remove de turmas globais
+      setTurmasGlobais((prev) => {
+        return prev
+          .map((tg) => {
+            const isMatch =
+              tg.nome.trim().toLowerCase() === baseNome.toLowerCase() ||
+              tg.nome.trim().toLowerCase() === nomeTurma.trim().toLowerCase();
+            if (!isMatch) return tg;
+            const remainingLetras = (tg.letras || ['A']).filter((l) => l.toUpperCase() !== letra);
+            return { ...tg, letras: remainingLetras };
+          })
+          .filter(
+            (tg) =>
+              tg.letras.length > 0 &&
+              tg.nome.trim().toLowerCase() !== nomeTurma.trim().toLowerCase()
+          );
+      });
+
+      // 4. Registra no armazenamento persistente de turmas excluídas
+      let nextExcluidas = registerTurmaExcluida(nomeTurma, id, turmasExcluidas);
+      const hasOtherPedag = turmasPedagogico.some(
+        (t) =>
+          t.id !== id &&
+          (t.nome.toLowerCase().startsWith(baseNome.toLowerCase()) ||
+            t.nome.toLowerCase() === baseNome.toLowerCase())
+      );
+      if (!hasOtherPedag) {
+        nextExcluidas = registerTurmaExcluida(baseNome, undefined, nextExcluidas);
+      }
+      setTurmasExcluidas(nextExcluidas);
+
+      // 5. Desvincula alunos vinculados a essa turma
+      setAlunos((prev) =>
+        prev.map((a) => {
+          if (matchesAlunoTurma(a, nomeTurma)) {
+            return { ...a, turma: '' };
+          }
+          return a;
+        })
+      );
+
+      toast.success(`Turma "${nomeTurma}" excluída com sucesso.`);
     }
   };
 
@@ -801,10 +998,28 @@ export const TurmasPedagogicoTab: React.FC = () => {
       (t.sala && t.sala.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchSetor = selectedSetorFilter === 'todos' || t.setor === selectedSetorFilter;
-    return matchSearch && matchSetor;
+    const matchAno =
+      anoLetivoAtivo === 'todos' ||
+      (t.anoLetivo || '2026') === anoLetivoAtivo;
+    return matchSearch && matchSetor && matchAno;
   });
 
   const setoresDisponiveis = Array.from(new Set(turmasPedagogico.map((t) => t.setor)));
+
+  // Alunos vinculados à turma selecionada para visualização no modal
+  const alunosDestaTurma = selectedTurmaParaAlunos
+    ? alunos.filter((a) => matchesAlunoTurma(a, selectedTurmaParaAlunos.nome))
+    : [];
+
+  const alunosFiltradosNoModal = alunosDestaTurma.filter((a) => {
+    if (!termoBuscaAlunosTurma.trim()) return true;
+    const term = termoBuscaAlunosTurma.toLowerCase();
+    const nomeAluno = (a.nome || '').toLowerCase();
+    const mat = (a.matricula || '').toLowerCase();
+    const resp = (a.nomeResponsavel || '').toLowerCase();
+    const doc = (a.cpf || '').toLowerCase();
+    return nomeAluno.includes(term) || mat.includes(term) || resp.includes(term) || doc.includes(term);
+  });
 
   return (
     <div className="space-y-6">
@@ -820,6 +1035,17 @@ export const TurmasPedagogicoTab: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <TutorialButton onClick={() => setIsTutorialOpen(true)} />
+          <Button
+            data-tour="btn-sync"
+            variant="outline"
+            onClick={handleSyncCompleto}
+            className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 flex items-center gap-1.5 text-xs shadow-sm font-medium"
+            title="Padroniza todas as classes do Berçário ao Ensino Médio com Turma A padrão e sincroniza todos os alunos"
+          >
+            <Sparkles size={15} className="text-emerald-600" />
+            Sincronizar Alunos & Turmas
+          </Button>
           <Button
             variant="outline"
             onClick={handleSepararFundamental}
@@ -830,6 +1056,7 @@ export const TurmasPedagogicoTab: React.FC = () => {
             Separar Fundamental 1 e 2
           </Button>
           <Button
+            data-tour="btn-nova-turma"
             onClick={handleOpenNewTurma}
             className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2 shadow-sm"
           >
@@ -839,7 +1066,14 @@ export const TurmasPedagogicoTab: React.FC = () => {
       </div>
 
       {/* Filtros e Busca */}
-      <div className="flex flex-col sm:flex-row items-center gap-3">
+      <div data-tour="filtros-busca" className="flex flex-col sm:flex-row items-center gap-3">
+        {/* Seletor de Ano com setas para avançar ou retroagir */}
+        <AnoLetivoSelector
+          anoAtivo={anoLetivoAtivo}
+          onAnoChange={setAnoLetivoAtivo}
+          showTodosOption={true}
+        />
+
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <Input
@@ -868,28 +1102,60 @@ export const TurmasPedagogicoTab: React.FC = () => {
       {/* Grid de Cards de Turmas */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {turmasFiltradas.length === 0 ? (
-          <div className="col-span-full text-center py-12 bg-white rounded-xl border border-dashed text-slate-500">
-            <GraduationCap size={40} className="mx-auto text-slate-300 mb-2" />
-            <p className="font-semibold">Nenhuma turma encontrada com esses filtros.</p>
-            <p className="text-xs text-slate-400 mt-1">Crie uma nova turma clicando no botão acima.</p>
+          <div className="col-span-full text-center py-12 bg-white rounded-xl border border-dashed text-slate-500 space-y-3">
+            <GraduationCap size={44} className="mx-auto text-slate-300" />
+            <div>
+              <p className="font-bold text-slate-700 text-sm">
+                Nenhuma turma encontrada
+                {anoLetivoAtivo !== 'todos' ? ` no Ano Letivo ${anoLetivoAtivo}` : ''}
+                {selectedSetorFilter !== 'todos' ? ` em ${selectedSetorFilter}` : ''}.
+              </p>
+              <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                {anoLetivoAtivo !== 'todos'
+                  ? `Você pode cadastrar novas turmas para ${anoLetivoAtivo} ou copiar as turmas existentes de 2026.`
+                  : 'Crie uma nova turma clicando no botão acima ou altere os filtros de pesquisa.'}
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+              <Button
+                size="sm"
+                onClick={handleOpenNewTurma}
+                className="bg-purple-600 hover:bg-purple-700 text-white text-xs flex items-center gap-1.5 shadow-sm"
+              >
+                <Plus size={14} /> Nova Turma {anoLetivoAtivo !== 'todos' ? `em ${anoLetivoAtivo}` : ''}
+              </Button>
+              {anoLetivoAtivo !== 'todos' && anoLetivoAtivo !== '2026' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleClonarTurmasParaAno('2026', anoLetivoAtivo)}
+                  className="border-purple-200 text-purple-700 hover:bg-purple-50 text-xs flex items-center gap-1.5 shadow-xs"
+                >
+                  <Copy size={13} className="text-purple-600" /> Copiar Turmas de 2026 para {anoLetivoAtivo}
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
-          turmasFiltradas.map((turma) => {
-            // Contagem de alunos matriculados nesta turma
-            const alunosMatriculados = alunos.filter((a) => {
-              const classe = (a.classe || '').toLowerCase().trim();
-              const letra = (a.turma || '').toLowerCase().trim();
-              const nomeT = turma.nome.toLowerCase().trim();
-              return nomeT === `${classe} ${letra}`.trim() || nomeT === classe || a.turma === turma.nome;
-            }).length;
+          turmasFiltradas.map((turma, index) => {
+            // Contagem de alunos matriculados nesta turma usando matchesAlunoTurma
+            const alunosMatriculados = alunos.filter((a) => matchesAlunoTurma(a, turma.nome)).length;
             const percentualOcupacao = Math.min(
               100,
               Math.round((alunosMatriculados / (turma.maxAlunos || 25)) * 100)
             );
 
+            // Detecção da classe base e próxima letra da turma
+            const matchClasse = turma.nome.match(/^(.*?)(?:\s+([A-Za-z]))?$/);
+            const baseClasse = matchClasse && matchClasse[2] ? matchClasse[1].trim() : turma.nome.trim();
+            const nextLetra = ['B', 'C', 'D', 'E'].find(
+              (l) => !turmasPedagogico.some((tp) => tp.nome.trim().toLowerCase() === `${baseClasse.toLowerCase()} ${l.toLowerCase()}`)
+            );
+
             return (
               <Card
                 key={turma.id}
+                data-tour={index === 0 ? 'card-turma' : undefined}
                 className="border-slate-200 hover:border-purple-300 transition-all shadow-sm flex flex-col justify-between"
               >
                 <CardHeader className="pb-3">
@@ -903,15 +1169,30 @@ export const TurmasPedagogicoTab: React.FC = () => {
                       </CardTitle>
                     </div>
 
-                    <Badge
-                      className={`text-[10px] font-semibold ${
-                        turma.status === 'Ativa'
-                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                          : 'bg-amber-100 text-amber-800 border-amber-300'
-                      }`}
-                    >
-                      {turma.status}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {nextLetra && (
+                        <Button
+                          data-tour={index === 0 ? 'btn-turma-b' : undefined}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddTurmaAdicional(baseClasse, turma.setor, nextLetra)}
+                          className="h-6 text-[11px] px-2 text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 flex items-center gap-1 font-semibold shadow-xs"
+                          title={`Criar turma adicional ${baseClasse} ${nextLetra}`}
+                        >
+                          <Plus size={11} className="text-indigo-600" />
+                          + Turma {nextLetra}
+                        </Button>
+                      )}
+                      <Badge
+                        className={`text-[10px] font-semibold ${
+                          turma.status === 'Ativa'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-amber-100 text-amber-800 border-amber-300'
+                        }`}
+                      >
+                        {turma.status}
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -961,6 +1242,40 @@ export const TurmasPedagogicoTab: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Botão de Ver Alunos da Turma e Transferência em Massa */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      data-tour={index === 0 ? 'btn-ver-alunos' : undefined}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedTurmaParaAlunos(turma);
+                        setTermoBuscaAlunosTurma('');
+                        setSelectedModalAlunoIds([]);
+                      }}
+                      className="flex-1 text-xs font-semibold text-purple-700 border-purple-200 bg-purple-50/70 hover:bg-purple-100 flex items-center justify-center gap-1.5 h-8 transition-colors shadow-xs"
+                    >
+                      <Users size={14} className="text-purple-600" />
+                      Ver Alunos ({alunosMatriculados})
+                    </Button>
+                    {alunosMatriculados > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const ids = alunos.filter((a) => matchesAlunoTurma(a, turma.nome)).map(a => a.id);
+                          setTransferAlunoIds(ids);
+                          setIsTransferModalOpen(true);
+                        }}
+                        className="text-xs font-semibold text-indigo-700 border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 flex items-center justify-center gap-1.5 h-8 px-2.5 transition-colors shadow-xs"
+                        title={`Transferir em massa todos os ${alunosMatriculados} alunos desta turma`}
+                      >
+                        <ArrowRightLeft size={13} className="text-indigo-600" />
+                        Transferir Turma
+                      </Button>
+                    )}
+                  </div>
+
                   {/* Professor Regente Vinculado */}
                   <div className="flex items-center gap-2.5 p-2 bg-purple-50/50 rounded-lg border border-purple-100">
                     <Avatar className="h-8 w-8 border border-purple-200">
@@ -994,6 +1309,7 @@ export const TurmasPedagogicoTab: React.FC = () => {
                   </Button>
 
                   <Button
+                    data-tour={index === 0 ? 'btn-horarios' : undefined}
                     size="sm"
                     className="text-xs bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-1.5 flex-1"
                     onClick={() => handleOpenGrade(turma)}
@@ -1792,6 +2108,320 @@ export const TurmasPedagogicoTab: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Visualização de Alunos da Turma */}
+      <Dialog
+        open={!!selectedTurmaParaAlunos}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedTurmaParaAlunos(null);
+            setTermoBuscaAlunosTurma('');
+            setSelectedModalAlunoIds([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-4 sm:p-6 pb-3 border-b bg-gradient-to-r from-purple-50 via-white to-purple-50">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Users className="text-purple-600" size={20} />
+                  Alunos da Turma: {selectedTurmaParaAlunos?.nome}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                  {selectedTurmaParaAlunos?.setor} • Turno {selectedTurmaParaAlunos?.turno} • Ano Letivo {selectedTurmaParaAlunos?.anoLetivo}
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-300 text-xs px-2.5 py-1 font-semibold">
+                  {alunosDestaTurma.length} {alunosDestaTurma.length === 1 ? 'aluno matriculado' : 'alunos matriculados'}
+                </Badge>
+                {selectedTurmaParaAlunos?.maxAlunos && (
+                  <Badge variant="outline" className="bg-slate-100 text-slate-700 text-xs font-normal">
+                    Capacidade: {selectedTurmaParaAlunos.maxAlunos} vagas
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Barra de busca de alunos */}
+            <div className="relative mt-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
+              <Input
+                placeholder="Buscar por nome do aluno, matrícula ou responsável..."
+                value={termoBuscaAlunosTurma}
+                onChange={(e) => setTermoBuscaAlunosTurma(e.target.value)}
+                className="pl-9 h-8 text-xs bg-white"
+              />
+            </div>
+
+            {/* Barra de Ações em Massa / Seleção */}
+            {alunosDestaTurma.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-2 pt-2 border-t border-purple-100/60">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all-turma-modal"
+                    checked={
+                      alunosFiltradosNoModal.length > 0 &&
+                      alunosFiltradosNoModal.every((a) => selectedModalAlunoIds.includes(a.id))
+                    }
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        const newIds = Array.from(new Set([...selectedModalAlunoIds, ...alunosFiltradosNoModal.map((a) => a.id)]));
+                        setSelectedModalAlunoIds(newIds);
+                      } else {
+                        const currentFilteredSet = new Set(alunosFiltradosNoModal.map((a) => a.id));
+                        setSelectedModalAlunoIds((prev) => prev.filter((id) => !currentFilteredSet.has(id)));
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor="select-all-turma-modal"
+                    className="text-xs text-slate-600 font-medium cursor-pointer select-none"
+                  >
+                    Selecionar todos ({alunosFiltradosNoModal.length})
+                  </label>
+                  {selectedModalAlunoIds.length > 0 && (
+                    <Badge variant="secondary" className="text-[11px] font-semibold text-purple-700 bg-purple-100">
+                      {selectedModalAlunoIds.length} selecionado{selectedModalAlunoIds.length > 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {selectedModalAlunoIds.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setTransferAlunoIds(selectedModalAlunoIds);
+                        setIsTransferModalOpen(true);
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 h-8 shadow-xs"
+                    >
+                      <ArrowRightLeft size={13} />
+                      Transferir Selecionados ({selectedModalAlunoIds.length})
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const allIds = alunosDestaTurma.map((a) => a.id);
+                      setTransferAlunoIds(allIds);
+                      setIsTransferModalOpen(true);
+                    }}
+                    className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs font-semibold flex items-center gap-1.5 h-8 shadow-xs"
+                    title="Transferir todos os alunos desta turma para outra turma ou série"
+                  >
+                    <Users size={13} className="text-indigo-600" />
+                    Transferir Turma Inteira ({alunosDestaTurma.length})
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogHeader>
+
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+            {alunosFiltradosNoModal.length === 0 ? (
+              <div className="text-center py-12 border border-dashed rounded-xl bg-slate-50 text-slate-500">
+                <Users size={36} className="mx-auto text-slate-300 mb-2" />
+                <p className="font-semibold text-sm">
+                  {termoBuscaAlunosTurma
+                    ? 'Nenhum aluno encontrado para os critérios de busca.'
+                    : 'Nenhum aluno matriculado nesta turma até o momento.'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                  {termoBuscaAlunosTurma
+                    ? 'Tente pesquisar por outro termo, nome ou matrícula.'
+                    : 'Você pode enturmar ou transferir alunos para esta turma a qualquer momento no módulo Alunos ou usando o botão de transferência.'}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-md border overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-10 text-center">
+                        <Checkbox
+                          checked={
+                            alunosFiltradosNoModal.length > 0 &&
+                            alunosFiltradosNoModal.every((a) => selectedModalAlunoIds.includes(a.id))
+                          }
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              const newIds = Array.from(new Set([...selectedModalAlunoIds, ...alunosFiltradosNoModal.map((a) => a.id)]));
+                              setSelectedModalAlunoIds(newIds);
+                            } else {
+                              const currentFilteredSet = new Set(alunosFiltradosNoModal.map((a) => a.id));
+                              setSelectedModalAlunoIds((prev) => prev.filter((id) => !currentFilteredSet.has(id)));
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead className="text-xs font-semibold">Aluno</TableHead>
+                      <TableHead className="text-xs font-semibold">Matrícula</TableHead>
+                      <TableHead className="text-xs font-semibold">Responsável & Contato</TableHead>
+                      <TableHead className="text-xs font-semibold">Mensalidade</TableHead>
+                      <TableHead className="text-xs font-semibold text-right">Ação</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {alunosFiltradosNoModal.map((aluno) => {
+                      const rawPhone =
+                        aluno.contatoWhatsapp ||
+                        aluno.contatoResponsavel ||
+                        aluno.celularAluno ||
+                        aluno.telefone ||
+                        '';
+                      const cleanPhone = rawPhone.replace(/\D/g, '');
+                      const waLink = cleanPhone
+                        ? `https://wa.me/${cleanPhone.startsWith('55') ? cleanPhone : '55' + cleanPhone}`
+                        : null;
+
+                      return (
+                        <TableRow key={aluno.id} className="hover:bg-slate-50/80">
+                          <TableCell className="w-10 text-center py-2.5">
+                            <Checkbox
+                              checked={selectedModalAlunoIds.includes(aluno.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedModalAlunoIds((prev) => [...prev, aluno.id]);
+                                } else {
+                                  setSelectedModalAlunoIds((prev) => prev.filter((id) => id !== aluno.id));
+                                }
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <Avatar className="h-8 w-8 border border-purple-200">
+                                <AvatarFallback className="bg-purple-100 text-purple-800 text-xs font-bold">
+                                  {aluno.nome.charAt(0)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <span className="text-xs font-bold text-slate-800 block">
+                                  {aluno.nome}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] px-1 py-0 ${
+                                    aluno.status === 'Ativo'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {aluno.status || 'Ativo'}
+                                </Badge>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono text-slate-600 py-2.5">
+                            {aluno.matricula || 'N/D'}
+                          </TableCell>
+                          <TableCell className="py-2.5">
+                            <div className="space-y-0.5">
+                              <div className="text-xs font-medium text-slate-700">
+                                {aluno.nomeResponsavel || 'Não informado'}
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {rawPhone && (
+                                  <span className="text-[10px] text-slate-500 font-mono">
+                                    {rawPhone}
+                                  </span>
+                                )}
+                                {waLink && (
+                                  <a
+                                    href={waLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded font-medium transition-colors"
+                                    title="Abrir conversa no WhatsApp"
+                                  >
+                                    <MessageSquare size={10} className="text-emerald-600" />
+                                    WhatsApp
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs font-semibold text-emerald-700 py-2.5">
+                            {aluno.valorBase ? (
+                              `R$ ${parseFloat(aluno.valorBase).toFixed(2).replace('.', ',')}`
+                            ) : (
+                              <span className="text-slate-400 font-normal">Padrão</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right py-2.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setTransferAlunoIds([aluno.id]);
+                                setIsTransferModalOpen(true);
+                              }}
+                              className="text-xs h-7 text-purple-700 border-purple-200 hover:bg-purple-50 flex items-center gap-1 ml-auto"
+                              title="Transferir aluno para outra turma"
+                            >
+                              <ArrowRightLeft size={12} className="text-purple-600" />
+                              Transferir
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="p-3 sm:p-4 border-t bg-slate-50 flex flex-row items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {selectedModalAlunoIds.length > 0
+                ? `${selectedModalAlunoIds.length} de ${alunosFiltradosNoModal.length} alunos selecionados`
+                : `${alunosFiltradosNoModal.length} aluno${alunosFiltradosNoModal.length !== 1 ? 's' : ''}`}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedTurmaParaAlunos(null);
+                  setTermoBuscaAlunosTurma('');
+                  setSelectedModalAlunoIds([]);
+                }}
+                className="text-xs"
+              >
+                Fechar
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Transferência Facilitada de Turma */}
+      <TransferirTurmaModal
+        isOpen={isTransferModalOpen}
+        onClose={() => {
+          setIsTransferModalOpen(false);
+          setTransferAlunoIds([]);
+        }}
+        selectedAlunoIds={transferAlunoIds}
+        alunos={alunos}
+        turmas={turmasGlobais}
+        onConfirmTransfer={handleConfirmTransfer}
+        onNovaTurmaCriada={(setor, classe, novaLetra) => {
+          const { updatedTurmas, changed } = addLetraToClasse(turmasGlobais, setor, classe, novaLetra);
+          if (changed) {
+            setTurmasGlobais(updatedTurmas);
+          }
+        }}
+      />
+
+      {/* Passo a Passo Interativo / Tutorial */}
+      <TutorialTour isOpen={isTutorialOpen} onClose={() => setIsTutorialOpen(false)} />
     </div>
   );
 };

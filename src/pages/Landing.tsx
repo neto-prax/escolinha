@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import directorImage from '@/assets/diretora-purple-edu.jpg';
+import { Logo } from '@/components/common/Logo';
 
 const pillars = [
   {
@@ -58,11 +59,8 @@ const Landing = () => {
     <div className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground">
       <header className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-xl">
         <div className="container flex h-16 items-center justify-between px-4 sm:h-20 sm:px-6">
-          <a href="#inicio" className="flex items-center gap-2.5" aria-label="Purple Edu - início">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-lg shadow-primary/20">
-              <span className="h-3.5 w-3.5 rotate-45 rounded-sm bg-primary-foreground" />
-            </span>
-            <span className="font-display text-xl text-foreground">Purple <span className="text-primary">Edu</span></span>
+          <a href="#inicio" className="flex items-center" aria-label="Purple Edu - início">
+            <Logo size="md" />
           </a>
 
           <nav className="hidden items-center gap-8 md:flex" aria-label="Navegação principal">
@@ -293,7 +291,7 @@ const Landing = () => {
 
       <footer className="bg-sidebar py-10 text-sidebar-foreground">
         <div className="container flex flex-col gap-6 px-4 sm:px-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-2.5"><span className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary"><span className="h-3 w-3 rotate-45 rounded-sm bg-primary-foreground" /></span><span className="font-display">Purple Edu</span></div>
+          <Logo size="sm" lightText={false} />
           <p className="text-sm text-sidebar-foreground/55">© 2026 Purple Edu. Gestão escolar conectada.</p>
           <Link to="/login" className="text-sm font-semibold text-sidebar-foreground/75 transition-colors hover:text-sidebar-primary">Área do cliente</Link>
         </div>

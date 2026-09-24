@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Plus, Users, FileDown, Upload, Download, MoreHorizontal, UserCog, FileText, UserPlus,
-  ChevronDown, ChevronRight, ChevronUp, FolderTree, AlertCircle, CheckCircle2, DollarSign, AlertTriangle, GraduationCap, Trash2
+  ChevronDown, ChevronRight, ChevronUp, FolderTree, AlertCircle, CheckCircle2, DollarSign, AlertTriangle, GraduationCap, Trash2, ArrowRightLeft
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Switch } from '@/components/ui/switch';
@@ -21,6 +21,9 @@ import { Aluno, Mensalidade } from '@/types/aluno';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { usePermissions } from '@/hooks/usePermissions';
+import { DEFAULT_TURMAS_CONFIG, normalizeAllAlunos } from '@/constants/turmas';
+import { TransferirTurmaModal } from '@/components/alunos/TransferirTurmaModal';
+import { TutorialTour, TutorialButton, MATRICULA_TUTORIAL_STEPS } from '@/components/common/TutorialTour';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,20 +43,14 @@ type PaymentDetail = {
   multa: number;
 };
 
-const defaultTurmas: TurmaConfig[] = [
-  { setor: 'Educação Infantil', nome: 'Maternal', letras: ['A', 'B'] },
-  { setor: 'Ensino Fundamental 1', nome: '1º Ano', letras: ['A', 'B'] },
-  { setor: 'Ensino Fundamental 2', nome: '6º Ano', letras: ['A'] },
-  { setor: 'Ensino Médio', nome: '1º Ano EM', letras: [] }
-];
-
 const Alunos = () => {
-  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', defaultTurmas);
+  const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', DEFAULT_TURMAS_CONFIG);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [alunos, setAlunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades, setMensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
   const [lancamentos, setLancamentos] = useLocalStorage<Lancamento[]>('escolinha_lancamentos_v2', []);
   const [activeTab, setActiveTab] = useState('gestao');
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
   const { canAccessTab } = usePermissions();
   const canAccessGestao = canAccessTab('alunos', 'gestao');
@@ -89,6 +86,105 @@ const Alunos = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileInputMensalidadesRef = useRef<HTMLInputElement>(null);
+
+  // Estados para Transferência Facilitada de Turma
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferAlunosIds, setTransferAlunosIds] = useState<string[]>([]);
+
+  // Normalização de alunos sem forçar classes excluídas
+  useEffect(() => {
+    if (alunos && alunos.length > 0) {
+      const { alunos: normalized, changed } = normalizeAllAlunos(alunos, turmas);
+      if (changed) {
+        setAlunos(normalized);
+      }
+    }
+  }, [alunos]);
+
+  const handleOpenTransferSingle = (alunoId: string) => {
+    setTransferAlunosIds([alunoId]);
+    setIsTransferModalOpen(true);
+  };
+
+  const handleOpenTransferBatch = () => {
+    if (selectedAlunosIds.length === 0) {
+      toast.error('Selecione pelo menos um aluno para transferir.');
+      return;
+    }
+    setTransferAlunosIds(selectedAlunosIds);
+    setIsTransferModalOpen(true);
+  };
+
+  const handleConfirmTransfer = ({
+    alunoIds,
+    novoSetor,
+    novaClasse,
+    novaTurma,
+    ajustarMensalidades,
+  }: {
+    alunoIds: string[];
+    novoSetor: string;
+    novaClasse: string;
+    novaTurma: string;
+    ajustarMensalidades: boolean;
+  }) => {
+    const turmaDestinoObj = turmas.find(t => t.setor === novoSetor && t.nome === novaClasse);
+    const novoValorPadrao = turmaDestinoObj?.valorPadrao;
+
+    setAlunos(prev => prev.map(aluno => {
+      if (alunoIds.includes(aluno.id)) {
+        return {
+          ...aluno,
+          setor: novoSetor,
+          classe: novaClasse,
+          turma: novaTurma,
+          valorBase: (ajustarMensalidades && novoValorPadrao !== undefined) ? String(novoValorPadrao) : aluno.valorBase,
+        };
+      }
+      return aluno;
+    }));
+
+    if (ajustarMensalidades && novoValorPadrao !== undefined) {
+      setMensalidades(prev => prev.map(m => {
+        if (alunoIds.includes(m.alunoId) && m.status === 'Pendente') {
+          const aluno = alunos.find(a => a.id === m.alunoId);
+          const desc = parseFloat(aluno?.descontoMensalidade || '0');
+          const novoValorFinal = Math.max(0, novoValorPadrao - desc);
+          return {
+            ...m,
+            valorFinal: novoValorFinal,
+            valorOriginalBase: novoValorPadrao,
+          };
+        }
+        return m;
+      }));
+    }
+
+    toast.success(`${alunoIds.length} aluno(s) transferido(s) para ${novoSetor} - ${novaClasse} (Turma ${novaTurma}) com sucesso!`);
+    setSelectedAlunosIds([]);
+  };
+
+  const handleNovaTurmaLetraCriada = (setor: string, classe: string, novaLetra: string) => {
+    setTurmas(prev => {
+      const copy = [...prev];
+      const idx = copy.findIndex(t => t.setor === setor && t.nome === classe);
+      if (idx !== -1) {
+        if (!copy[idx].letras.includes(novaLetra)) {
+          copy[idx] = {
+            ...copy[idx],
+            letras: [...copy[idx].letras, novaLetra].sort(),
+          };
+        }
+      } else {
+        copy.push({
+          setor,
+          nome: classe,
+          letras: [novaLetra],
+        });
+      }
+      return copy;
+    });
+  };
 
   const handleExport = () => {
     const dataToExport = alunos.map(a => ({
@@ -696,10 +792,11 @@ const Alunos = () => {
 
   const groupedAlunos = alunos.reduce((acc, aluno) => {
     if (aluno.status === 'Ativo') {
-      const groupKey = (aluno.setor && aluno.classe && aluno.turma)
-        ? `${aluno.setor} - ${aluno.classe} (Turma ${aluno.turma})`
-        : (aluno.setor || aluno.classe)
-          ? `${aluno.setor || ''} ${aluno.classe || ''} (Sem Turma)`.trim()
+      const turmaLetra = aluno.turma || (aluno.classe ? 'A' : '');
+      const groupKey = (aluno.setor && aluno.classe)
+        ? `${aluno.setor} - ${aluno.classe} (Turma ${turmaLetra || 'A'})`
+        : (aluno.classe)
+          ? `${aluno.classe} (Turma ${turmaLetra || 'A'})`
           : 'Alunos Sem Turma Definida';
       if (!acc[groupKey]) acc[groupKey] = [];
       acc[groupKey].push(aluno);
@@ -810,8 +907,9 @@ const Alunos = () => {
   return (
     <div className="space-y-6">
       <PageHeader title="Alunos" description="Gestão de estudantes e enturmações">
-        <div className="flex items-center gap-2">
-          <Button onClick={() => setIsAlunoFormOpen(true)}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <TutorialButton onClick={() => setIsTutorialOpen(true)} />
+          <Button data-tour="btn-novo-aluno" onClick={() => setIsAlunoFormOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Aluno
           </Button>
@@ -832,33 +930,58 @@ const Alunos = () => {
       </div>
 
       <Tabs value={effectiveActiveTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
+        <TabsList data-tour="abas-alunos" className="mb-4">
           {canAccessGestao && <TabsTrigger value="gestao">Gestão de Alunos</TabsTrigger>}
           {canAccessTurmas && <TabsTrigger value="turmas">Turmas e Contratos</TabsTrigger>}
           {canAccessMensalidades && <TabsTrigger value="mensalidades">Mensalidades</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="gestao" className="space-y-4">
-          <Card>
+          <Card data-tour="tabela-alunos">
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <CardTitle>Listagem de Alunos</CardTitle>
             <CardDescription>Cadastre e gerencie a enturmação dos estudantes.</CardDescription>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 items-center">
-            {selectedAlunosIds.length > 0 && (
-              <Button 
-                variant="default"
-                className="bg-primary hover:bg-primary/90"
-                onClick={() => {
-                  const alunoEdit = selectedAlunosIds.length === 1 ? alunos.find(a => a.id === selectedAlunosIds[0]) : null;
-                  setEnturmarValorBase(alunoEdit?.valorBase || '');
-                  setEnturmarTurmaInfo(alunoEdit?.setor ? `${alunoEdit.setor}|${alunoEdit.classe}|${alunoEdit.turma || 'Geral'}` : '');
-                  setIsEnturmarOpen(true);
-                }}
-              >
-                Enturmar ({selectedAlunosIds.length})
-              </Button>
+          <div data-tour="btn-importar-alunos" className="flex gap-2 overflow-x-auto pb-1 items-center">
+            {selectedAlunosIds.length > 0 ? (
+              <div data-tour="acoes-lote-alunos" className="flex gap-2 items-center">
+                <Button 
+                  variant="outline"
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-300 font-semibold gap-1.5 text-xs shadow-xs"
+                  onClick={handleOpenTransferBatch}
+                >
+                  <ArrowRightLeft className="h-4 w-4 text-indigo-600" />
+                  Transferência em Massa ({selectedAlunosIds.length})
+                </Button>
+                <Button 
+                  variant="default"
+                  className="bg-primary hover:bg-primary/90 text-xs"
+                  onClick={() => {
+                    const alunoEdit = selectedAlunosIds.length === 1 ? alunos.find(a => a.id === selectedAlunosIds[0]) : null;
+                    setEnturmarValorBase(alunoEdit?.valorBase || '');
+                    setEnturmarTurmaInfo(alunoEdit?.setor ? `${alunoEdit.setor}|${alunoEdit.classe}|${alunoEdit.turma || 'Geral'}` : '');
+                    setIsEnturmarOpen(true);
+                  }}
+                >
+                  Enturmar ({selectedAlunosIds.length})
+                </Button>
+              </div>
+            ) : (
+              displayedAlunos.length > 0 && (
+                <Button
+                  variant="outline"
+                  className="text-xs border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 font-semibold gap-1.5 shadow-xs"
+                  onClick={() => {
+                    setTransferAlunosIds(displayedAlunos.map(a => a.id));
+                    setIsTransferModalOpen(true);
+                  }}
+                  title="Transferir em massa todos os alunos filtrados na tabela"
+                >
+                  <ArrowRightLeft className="h-4 w-4 text-indigo-600" />
+                  Transferência em Massa ({displayedAlunos.length})
+                </Button>
+              )
             )}
             <input 
               type="file" 
@@ -892,12 +1015,14 @@ const Alunos = () => {
                   <TableRow>
                     <TableHead className="w-12">
                       <Checkbox 
-                        checked={alunos.length > 0 && selectedAlunosIds.length === alunos.length}
+                        checked={displayedAlunos.length > 0 && displayedAlunos.every(a => selectedAlunosIds.includes(a.id))}
                         onCheckedChange={(checked) => {
                           if (checked) {
-                            setSelectedAlunosIds(alunos.map(a => a.id));
+                            const newIds = Array.from(new Set([...selectedAlunosIds, ...displayedAlunos.map(a => a.id)]));
+                            setSelectedAlunosIds(newIds);
                           } else {
-                            setSelectedAlunosIds([]);
+                            const currentFilteredSet = new Set(displayedAlunos.map(a => a.id));
+                            setSelectedAlunosIds(prev => prev.filter(id => !currentFilteredSet.has(id)));
                           }
                         }}
                       />
@@ -993,6 +1118,10 @@ const Alunos = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenTransferSingle(aluno.id)}>
+                            <ArrowRightLeft className="mr-2 h-4 w-4 text-primary" />
+                            Transferir de Turma
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => {
                             setSelectedAlunosIds([aluno.id]);
                             setEnturmarValorBase(aluno.valorBase || '');
@@ -1254,6 +1383,23 @@ const Alunos = () => {
                               Atrasado: <strong className="font-bold">{formatCurrency(turma.totalAtrasado)}</strong>
                             </div>
                           )}
+                          {turma.totalAlunos > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const ids = turma.groupAlunos.map(item => item.aluno.id);
+                                setTransferAlunosIds(ids);
+                                setIsTransferModalOpen(true);
+                              }}
+                              className="h-8 px-2.5 text-xs font-semibold gap-1.5 text-indigo-700 hover:bg-indigo-50 border-indigo-200 bg-white shadow-xs ml-auto"
+                              title={`Transferir em massa todos os ${turma.totalAlunos} alunos desta turma`}
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-600" />
+                              Transferir Turma ({turma.totalAlunos})
+                            </Button>
+                          )}
                         </div>
                       </div>
 
@@ -1352,6 +1498,20 @@ const Alunos = () => {
                                                 Em Dia
                                               </Badge>
                                             )}
+
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenTransferSingle(aluno.id);
+                                              }}
+                                              className="h-6 px-2 text-xs font-semibold gap-1 text-primary hover:bg-primary/10 border-primary/30 ml-auto"
+                                              title="Transferir aluno de turma"
+                                            >
+                                              <ArrowRightLeft className="h-3 w-3" />
+                                              Transferir
+                                            </Button>
                                           </div>
 
                                           <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-1">
@@ -2296,6 +2456,26 @@ const Alunos = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <TransferirTurmaModal
+        isOpen={isTransferModalOpen}
+        onClose={() => {
+          setIsTransferModalOpen(false);
+          setTransferAlunosIds([]);
+        }}
+        selectedAlunoIds={transferAlunosIds}
+        alunos={alunos}
+        turmas={turmas}
+        onConfirmTransfer={handleConfirmTransfer}
+        onNovaTurmaCriada={handleNovaTurmaLetraCriada}
+      />
+
+      {/* Tutorial Passo a Passo da Tela de Matrículas / Alunos */}
+      <TutorialTour
+        isOpen={isTutorialOpen}
+        onClose={() => setIsTutorialOpen(false)}
+        steps={MATRICULA_TUTORIAL_STEPS}
+      />
     </div>
   );
 };

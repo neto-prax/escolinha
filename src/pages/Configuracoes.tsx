@@ -8,18 +8,22 @@ import { PedagogicoSettings } from '@/components/settings/PedagogicoSettings';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { DangerZoneSettings } from '@/components/settings/DangerZoneSettings';
 import { AdministrativoSettings } from '@/components/settings/AdministrativoSettings';
-import { Phone, Building2, CreditCard, FileText, Briefcase, Settings2 } from 'lucide-react';
+import { SedesManager } from '@/components/settings/SedesManager';
+import { Phone, Building2, CreditCard, FileText, Briefcase, Settings2, MapPin } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
   const { user } = useAuth();
   const { canAccessTab } = usePermissions();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const canAccessGeral = canAccessTab('configuracoes', 'geral');
+  const canAccessSedes = true; // Sempre disponível nas configurações da escola
   const canAccessWhatsapp = canAccessTab('configuracoes', 'whatsapp');
   const canAccessFinanceiro = canAccessTab('configuracoes', 'financeiro');
   const canAccessPedagogico = canAccessTab('configuracoes', 'pedagogico');
@@ -27,19 +31,26 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
 
   const availableTabs = [
     canAccessGeral && 'geral',
+    canAccessSedes && 'sedes',
     canAccessWhatsapp && 'whatsapp',
     canAccessFinanceiro && 'financeiro',
     canAccessPedagogico && 'pedagogico',
     canAccessAdministrativo && 'administrativo',
   ].filter(Boolean) as string[];
 
-  const [activeTab, setActiveTab] = useState(availableTabs[0] || 'geral');
+  const initialTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(
+    initialTab && availableTabs.includes(initialTab) ? initialTab : availableTabs[0] || 'geral'
+  );
 
   useEffect(() => {
-    if (!availableTabs.includes(activeTab) && availableTabs.length > 0) {
+    const tab = searchParams.get('tab');
+    if (tab && availableTabs.includes(tab)) {
+      setActiveTab(tab);
+    } else if (!availableTabs.includes(activeTab) && availableTabs.length > 0) {
       setActiveTab(availableTabs[0]);
     }
-  }, [availableTabs, activeTab]);
+  }, [availableTabs, activeTab, searchParams]);
 
   const { data: isSuperAdmin } = useQuery({
     queryKey: ['is-super-admin', user?.id],
@@ -69,12 +80,26 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
           Nenhuma seção de configuração disponível com suas permissões atuais.
         </div>
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(val) => {
+            setActiveTab(val);
+            setSearchParams({ tab: val });
+          }}
+          className="space-y-6"
+        >
           <TabsList className="bg-slate-100 p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200">
             {canAccessGeral && (
               <TabsTrigger value="geral" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
                 <Settings2 className="h-4 w-4" />
                 Geral
+              </TabsTrigger>
+            )}
+
+            {canAccessSedes && (
+              <TabsTrigger value="sedes" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-[#6b26d9] data-[state=active]:shadow-sm">
+                <MapPin className="h-4 w-4" />
+                Sedes & Unidades
               </TabsTrigger>
             )}
 
@@ -114,6 +139,11 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
             <AutomationSettings />
             <DangerZoneSettings />
           </div>
+        </TabsContent>
+
+        {/* 2. SEDES & UNIDADES */}
+        <TabsContent value="sedes" className="space-y-6">
+          <SedesManager />
         </TabsContent>
 
         {/* 2. WHATSAPP */}

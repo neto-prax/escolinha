@@ -57,8 +57,9 @@ export const ReciboVendaEstoqueModal: React.FC<ReciboVendaEstoqueModalProps> = (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-100 print:p-0 print:bg-white">
           <div className="bg-white p-8 rounded-lg shadow-sm border print:border-none print:shadow-none max-w-xl mx-auto font-sans text-slate-800 text-sm">
             {/* Header Institucional */}
-            <div className="border-b-2 border-slate-900 pb-4 mb-5 text-center">
-              <h2 className="text-xl font-bold uppercase tracking-wider text-slate-900">{escolaNome}</h2>
+            <div className="border-b-2 border-slate-900 pb-4 mb-5 text-center flex flex-col items-center">
+              <img src="/logo.png" alt="Purple Edu" className="h-8 mb-2 object-contain" />
+              <h2 className="text-lg font-bold uppercase tracking-wider text-slate-900">{escolaNome}</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Comprovante de Venda & Retirada de Estoque
               </p>

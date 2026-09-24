@@ -17,8 +17,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, CreditCard, Percent, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, CreditCard, Percent, Loader2, Landmark, Key, ShieldCheck, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { asaasService, getAsaasApiKey, setAsaasApiKey, DEFAULT_ASAAS_API_KEY } from '@/services/asaasService';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,6 +72,39 @@ export const FinancialSettings = () => {
   const [discountPercentage, setDiscountPercentage] = useState<number | null>(null);
   const [discountFixed, setDiscountFixed] = useState<number | null>(null);
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+
+  // Asaas Gateway State
+  const [asaasApiKeyInput, setAsaasApiKeyInput] = useState(getAsaasApiKey());
+  const [showAsaasKey, setShowAsaasKey] = useState(false);
+  const [isTestingAsaas, setIsTestingAsaas] = useState(false);
+  const [asaasStatus, setAsaasStatus] = useState<{ connected: boolean; name?: string; balance?: number } | null>(null);
+  const [autoEmitPix, setAutoEmitPix] = useState(true);
+  const [autoEmitBoleto, setAutoEmitBoleto] = useState(true);
+
+  const handleTestAndSaveAsaas = async () => {
+    setIsTestingAsaas(true);
+    try {
+      const res = await asaasService.testConnection(asaasApiKeyInput);
+      if (res.success) {
+        setAsaasApiKey(asaasApiKeyInput);
+        setAsaasStatus({ connected: true, name: res.accountName, balance: res.balance });
+        toast.success(`Asaas Bank conectado com sucesso para ${res.accountName}!`);
+      } else {
+        setAsaasStatus({ connected: false });
+        toast.error(`Falha ao conectar: ${res.error}`);
+      }
+    } catch (err: any) {
+      toast.error('Erro na conexão: ' + err.message);
+    } finally {
+      setIsTestingAsaas(false);
+    }
+  };
+
+  const handleResetAsaasDefault = () => {
+    setAsaasApiKeyInput(DEFAULT_ASAAS_API_KEY);
+    setAsaasApiKey(DEFAULT_ASAAS_API_KEY);
+    toast.info('Chave padrão do Asaas restaurada.');
+  };
 
   // Fetch payment plans
   const { data: paymentPlans = [], isLoading: isLoadingPlans } = useQuery({
@@ -293,6 +327,10 @@ export const FinancialSettings = () => {
             <Percent className="h-4 w-4" />
             Tipos de Desconto
           </TabsTrigger>
+          <TabsTrigger value="asaas" className="gap-2 font-semibold text-[#6b26d9]">
+            <Landmark className="h-4 w-4" />
+            Gateway Asaas Bank
+          </TabsTrigger>
         </TabsList>
 
         {/* Payment Plans Tab */}
@@ -438,6 +476,126 @@ export const FinancialSettings = () => {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Asaas Gateway Tab */}
+        <TabsContent value="asaas" className="space-y-4">
+          <Card>
+            <CardHeader className="border-b bg-gradient-to-r from-purple-50 to-indigo-50/50 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className="bg-[#6b26d9] text-white hover:bg-[#5b21b6]">Asaas Bank Oficial</Badge>
+                    <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-300">
+                      ● Ambiente de Produção
+                    </Badge>
+                  </div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Landmark className="h-5 w-5 text-[#6b26d9]" />
+                    Integração Bancária & Gateway de Pagamentos Asaas
+                  </CardTitle>
+                  <CardDescription>
+                    Configure a conta Asaas Bank para recebimento de mensalidades, taxas e emissão automática de Pix e Boletos.
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={handleTestAndSaveAsaas}
+                  disabled={isTestingAsaas}
+                  className="bg-[#6b26d9] hover:bg-[#5b21b6] text-white gap-2 font-bold shadow-sm self-start"
+                >
+                  {isTestingAsaas ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  Testar & Conectar
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="space-y-6 pt-6">
+              {/* Chave de API */}
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-700">Chave de API Asaas (Access Token)</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showAsaasKey ? 'text' : 'password'}
+                      value={asaasApiKeyInput}
+                      onChange={(e) => setAsaasApiKeyInput(e.target.value)}
+                      placeholder="$aact_prod_..."
+                      className="font-mono text-xs pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAsaasKey(!showAsaasKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showAsaasKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button variant="outline" onClick={handleResetAsaasDefault} className="text-xs">
+                    Chave Padrão
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  A chave oficial de produção do diretor está pré-configurada e pronta para emitir cobranças reais.
+                </p>
+              </div>
+
+              {/* Status de Conexão */}
+              {asaasStatus && (
+                <div
+                  className={`p-4 rounded-lg border ${
+                    asaasStatus.connected
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    {asaasStatus.connected ? (
+                      <>
+                        <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                        Conectado com sucesso ao Asaas Bank!
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-5 w-5 text-rose-600" />
+                        Falha ao validar a chave informada.
+                      </>
+                    )}
+                  </div>
+                  {asaasStatus.connected && (
+                    <div className="mt-1 text-xs text-emerald-700">
+                      Titular: <span className="font-semibold">{asaasStatus.name}</span> • Saldo atual:{' '}
+                      <span className="font-semibold">{formatCurrency(asaasStatus.balance || 0)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Opções de Emissão */}
+              <div className="border rounded-lg p-4 space-y-4 bg-slate-50/50">
+                <h4 className="text-sm font-bold text-slate-800">Automação de Cobranças</h4>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-semibold">Emissão Automática de Pix</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Gera QR Code Pix instantâneo do Asaas ao cadastrar ou emitir faturas de mensalidade.
+                    </p>
+                  </div>
+                  <Switch checked={autoEmitPix} onCheckedChange={setAutoEmitPix} />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-semibold">Emissão Automática de Boleto Bancário</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Gera boleto bancário registrado Asaas com linha digitável e PDF para impressão.
+                    </p>
+                  </div>
+                  <Switch checked={autoEmitBoleto} onCheckedChange={setAutoEmitBoleto} />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
