@@ -65,7 +65,7 @@ import {
 const ROLE_LABELS: Record<AppRole, string> = {
   director: 'Diretor(a)',
   admin: 'Administrativo',
-  secretary: 'Secretaria',
+  secretary: 'Secretária',
   teacher: 'Professor(a)',
   seller: 'Vendedor(a)',
 };

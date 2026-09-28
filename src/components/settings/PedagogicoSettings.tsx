@@ -6,10 +6,11 @@ import { MateriasTab } from '@/components/pedagogico/MateriasTab';
 import { CiclosMediasTab } from '@/components/pedagogico/CiclosMediasTab';
 import { NotasTab } from '@/components/pedagogico/NotasTab';
 import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
-import { Layers, Calculator, GraduationCap, MessageCircle, Settings2, Users, FileText } from 'lucide-react';
+import { CalendarioEscolarTab } from '@/components/pedagogico/CalendarioEscolarTab';
+import { Layers, Calculator, GraduationCap, MessageCircle, Settings2, Users, FileText, CalendarDays } from 'lucide-react';
 
 interface PedagogicoSettingsProps {
-  defaultTab?: 'turmas' | 'docs-escolar' | 'materias' | 'ciclos-medias' | 'notas' | 'relatorio';
+  defaultTab?: 'turmas' | 'docs-escolar' | 'materias' | 'ciclos-medias' | 'notas' | 'relatorio' | 'calendario';
 }
 
 export const PedagogicoSettings: React.FC<PedagogicoSettingsProps> = ({
@@ -80,6 +81,14 @@ export const PedagogicoSettings: React.FC<PedagogicoSettingsProps> = ({
             <MessageCircle className="h-3.5 w-3.5" />
             Relatório Diário WhatsApp
           </TabsTrigger>
+
+          <TabsTrigger
+            value="calendario"
+            className="gap-2 px-3.5 py-1.5 text-xs font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-purple-700 data-[state=active]:shadow-sm"
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Calendário Escolar
+          </TabsTrigger>
         </TabsList>
 
         {/* 1. Turmas & Horários */}
@@ -110,6 +119,11 @@ export const PedagogicoSettings: React.FC<PedagogicoSettingsProps> = ({
         {/* 6. Relatório Diário WhatsApp */}
         <TabsContent value="relatorio" className="pt-2">
           <DailyReportSettings />
+        </TabsContent>
+
+        {/* 7. Calendário Escolar */}
+        <TabsContent value="calendario" className="pt-2">
+          <CalendarioEscolarTab />
         </TabsContent>
       </Tabs>
     </div>

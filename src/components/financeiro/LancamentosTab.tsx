@@ -11,6 +11,13 @@ import { ProdutoEstoque, MovimentacaoEstoque, ItemVendaEstoque, filterRealProdut
 import { ReciboVendaEstoqueModal } from '@/components/estoque/ReciboVendaEstoqueModal';
 import { SearchableProdutoSelect } from '@/components/estoque/SearchableProdutoSelect';
 import { useSedes } from '@/hooks/useSedes';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
+import { PixQrCodeModal } from '@/components/financeiro/PixQrCodeModal';
+import { BoletoGeradoModal } from '@/components/financeiro/BoletoGeradoModal';
+import { generatePixCopiaECola, openBoletoInNewTab, getBankDisplayName, detectBankFromCaixa } from '@/utils/paymentGenerators';
+import { getActiveBankingGateway, BankingGatewayId, hasCoraCredentials } from '@/services/coraService';
+import { BancoEmissorId } from '@/types/finance';
 
 interface LancamentosTabProps {
   lancamentos: Lancamento[];
@@ -87,10 +94,66 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
     formaPagamento: 'PIX',
   });
 
+  // Modal Pix QR Code
+  const [pixModalData, setPixModalData] = useState<{
+    isOpen: boolean;
+    valor: number;
+    descricao: string;
+    copiaCola: string;
+    alunoNome?: string;
+    responsavelNome?: string;
+    instituicaoNome?: string;
+  }>({
+    isOpen: false,
+    valor: 0,
+    descricao: '',
+    copiaCola: '',
+  });
+
+  // Modal Boleto Bancário & Banco do Caixa
+  const [bancoEmissor, setBancoEmissor] = useState<BancoEmissorId>(() => {
+    return detectBankFromCaixa(caixas[0]?.id, caixas);
+  });
+
+  const handleCaixaChange = (novoCaixaId: string) => {
+    setCaixaId(novoCaixaId);
+    setBancoEmissor(detectBankFromCaixa(novoCaixaId, caixas));
+  };
+
+  useEffect(() => {
+    if (caixaId) {
+      setBancoEmissor(detectBankFromCaixa(caixaId, caixas));
+    }
+  }, [caixaId, caixas]);
+
+  const [boletoModalData, setBoletoModalData] = useState<{
+    isOpen: boolean;
+    valor: number;
+    descricao: string;
+    linhaDigitavel: string;
+    barcodeNumber?: string;
+    boletoUrl: string;
+    vencimento?: string;
+    alunoNome?: string;
+    bancoNome?: string;
+  }>({
+    isOpen: false,
+    valor: 0,
+    descricao: '',
+    linhaDigitavel: '',
+    barcodeNumber: '',
+    boletoUrl: '',
+  });
+
   const [isFecharCaixaOpen, setIsFecharCaixaOpen] = useState(false);
   const [caixaFechamentoId, setCaixaFechamentoId] = useState<string>(caixas[0]?.id || '');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const paginationLancamentos = usePagination({
+    items: lancamentos,
+    pageSize: 30,
+  });
 
   const handleExport = () => {
     const dataToExport = lancamentos.map(l => ({
@@ -508,7 +571,65 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
       alunoId: tipo === 'Entrada' && alunoId ? alunoId : undefined,
       itensEstoque: itensEstoqueSalvos,
       reciboNumero: reciboNumeroGerado,
+      bancoEmissor: formaPagamento === 'Boleto' ? bancoEmissor : undefined,
     });
+
+    // Se for Entrada com PIX ou Boleto, gera o QR Code / Boleto
+    if (tipo === 'Entrada') {
+      const valorNum = Number(valor);
+      const instituicaoNome = activeSede?.nome || (unidade !== 'Todas' ? unidade : 'Escola Interagir');
+
+      if (formaPagamento === 'PIX') {
+        const copiaCola = generatePixCopiaECola({
+          valor: valorNum,
+          descricao,
+          beneficiarioNome: instituicaoNome,
+          pagadorNome: alunoObj?.nomeResponsavel || alunoObj?.nome,
+          pagadorCpfCnpj: alunoObj?.cpfResponsavel || alunoObj?.cpf,
+        });
+
+        setPixModalData({
+          isOpen: true,
+          valor: valorNum,
+          descricao,
+          copiaCola,
+          alunoNome: alunoObj?.nome,
+          responsavelNome: alunoObj?.nomeResponsavel,
+          instituicaoNome,
+        });
+
+        toast.success('Entrada registrada com sucesso! QR Code PIX gerado.');
+      } else if (formaPagamento === 'Boleto') {
+        const boletoResult = openBoletoInNewTab({
+          valor: valorNum,
+          descricao,
+          vencimento: dataLancamento,
+          beneficiarioNome: instituicaoNome,
+          beneficiarioEndereco: activeSede?.endereco,
+          pagadorNome: alunoObj?.nomeResponsavel || alunoObj?.nome,
+          pagadorCpfCnpj: alunoObj?.cpfResponsavel || alunoObj?.cpf,
+          pagadorEndereco: alunoObj?.endereco,
+          gatewayId: bancoEmissor,
+        });
+
+        setBoletoModalData({
+          isOpen: true,
+          valor: valorNum,
+          descricao,
+          linhaDigitavel: boletoResult.linhaDigitavel,
+          barcodeNumber: boletoResult.barcodeNumber,
+          boletoUrl: boletoResult.url,
+          alunoNome: alunoObj?.nome,
+          bancoNome: getBankDisplayName(bancoEmissor),
+        });
+
+        if (boletoResult.opened) {
+          toast.success(`Entrada registrada! Boleto ${getBankDisplayName(bancoEmissor)} aberto em nova aba do Chrome.`);
+        } else {
+          toast.info(`Boleto ${getBankDisplayName(bancoEmissor)} gerado! Clique para visualizar.`);
+        }
+      }
+    }
 
     setDescricao('');
     setValor('');
@@ -887,11 +1008,70 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
               <label className="text-sm font-medium text-gray-700 mb-1">Qual Caixa?</label>
               <select 
                 value={caixaId} 
-                onChange={(e) => setCaixaId(e.target.value)}
+                onChange={(e) => handleCaixaChange(e.target.value)}
                 className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-white"
               >
                 {caixas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
+              {(() => {
+                const selectedCaixa = caixas.find(c => c.id === caixaId);
+                const caixaNome = (selectedCaixa?.nome || '').toLowerCase();
+                const isCoraCaixa = caixaNome.includes('cora') || caixaNome.includes('403');
+                if (isCoraCaixa && !hasCoraCredentials()) {
+                  return (
+                    <span className="text-[11px] text-amber-700 mt-1 font-medium bg-amber-50 border border-amber-200 p-1.5 rounded">
+                      ⚠️ O Banco Cora só pode ser integrado com credenciais cadastradas. O boleto será emitido por {getBankDisplayName(bancoEmissor)}.
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          )}
+
+          {formaPagamento === 'Boleto' && (
+            <div className="flex flex-col">
+              <label className="text-sm font-bold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Landmark className="h-4 w-4 text-indigo-600" />
+                  Banco do Boleto (Do Caixa Selecionado)
+                </span>
+                <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  Automático pelo Caixa
+                </span>
+              </label>
+              <select 
+                value={bancoEmissor} 
+                onChange={(e) => {
+                  const val = e.target.value as BancoEmissorId;
+                  if (val === 'cora' && !hasCoraCredentials()) {
+                    toast.error('O Banco Cora só pode ser integrado quando a escola envia as credenciais de API!');
+                    return;
+                  }
+                  setBancoEmissor(val);
+                }}
+                className="p-2 border-2 border-indigo-200 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/50 font-bold text-xs text-indigo-900 shadow-xs"
+              >
+                <option value="bb">Banco do Brasil (001-9)</option>
+                <option value="sicoob">Banco Sicoob (756-0)</option>
+                <option value="bradesco">Banco Bradesco (237-2)</option>
+                <option value="itau">Banco Itaú (341-7)</option>
+                <option value="santander">Banco Santander (033-7)</option>
+                <option value="caixa_gov">Caixa Econômica (104-0)</option>
+                <option value="asaas">Asaas Bank (461 / 001)</option>
+                <option value="inter">Banco Inter (077-9)</option>
+                <option value="nubank">Nubank (260)</option>
+                {hasCoraCredentials() ? (
+                  <option value="cora">Banco Cora (403-9) - Credenciado</option>
+                ) : (
+                  <option value="cora" disabled>
+                    Banco Cora (403-9) - Requer Credenciais
+                  </option>
+                )}
+              </select>
+              <span className="text-[11px] text-slate-500 mt-1">
+                Boleto emitido para a conta/caixa: <strong>{caixas.find(c => c.id === caixaId)?.nome || 'Caixa'}</strong>
+              </span>
             </div>
           )}
 
@@ -1122,7 +1302,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
                   <td colSpan={7} className="py-4 text-center text-gray-500">Nenhum lançamento registrado.</td>
                 </tr>
               ) : (
-                lancamentos.map((lanc) => (
+                paginationLancamentos.paginatedItems.map((lanc) => (
                   <tr key={lanc.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4">{formatDate(lanc.data)}</td>
                     <td className="py-3 px-4">
@@ -1220,6 +1400,68 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
                             <Printer size={13} /> Recibo
                           </button>
                         )}
+                        {lanc.tipo === 'Entrada' && lanc.formaPagamento === 'PIX' && (
+                          <button
+                            onClick={() => {
+                              const aluno = alunos.find((a: any) => a.id === lanc.alunoId);
+                              const instituicao = lanc.unidade !== 'Todas' ? lanc.unidade : (activeSede?.nome || 'Escola Interagir');
+                              const copiaCola = generatePixCopiaECola({
+                                valor: lanc.valor,
+                                descricao: lanc.descricao,
+                                beneficiarioNome: instituicao,
+                                pagadorNome: aluno?.nomeResponsavel || aluno?.nome,
+                                pagadorCpfCnpj: aluno?.cpfResponsavel || aluno?.cpf,
+                              });
+                              setPixModalData({
+                                isOpen: true,
+                                valor: lanc.valor,
+                                descricao: lanc.descricao,
+                                copiaCola,
+                                alunoNome: aluno?.nome,
+                                responsavelNome: aluno?.nomeResponsavel,
+                                instituicaoNome: instituicao,
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-medium border border-emerald-200 transition-colors"
+                            title="Ver QR Code Pix"
+                          >
+                            <QrCode size={13} /> Pix
+                          </button>
+                        )}
+                        {lanc.tipo === 'Entrada' && lanc.formaPagamento === 'Boleto' && (
+                          <button
+                            onClick={() => {
+                              const aluno = alunos.find((a: any) => a.id === lanc.alunoId);
+                              const instituicao = lanc.unidade !== 'Todas' ? lanc.unidade : (activeSede?.nome || 'Escola Interagir');
+                              const bEmissor = lanc.bancoEmissor || detectBankFromCaixa(lanc.caixaId, caixas);
+                              const boletoResult = openBoletoInNewTab({
+                                valor: lanc.valor,
+                                descricao: lanc.descricao,
+                                vencimento: lanc.data,
+                                beneficiarioNome: instituicao,
+                                beneficiarioEndereco: activeSede?.endereco,
+                                pagadorNome: aluno?.nomeResponsavel || aluno?.nome,
+                                pagadorCpfCnpj: aluno?.cpfResponsavel || aluno?.cpf,
+                                pagadorEndereco: aluno?.endereco,
+                                gatewayId: bEmissor,
+                              });
+                              setBoletoModalData({
+                                isOpen: true,
+                                valor: lanc.valor,
+                                descricao: lanc.descricao,
+                                linhaDigitavel: boletoResult.linhaDigitavel,
+                                barcodeNumber: boletoResult.barcodeNumber,
+                                boletoUrl: boletoResult.url,
+                                alunoNome: aluno?.nome,
+                                bancoNome: getBankDisplayName(bEmissor),
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-medium border border-blue-200 transition-colors"
+                            title="Abrir Boleto em nova aba"
+                          >
+                            <FileDown size={13} /> Boleto
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1228,6 +1470,18 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
             </tbody>
           </table>
         </div>
+
+        <DataTablePagination
+          currentPage={paginationLancamentos.currentPage}
+          totalPages={paginationLancamentos.totalPages}
+          totalItems={paginationLancamentos.totalItems}
+          startIndex={paginationLancamentos.startIndex}
+          endIndex={paginationLancamentos.endIndex}
+          itemsPerPage={paginationLancamentos.itemsPerPage}
+          onPageChange={paginationLancamentos.goToPage}
+          onItemsPerPageChange={paginationLancamentos.setItemsPerPage}
+          itemName="lançamentos"
+        />
       </div>
 
       {/* Modal Fechar Caixa */}
@@ -1331,6 +1585,31 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
         itens={reciboModalData.itens}
         valorTotal={reciboModalData.valorTotal}
         formaPagamento={reciboModalData.formaPagamento}
+      />
+
+      {/* Modal de QR Code Pix */}
+      <PixQrCodeModal
+        isOpen={pixModalData.isOpen}
+        onClose={() => setPixModalData((prev) => ({ ...prev, isOpen: false }))}
+        valor={pixModalData.valor}
+        descricao={pixModalData.descricao}
+        copiaCola={pixModalData.copiaCola}
+        alunoNome={pixModalData.alunoNome}
+        responsavelNome={pixModalData.responsavelNome}
+        instituicaoNome={pixModalData.instituicaoNome}
+      />
+
+      {/* Modal de Confirmação do Boleto Aberto */}
+      <BoletoGeradoModal
+        isOpen={boletoModalData.isOpen}
+        onClose={() => setBoletoModalData((prev) => ({ ...prev, isOpen: false }))}
+        valor={boletoModalData.valor}
+        descricao={boletoModalData.descricao}
+        linhaDigitavel={boletoModalData.linhaDigitavel}
+        barcodeNumber={boletoModalData.barcodeNumber}
+        boletoUrl={boletoModalData.boletoUrl}
+        alunoNome={boletoModalData.alunoNome}
+        bancoNome={boletoModalData.bancoNome}
       />
     </div>
   );

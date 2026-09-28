@@ -55,7 +55,7 @@ export const DocumentosImpressaoModal: React.FC<DocumentosImpressaoModalProps> =
       .filter(Boolean)
       .join(', ') || 'Endereço residencial cadastrado na ficha do aluno';
 
-    const turmaRegular = `${aluno.classe || ''} ${aluno.turma || ''}`.trim() || 'Não enturmado';
+    const turmaRegular = `${aluno.classe || ''} ${aluno.turma || ''}`.trim() || 'Não matriculado';
     const turmaContraturno = aluno.temContraturno
       ? `${aluno.classeContraturno || 'Contraturno'} ${aluno.turmaContraturno || ''}`.trim()
       : 'Não matriculado em contraturno';

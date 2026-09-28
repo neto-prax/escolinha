@@ -17,13 +17,21 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { TurmaConfig, Lancamento } from '@/types/finance';
-import { Aluno, Mensalidade } from '@/types/aluno';
+import { Aluno, Mensalidade, Responsavel } from '@/types/aluno';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { usePermissions } from '@/hooks/usePermissions';
 import { DEFAULT_TURMAS_CONFIG, normalizeAllAlunos } from '@/constants/turmas';
 import { TransferirTurmaModal } from '@/components/alunos/TransferirTurmaModal';
+import { DocumentosImpressaoModal } from '@/components/alunos/DocumentosImpressaoModal';
+import { DocumentoEscolarTemplate, DEFAULT_DOCUMENTOS_ESCOLARES } from '@/types/documentoEscolar';
+import { useAuth } from '@/contexts/AuthContext';
+import { Printer, Sun, Moon, Clock, CreditCard, Sparkles } from 'lucide-react';
+import { MatriculaWizardModal } from '@/components/alunos/MatriculaWizardModal';
+import { User, MapPin, ChevronLeft } from 'lucide-react';
 import { TutorialTour, TutorialButton, MATRICULA_TUTORIAL_STEPS } from '@/components/common/TutorialTour';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,17 +42,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { PixQrCodeModal } from '@/components/financeiro/PixQrCodeModal';
+import { BoletoGeradoModal } from '@/components/financeiro/BoletoGeradoModal';
+import { generatePixCopiaECola, openBoletoInNewTab, getBankDisplayName, detectBankFromCaixa } from '@/utils/paymentGenerators';
+import { getActiveBankingGateway, hasCoraCredentials } from '@/services/coraService';
+import { Caixa } from '@/types/finance';
+import { mockCaixas } from '@/data/mockData';
 
 type PaymentDetail = {
   mensalidadeId: string;
   dataPagamento: string;
   formaPagamento: string;
+  caixaId?: string;
   desconto: number;
   multa: number;
 };
 
 const Alunos = () => {
   const [turmas, setTurmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', DEFAULT_TURMAS_CONFIG);
+  const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [alunos, setAlunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const [mensalidades, setMensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
@@ -69,15 +85,89 @@ const Alunos = () => {
   
   const [isAlunoFormOpen, setIsAlunoFormOpen] = useState(false);
   const [editingAlunoId, setEditingAlunoId] = useState<string | null>(null);
-  const [isEnturmarOpen, setIsEnturmarOpen] = useState(false);
+  const [matriculaFormStep, setMatriculaFormStep] = useState<1 | 2 | 3 | 4>(1);
+  const [formResponsaveis, setFormResponsaveis] = useState<Responsavel[]>([
+    {
+      id: 'resp-1',
+      nome: '',
+      contato: '',
+      parentesco: 'Mãe',
+      cpf: '',
+      rg: '',
+      email: '',
+      responsavelFinanceiro: true,
+      responsavelDidatico: true,
+    },
+  ]);
+  const [matriculaTurmaInfo, setMatriculaTurmaInfo] = useState('');
+  const [matriculaValorBase, setMatriculaValorBase] = useState('');
+  const [matriculaDesconto, setMatriculaDesconto] = useState('');
+  const [matriculaVencimento, setMatriculaVencimento] = useState('5');
+  const [isMatriculaWizardOpen, setIsMatriculaWizardOpen] = useState(false);
+  const matriculaFormRef = useRef<HTMLFormElement>(null);
+  const [isMatricularOpen, setIsMatricularOpen] = useState(false);
   const [selectedAlunosIds, setSelectedAlunosIds] = useState<string[]>([]);
   const [selectedMensalidadesIds, setSelectedMensalidadesIds] = useState<string[]>([]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [mensalidadesToDelete, setMensalidadesToDelete] = useState<string[]>([]);
   const [paymentDetails, setPaymentDetails] = useState<Record<string, PaymentDetail>>({});
   
-  const [enturmarValorBase, setEnturmarValorBase] = useState('');
-  const [enturmarTurmaInfo, setEnturmarTurmaInfo] = useState('');
+  // Modais de Pix e Boleto para confirmação de pagamentos
+  const [pixModalData, setPixModalData] = useState<{
+    isOpen: boolean;
+    valor: number;
+    descricao: string;
+    copiaCola: string;
+    alunoNome?: string;
+    responsavelNome?: string;
+    instituicaoNome?: string;
+  }>({
+    isOpen: false,
+    valor: 0,
+    descricao: '',
+    copiaCola: '',
+  });
+
+  const [boletoModalData, setBoletoModalData] = useState<{
+    isOpen: boolean;
+    valor: number;
+    descricao: string;
+    linhaDigitavel: string;
+    barcodeNumber?: string;
+    boletoUrl: string;
+    vencimento?: string;
+    alunoNome?: string;
+    bancoNome?: string;
+  }>({
+    isOpen: false,
+    valor: 0,
+    descricao: '',
+    linhaDigitavel: '',
+    barcodeNumber: '',
+    boletoUrl: '',
+  });
+
+  const { school } = useAuth();
+  // Estados para Modal Multi-Step de Matrícula (3 Steps: Turma, Financeiro, Contrato)
+  const [matricularStep, setMatricularStep] = useState<1 | 2 | 3>(1);
+  const [matricularTurmaInfo, setMatricularTurmaInfo] = useState('');
+  const [matricularTurno, setMatricularTurno] = useState('Matutino');
+  const [matricularTemContraturno, setMatricularTemContraturno] = useState(false);
+  const [matricularClasseContraturno, setMatricularClasseContraturno] = useState('Contraturno Regular');
+  const [matricularTurnoContraturno, setMatricularTurnoContraturno] = useState('Vespertino');
+  const [matricularValorContraturno, setMatricularValorContraturno] = useState('350.00');
+  const [matricularMesInicio, setMatricularMesInicio] = useState(2); // Fevereiro
+  const [matricularQtdParcelas, setMatricularQtdParcelas] = useState(11);
+  const [matricularDiaVencimento, setMatricularDiaVencimento] = useState('10');
+  const [matricularValorBase, setMatricularValorBase] = useState('');
+  const [matricularDesconto, setMatricularDesconto] = useState('0');
+  const [matricularAnoLetivo, setMatricularAnoLetivo] = useState('2026');
+  const [isDocImpressaoOpen, setIsDocImpressaoOpen] = useState(false);
+
+  const [documentosTemplates] = useLocalStorage<DocumentoEscolarTemplate[]>(
+    'escolinha_documentos_escolares',
+    DEFAULT_DOCUMENTOS_ESCOLARES
+  );
 
   const [expandedTurmas, setExpandedTurmas] = useState<Record<string, boolean>>({});
   const [expandedAlunos, setExpandedAlunos] = useState<Record<string, boolean>>({});
@@ -435,7 +525,7 @@ const Alunos = () => {
       } else if (sortConfig.key === 'responsavel') {
         valA = String(a.nomeResponsavel || '').toLowerCase();
         valB = String(b.nomeResponsavel || '').toLowerCase();
-      } else if (sortConfig.key === 'enturmacao') {
+      } else if (sortConfig.key === 'matriculaTurma') {
         valA = `${a.setor} ${a.classe} ${a.turma}`.toLowerCase();
         valB = `${b.setor} ${b.classe} ${b.turma}`.toLowerCase();
       } else if (sortConfig.key === 'status') {
@@ -448,6 +538,16 @@ const Alunos = () => {
       return 0;
     });
   }
+
+  const paginationAlunos = usePagination({
+    items: displayedAlunos,
+    pageSize: 30,
+  });
+
+  const paginationMensalidades = usePagination({
+    items: displayedAlunos,
+    pageSize: 30,
+  });
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -509,6 +609,11 @@ const Alunos = () => {
 
         const valorCobrado = Math.max(0, m.valorFinal - (detail.desconto || 0) + (detail.multa || 0));
 
+        const caixaDestino = detail.caixaId || caixas[0]?.id;
+        const bancoEmissorBoleto = detail.formaPagamento === 'Boleto'
+          ? detectBankFromCaixa(caixaDestino, caixas)
+          : undefined;
+
         const novoLancamento: Lancamento = {
           id: crypto.randomUUID(),
           data: new Date(detail.dataPagamento),
@@ -518,6 +623,8 @@ const Alunos = () => {
           tipoCusto: 'Fixo',
           valor: valorCobrado,
           formaPagamento: detail.formaPagamento as any,
+          caixaId: detail.formaPagamento !== 'Cartão' ? caixaDestino : undefined,
+          bancoEmissor: bancoEmissorBoleto,
           tipo: 'Entrada',
           status: 'Pago',
           turmas: turmas.filter(t => t.setor === aluno.setor && t.nome === aluno.classe)
@@ -540,6 +647,67 @@ const Alunos = () => {
       setLancamentos(novosLancamentos);
       setMensalidades(novasMensalidades);
       toast.success(`${payCount} mensalidade(s) paga(s) e registrada(s) no Financeiro!`);
+
+      // Geração de Boleto ou Pix se selecionado
+      const boletos = novosLancamentos.filter(l => l.formaPagamento === 'Boleto');
+      const pixes = novosLancamentos.filter(l => l.formaPagamento === 'PIX');
+
+      if (boletos.length > 0) {
+        const prim = boletos[0];
+        const aluno = alunos.find(a => prim.descricao.includes(a.nome));
+        const total = boletos.reduce((acc, b) => acc + b.valor, 0);
+        const desc = boletos.length === 1 ? prim.descricao : `Mensalidades (${boletos.length}x) - ${aluno?.nome || ''}`;
+        const activeBank = prim.bancoEmissor || detectBankFromCaixa(prim.caixaId, caixas);
+        const res = openBoletoInNewTab({
+          valor: total,
+          descricao: desc,
+          vencimento: prim.data,
+          beneficiarioNome: 'Escola Interagir',
+          pagadorNome: aluno?.nomeResponsavel || aluno?.nome,
+          pagadorCpfCnpj: aluno?.cpfResponsavel || aluno?.cpf,
+          pagadorEndereco: aluno?.endereco,
+          gatewayId: activeBank,
+        });
+
+        setBoletoModalData({
+          isOpen: true,
+          valor: total,
+          descricao: desc,
+          linhaDigitavel: res.linhaDigitavel,
+          barcodeNumber: res.barcodeNumber,
+          boletoUrl: res.url,
+          alunoNome: aluno?.nome,
+          bancoNome: getBankDisplayName(activeBank),
+        });
+
+        if (res.opened) {
+          toast.success(`Boleto ${getBankDisplayName(activeBank)} aberto em nova aba do Chrome!`);
+        }
+      }
+
+      if (pixes.length > 0) {
+        const prim = pixes[0];
+        const aluno = alunos.find(a => prim.descricao.includes(a.nome));
+        const total = pixes.reduce((acc, p) => acc + p.valor, 0);
+        const desc = pixes.length === 1 ? prim.descricao : `Mensalidades (${pixes.length}x) - ${aluno?.nome || ''}`;
+        const copiaCola = generatePixCopiaECola({
+          valor: total,
+          descricao: desc,
+          beneficiarioNome: 'Escola Interagir',
+          pagadorNome: aluno?.nomeResponsavel || aluno?.nome,
+          pagadorCpfCnpj: aluno?.cpfResponsavel || aluno?.cpf,
+        });
+
+        setPixModalData({
+          isOpen: true,
+          valor: total,
+          descricao: desc,
+          copiaCola,
+          alunoNome: aluno?.nome,
+          responsavelNome: aluno?.nomeResponsavel,
+          instituicaoNome: 'Escola Interagir',
+        });
+      }
     }
     
     setIsPaymentModalOpen(false);
@@ -549,11 +717,13 @@ const Alunos = () => {
   const openPaymentModal = () => {
     const details: Record<string, PaymentDetail> = {};
     const today = new Date().toISOString().split('T')[0];
+    const defaultCaixa = caixas[0]?.id || '';
     selectedMensalidadesIds.forEach(id => {
       details[id] = {
         mensalidadeId: id,
         dataPagamento: today,
         formaPagamento: 'PIX',
+        caixaId: defaultCaixa,
         desconto: 0,
         multa: 0
       };
@@ -868,14 +1038,14 @@ const Alunos = () => {
     };
   });
 
-  const globalTotalAlunosEnturmados = turmasTreeData.reduce((sum, t) => sum + t.totalAlunos, 0);
+  const globalTotalAlunosMatriculados = turmasTreeData.reduce((sum, t) => sum + t.totalAlunos, 0);
   const globalTotalBase = turmasTreeData.reduce((sum, t) => sum + t.totalBase, 0);
   const globalTotalDesconto = turmasTreeData.reduce((sum, t) => sum + t.totalDesconto, 0);
   const globalTotalLiquidoMensal = turmasTreeData.reduce((sum, t) => sum + t.totalLiquido, 0);
   const globalTotalAtrasado = turmasTreeData.reduce((sum, t) => sum + t.totalAtrasado, 0);
   const globalTotalInadimplentes = turmasTreeData.reduce((sum, t) => sum + t.inadimplentesCount, 0);
-  const globalTaxaAdimplencia = globalTotalAlunosEnturmados > 0 
-    ? (((globalTotalAlunosEnturmados - globalTotalInadimplentes) / globalTotalAlunosEnturmados) * 100).toFixed(1) 
+  const globalTaxaAdimplencia = globalTotalAlunosMatriculados > 0 
+    ? (((globalTotalAlunosMatriculados - globalTotalInadimplentes) / globalTotalAlunosMatriculados) * 100).toFixed(1) 
     : '100';
 
   const isTurmaOpen = (groupName: string) => {
@@ -906,12 +1076,37 @@ const Alunos = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Alunos" description="Gestão de estudantes e enturmações">
+      <PageHeader title="Alunos" description="Gestão de estudantes e matrículas">
         <div className="flex items-center gap-2 flex-wrap">
           <TutorialButton onClick={() => setIsTutorialOpen(true)} />
-          <Button data-tour="btn-novo-aluno" onClick={() => setIsAlunoFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Aluno
+          <Button
+            data-tour="btn-novo-aluno"
+            onClick={() => {
+              setEditingAlunoId(null);
+              setMatriculaFormStep(1);
+              setMatriculaTurmaInfo('');
+              setMatriculaValorBase('');
+              setMatriculaDesconto('');
+              setMatriculaVencimento('5');
+              setFormResponsaveis([
+                {
+                  id: crypto.randomUUID(),
+                  nome: '',
+                  contato: '',
+                  parentesco: 'Mãe',
+                  cpf: '',
+                  rg: '',
+                  email: '',
+                  responsavelFinanceiro: true,
+                  responsavelDidatico: true,
+                },
+              ]);
+              setIsAlunoFormOpen(true);
+            }}
+            className="bg-primary hover:bg-primary/90 text-white font-semibold gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Nova Matrícula
           </Button>
         </div>
       </PageHeader>
@@ -941,7 +1136,7 @@ const Alunos = () => {
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <CardTitle>Listagem de Alunos</CardTitle>
-            <CardDescription>Cadastre e gerencie a enturmação dos estudantes.</CardDescription>
+            <CardDescription>Cadastre e gerencie as matrículas dos estudantes.</CardDescription>
           </div>
           <div data-tour="btn-importar-alunos" className="flex gap-2 overflow-x-auto pb-1 items-center">
             {selectedAlunosIds.length > 0 ? (
@@ -956,15 +1151,26 @@ const Alunos = () => {
                 </Button>
                 <Button 
                   variant="default"
-                  className="bg-primary hover:bg-primary/90 text-xs"
+                  className="bg-primary hover:bg-primary/90 text-xs font-semibold gap-1.5"
                   onClick={() => {
                     const alunoEdit = selectedAlunosIds.length === 1 ? alunos.find(a => a.id === selectedAlunosIds[0]) : null;
-                    setEnturmarValorBase(alunoEdit?.valorBase || '');
-                    setEnturmarTurmaInfo(alunoEdit?.setor ? `${alunoEdit.setor}|${alunoEdit.classe}|${alunoEdit.turma || 'Geral'}` : '');
-                    setIsEnturmarOpen(true);
+                    setMatricularStep(1);
+                    setMatricularTurmaInfo(alunoEdit?.setor && alunoEdit?.classe ? `${alunoEdit.setor}|${alunoEdit.classe}|${alunoEdit.turma || 'A'}` : '');
+                    setMatricularTurno(alunoEdit?.turno || 'Matutino');
+                    setMatricularTemContraturno(Boolean(alunoEdit?.temContraturno));
+                    setMatricularClasseContraturno(alunoEdit?.classeContraturno || 'Contraturno Regular');
+                    setMatricularTurnoContraturno(alunoEdit?.turnoContraturno || 'Vespertino');
+                    setMatricularValorContraturno(alunoEdit?.valorContraturno || '350.00');
+                    setMatricularMesInicio(alunoEdit?.mesInicio || 2);
+                    setMatricularQtdParcelas(alunoEdit?.parcelasContratadas || 11);
+                    setMatricularDiaVencimento(alunoEdit?.diaVencimento || '10');
+                    setMatricularValorBase(alunoEdit?.valorBase || '');
+                    setMatricularDesconto(alunoEdit?.descontoMensalidade || '0');
+                    setIsMatricularOpen(true);
                   }}
                 >
-                  Enturmar ({selectedAlunosIds.length})
+                  <GraduationCap className="h-4 w-4" />
+                  Matricular ({selectedAlunosIds.length})
                 </Button>
               </div>
             ) : (
@@ -1043,8 +1249,8 @@ const Alunos = () => {
                       </div>
                     </TableHead>
                     <TableHead>
-                      <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => handleSort('enturmacao')} title="Clique para ordenar">
-                        Enturmação (Setor / Classe / Turma) {sortConfig?.key === 'enturmacao' ? (sortConfig.direction === 'asc' ? "↑" : "↓") : "↕"}
+                      <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => handleSort('matriculaTurma')} title="Clique para ordenar">
+                        Matrícula / Turma (Setor / Classe / Turma) {sortConfig?.key === 'matriculaTurma' ? (sortConfig.direction === 'asc' ? "↑" : "↓") : "↕"}
                       </div>
                     </TableHead>
                     <TableHead>
@@ -1063,7 +1269,7 @@ const Alunos = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    displayedAlunos.map(aluno => (
+                    paginationAlunos.paginatedItems.map(aluno => (
                       <TableRow key={aluno.id}>
                         <TableCell>
                           <Checkbox 
@@ -1079,7 +1285,21 @@ const Alunos = () => {
                     </TableCell>
                     <TableCell className="font-medium text-muted-foreground">{aluno.matricula}</TableCell>
                     <TableCell className="font-bold">{aluno.nome}</TableCell>
-                    <TableCell>{aluno.nomeResponsavel}</TableCell>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-slate-800 text-xs flex items-center gap-1.5 flex-wrap">
+                          <span>{aluno.nomeResponsavel || '-'}</span>
+                          {aluno.responsaveis && aluno.responsaveis.length > 1 && (
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-indigo-50/70 text-indigo-700 border-indigo-200">
+                              +{aluno.responsaveis.length - 1} outro{aluno.responsaveis.length - 1 > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-500 block">
+                          {aluno.parentescoResponsavel ? `${aluno.parentescoResponsavel} • ` : ''}{aluno.contatoResponsavel || 'Sem contato'}
+                        </span>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         {aluno.setor && aluno.classe && aluno.turma ? (
@@ -1090,7 +1310,7 @@ const Alunos = () => {
                             </span>
                           </>
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">Não enturmado</span>
+                          <span className="text-xs text-muted-foreground italic">Não matriculado</span>
                         )}
                         {aluno.valorBase && parseFloat(aluno.valorBase) > 0 && (
                           <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded w-fit">
@@ -1124,28 +1344,70 @@ const Alunos = () => {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => {
                             setSelectedAlunosIds([aluno.id]);
-                            setEnturmarValorBase(aluno.valorBase || '');
-                            setEnturmarTurmaInfo(aluno.setor ? `${aluno.setor}|${aluno.classe}|${aluno.turma || 'Geral'}` : '');
-                            setIsEnturmarOpen(true);
+                            setMatricularStep(1);
+                            setMatricularTurmaInfo(aluno.setor && aluno.classe ? `${aluno.setor}|${aluno.classe}|${aluno.turma || 'A'}` : '');
+                            setMatricularTurno(aluno.turno || 'Matutino');
+                            setMatricularTemContraturno(Boolean(aluno.temContraturno));
+                            setMatricularClasseContraturno(aluno.classeContraturno || 'Contraturno Regular');
+                            setMatricularTurnoContraturno(aluno.turnoContraturno || 'Vespertino');
+                            setMatricularValorContraturno(aluno.valorContraturno || '350.00');
+                            setMatricularMesInicio(aluno.mesInicio || 2);
+                            setMatricularQtdParcelas(aluno.parcelasContratadas || 11);
+                            setMatricularDiaVencimento(aluno.diaVencimento || '10');
+                            setMatricularValorBase(aluno.valorBase || '');
+                            setMatricularDesconto(aluno.descontoMensalidade || '0');
+                            setIsMatricularOpen(true);
                           }}>
-                            <Users className="mr-2 h-4 w-4" />
-                            Enturmar
+                            <GraduationCap className="mr-2 h-4 w-4 text-primary" />
+                            Matricular
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => {
                             setEditingAlunoId(aluno.id);
+                            setMatriculaFormStep(1);
+                            setMatriculaTurmaInfo(aluno.setor && aluno.classe ? `${aluno.setor}|${aluno.classe}|${aluno.turma || 'A'}` : '');
+                            setMatriculaValorBase(aluno.valorBase || '');
+                            setMatriculaDesconto(aluno.descontoMensalidade || '');
+                            setMatriculaVencimento(aluno.diaVencimento || '5');
+                            if (aluno.responsaveis && aluno.responsaveis.length > 0) {
+                              setFormResponsaveis(aluno.responsaveis);
+                            } else {
+                              setFormResponsaveis([
+                                {
+                                  id: crypto.randomUUID(),
+                                  nome: aluno.nomeResponsavel || '',
+                                  contato: aluno.contatoResponsavel || '',
+                                  parentesco: aluno.parentescoResponsavel || 'Mãe',
+                                  cpf: aluno.cpfResponsavel || '',
+                                  rg: aluno.rgResponsavel || '',
+                                  email: aluno.emailResponsavel || '',
+                                  responsavelFinanceiro: aluno.responsavelFinanceiro ?? true,
+                                  responsavelDidatico: aluno.responsavelDidatico ?? true,
+                                },
+                              ]);
+                            }
                             setIsAlunoFormOpen(true);
                           }}>
                             <UserCog className="mr-2 h-4 w-4" />
-                            Editar Aluno
+                            Editar Matrícula / Aluno
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => {
                             setSelectedAlunosIds([aluno.id]);
-                            setEnturmarValorBase(aluno.valorBase || '');
-                            setEnturmarTurmaInfo(aluno.setor ? `${aluno.setor}|${aluno.classe}|${aluno.turma || 'Geral'}` : '');
-                            setIsEnturmarOpen(true);
+                            setMatricularStep(2); // Abre direto na aba financeira/contrato
+                            setMatricularTurmaInfo(aluno.setor && aluno.classe ? `${aluno.setor}|${aluno.classe}|${aluno.turma || 'A'}` : '');
+                            setMatricularTurno(aluno.turno || 'Matutino');
+                            setMatricularTemContraturno(Boolean(aluno.temContraturno));
+                            setMatricularClasseContraturno(aluno.classeContraturno || 'Contraturno Regular');
+                            setMatricularTurnoContraturno(aluno.turnoContraturno || 'Vespertino');
+                            setMatricularValorContraturno(aluno.valorContraturno || '350.00');
+                            setMatricularMesInicio(aluno.mesInicio || 2);
+                            setMatricularQtdParcelas(aluno.parcelasContratadas || 11);
+                            setMatricularDiaVencimento(aluno.diaVencimento || '10');
+                            setMatricularValorBase(aluno.valorBase || '');
+                            setMatricularDesconto(aluno.descontoMensalidade || '0');
+                            setIsMatricularOpen(true);
                           }}>
-                            <FileText className="mr-2 h-4 w-4" />
+                            <FileText className="mr-2 h-4 w-4 text-indigo-600" />
                             Editar Contrato
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -1156,6 +1418,17 @@ const Alunos = () => {
               )}
             </TableBody>
           </Table>
+          <DataTablePagination
+            currentPage={paginationAlunos.currentPage}
+            totalPages={paginationAlunos.totalPages}
+            totalItems={paginationAlunos.totalItems}
+            startIndex={paginationAlunos.startIndex}
+            endIndex={paginationAlunos.endIndex}
+            itemsPerPage={paginationAlunos.itemsPerPage}
+            onPageChange={paginationAlunos.goToPage}
+            onItemsPerPageChange={paginationAlunos.setItemsPerPage}
+            itemName="alunos"
+          />
         </CardContent>
       </Card>
       </TabsContent>
@@ -1203,7 +1476,7 @@ const Alunos = () => {
             <CardContent>
               <div className="text-2xl font-bold">{turmasTreeData.length} turmas</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {globalTotalAlunosEnturmados} alunos enturmados ativos
+                {globalTotalAlunosMatriculados} alunos matriculados ativos
               </p>
             </CardContent>
           </Card>
@@ -1218,7 +1491,7 @@ const Alunos = () => {
             <CardContent>
               <div className="text-2xl font-bold text-emerald-600">{globalTaxaAdimplencia}%</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {globalTotalAlunosEnturmados - globalTotalInadimplentes} de {globalTotalAlunosEnturmados} em dia
+                {globalTotalAlunosMatriculados - globalTotalInadimplentes} de {globalTotalAlunosMatriculados} em dia
               </p>
             </CardContent>
           </Card>
@@ -1306,7 +1579,7 @@ const Alunos = () => {
                     </Button>
                   </div>
                 ) : (
-                  <p>Nenhum aluno enturmado no sistema ainda.</p>
+                  <p>Nenhum aluno matriculado no sistema ainda.</p>
                 )}
               </div>
             ) : (
@@ -1772,15 +2045,16 @@ const Alunos = () => {
                 {searchAlunoMensalidade ? 'Nenhum aluno encontrado.' : 'Nenhum aluno ativo no sistema.'}
               </div>
             ) : (
-              <Table>
-                <TableHeader>
+              <>
+                <Table>
+                  <TableHeader>
                   <TableRow>
                     <TableHead className="w-1/3">Aluno</TableHead>
                     <TableHead>Mensalidades</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayedAlunos.map(aluno => {
+                  {paginationMensalidades.paginatedItems.map(aluno => {
                     const alunoMensalidades = mensalidades
                       .filter(m => {
                         if (m.alunoId !== aluno.id) return false;
@@ -1799,7 +2073,7 @@ const Alunos = () => {
                         <TableCell>
                           <div className="font-bold">{aluno.nome}</div>
                           <div className="text-xs text-muted-foreground">
-                            {aluno.setor ? `${aluno.setor} - ${aluno.classe} ${aluno.turma}` : 'Não enturmado'}
+                            {aluno.setor ? `${aluno.setor} - ${aluno.classe} ${aluno.turma}` : 'Não matriculado'}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -1852,6 +2126,18 @@ const Alunos = () => {
                   })}
                 </TableBody>
               </Table>
+              <DataTablePagination
+                currentPage={paginationMensalidades.currentPage}
+                totalPages={paginationMensalidades.totalPages}
+                totalItems={paginationMensalidades.totalItems}
+                startIndex={paginationMensalidades.startIndex}
+                endIndex={paginationMensalidades.endIndex}
+                itemsPerPage={paginationMensalidades.itemsPerPage}
+                onPageChange={paginationMensalidades.goToPage}
+                onItemsPerPageChange={paginationMensalidades.setItemsPerPage}
+                itemName="alunos"
+              />
+            </>
             )}
           </CardContent>
         </Card>
@@ -1887,131 +2173,270 @@ const Alunos = () => {
 
       <Dialog open={isAlunoFormOpen} onOpenChange={(open) => {
         setIsAlunoFormOpen(open);
-        if (!open) setEditingAlunoId(null);
+        if (!open) {
+          setEditingAlunoId(null);
+          setMatriculaFormStep(1);
+        }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingAlunoId ? 'Editar Aluno' : 'Novo Aluno'}</DialogTitle>
-            <DialogDescription>{editingAlunoId ? 'Atualize os dados do aluno no sistema.' : 'Cadastre um novo aluno no sistema.'}</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            const formData = new FormData(e.currentTarget);
-            
-            // Extract all fields
-            const extractedData = {
-              nome: formData.get('nome') as string,
-              dataNascimento: formData.get('dataNascimento') as string,
-              estadoCivil: formData.get('estadoCivil') as string,
-              cidadeNatal: formData.get('cidadeNatal') as string,
-              nacionalidade: formData.get('nacionalidade') as string,
-              estrangeiro: formData.get('estrangeiro') === 'on',
-              bloquearRematricula: formData.get('bloquearRematricula') === 'on',
-              profissao: formData.get('profissao') as string,
-              empresaTrabalho: formData.get('empresaTrabalho') as string,
-              classificacao: formData.get('classificacao') as string,
-              rg: formData.get('rg') as string,
-              rgOrgao: formData.get('rgOrgao') as string,
-              rgDataExpedicao: formData.get('rgDataExpedicao') as string,
-              tituloEleitor: formData.get('tituloEleitor') as string,
-              tituloZona: formData.get('tituloZona') as string,
-              tituloSecao: formData.get('tituloSecao') as string,
-              tituloDataEmissao: formData.get('tituloDataEmissao') as string,
-              cpf: formData.get('cpf') as string,
-              passaporte: formData.get('passaporte') as string,
-              docMilitar: formData.get('docMilitar') as string,
-              docMilitarNum: formData.get('docMilitarNum') as string,
-              certidaoNascimento: formData.get('certidaoNascimento') as string,
-              
-              cep: formData.get('cep') as string,
-              rua: formData.get('rua') as string,
-              numero: formData.get('numero') as string,
-              complemento: formData.get('complemento') as string,
-              cidade: formData.get('cidade') as string,
-              uf: formData.get('uf') as string,
-              bairro: formData.get('bairro') as string,
-              
-              telefone: formData.get('telefone') as string,
-              telefoneComercial: formData.get('telefoneComercial') as string,
-              celularAluno: formData.get('celularAluno') as string,
-              operadora: formData.get('operadora') as string,
-              contatoWhatsapp: formData.get('contatoWhatsapp') as string,
-              email: formData.get('email') as string,
-              naoReceberEmail: formData.get('naoReceberEmail') === 'on',
-              naoReceberSms: formData.get('naoReceberSms') === 'on',
-              correspondencia: formData.get('correspondencia') as string,
-              
-              nomeResponsavel: formData.get('nomeResponsavel') as string,
-              contatoResponsavel: formData.get('contatoResponsavel') as string,
-              cpfResponsavel: formData.get('cpfResponsavel') as string,
-              rgResponsavel: formData.get('rgResponsavel') as string,
-              emailResponsavel: formData.get('emailResponsavel') as string,
-              parentescoResponsavel: formData.get('parentescoResponsavel') as string,
-              responsavelFinanceiro: formData.get('responsavelFinanceiro') === 'on',
-              responsavelOpcional: formData.get('responsavelOpcional') as string,
-              responsavelDidatico: formData.get('responsavelDidatico') === 'on',
-              condutorIda: formData.get('condutorIda') as string,
-              condutorVolta: formData.get('condutorVolta') as string,
-            };
+        <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col p-0">
+          <DialogHeader className="p-5 border-b bg-slate-50/80">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <GraduationCap className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    {editingAlunoId ? 'Editar Matrícula / Aluno' : 'Nova Matrícula Escolar'}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500">
+                    {editingAlunoId
+                      ? 'Atualize os dados do estudante, responsáveis e informações contratuais.'
+                      : 'Formulário guiado em 4 etapas para efetivar o cadastro e matrícula do estudante.'}
+                  </DialogDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-white border-slate-200">
+                Passo {matriculaFormStep} de 4
+              </Badge>
+            </div>
 
-            if (editingAlunoId) {
-              setAlunos(alunos.map(a => {
-                if (a.id === editingAlunoId) {
-                  return { ...a, ...extractedData };
-                }
-                return a;
-              }));
-              toast.success('Aluno atualizado com sucesso!');
-            } else {
-              const currentYear = new Date().getFullYear().toString();
-              let proximoNumero = 1;
-              const matriculasAnoAtual = alunos
-                .map(a => a.matricula)
-                .filter(m => m.startsWith(currentYear))
-                .map(m => parseInt(m.substring(4)))
-                .filter(n => !isNaN(n));
-                
-              if (matriculasAnoAtual.length > 0) {
-                proximoNumero = Math.max(...matriculasAnoAtual) + 1;
-              }
-              const matriculaGerada = `${currentYear}${proximoNumero.toString().padStart(3, '0')}`;
+            {/* Stepper Progress Bar */}
+            <div className="w-full bg-slate-200 rounded-full h-1.5 mt-4 overflow-hidden">
+              <div
+                className="bg-primary h-1.5 transition-all duration-300 rounded-full"
+                style={{
+                  width:
+                    matriculaFormStep === 1
+                      ? '25%'
+                      : matriculaFormStep === 2
+                      ? '50%'
+                      : matriculaFormStep === 3
+                      ? '75%'
+                      : '100%',
+                }}
+              />
+            </div>
+
+            {/* Stepper Steps / Pills */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3">
+              {[
+                { step: 1, label: '1. Aluno & Docs', icon: User },
+                { step: 2, label: '2. Endereço & Contato', icon: MapPin },
+                { step: 3, label: '3. Responsáveis', icon: Users },
+                { step: 4, label: '4. Turma & Contrato', icon: GraduationCap },
+              ].map((s) => {
+                const Icon = s.icon;
+                const isActive = matriculaFormStep === s.step;
+                const isCompleted = matriculaFormStep > s.step;
+                return (
+                  <button
+                    key={s.step}
+                    type="button"
+                    onClick={() => setMatriculaFormStep(s.step as 1 | 2 | 3 | 4)}
+                    className={`flex items-center gap-2 p-2 rounded-lg text-xs font-semibold transition-all border text-left ${
+                      isActive
+                        ? 'bg-primary text-white border-primary shadow-xs'
+                        : isCompleted
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 font-bold ${
+                        isActive
+                          ? 'bg-white text-primary'
+                          : isCompleted
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {isCompleted ? <CheckCircle2 className="h-3.5 w-3.5" /> : s.step}
+                    </div>
+                    <span className="truncate">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </DialogHeader>
+
+          <form
+            ref={matriculaFormRef}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
               
-              const novoAluno: Aluno = {
-                id: crypto.randomUUID(),
-                matricula: matriculaGerada,
-                status: 'Ativo',
-                ...extractedData
+              // Extract all fields
+              const extractedData = {
+                nome: (formData.get('nome') as string) || '',
+                dataNascimento: (formData.get('dataNascimento') as string) || '',
+                estadoCivil: (formData.get('estadoCivil') as string) || 'Solteiro',
+                cidadeNatal: (formData.get('cidadeNatal') as string) || '',
+                nacionalidade: (formData.get('nacionalidade') as string) || 'Brasileiro(a)',
+                estrangeiro: formData.get('estrangeiro') === 'on',
+                bloquearRematricula: formData.get('bloquearRematricula') === 'on',
+                profissao: (formData.get('profissao') as string) || '',
+                empresaTrabalho: (formData.get('empresaTrabalho') as string) || '',
+                classificacao: (formData.get('classificacao') as string) || '',
+                rg: (formData.get('rg') as string) || '',
+                rgOrgao: (formData.get('rgOrgao') as string) || '',
+                rgDataExpedicao: (formData.get('rgDataExpedicao') as string) || '',
+                tituloEleitor: (formData.get('tituloEleitor') as string) || '',
+                tituloZona: (formData.get('tituloZona') as string) || '',
+                tituloSecao: (formData.get('tituloSecao') as string) || '',
+                tituloDataEmissao: (formData.get('tituloDataEmissao') as string) || '',
+                cpf: (formData.get('cpf') as string) || '',
+                passaporte: (formData.get('passaporte') as string) || '',
+                docMilitar: (formData.get('docMilitar') as string) || '',
+                docMilitarNum: (formData.get('docMilitarNum') as string) || '',
+                certidaoNascimento: (formData.get('certidaoNascimento') as string) || '',
+                
+                cep: (formData.get('cep') as string) || '',
+                rua: (formData.get('rua') as string) || '',
+                numero: (formData.get('numero') as string) || '',
+                complemento: (formData.get('complemento') as string) || '',
+                cidade: (formData.get('cidade') as string) || '',
+                uf: (formData.get('uf') as string) || '',
+                bairro: (formData.get('bairro') as string) || '',
+                
+                telefone: (formData.get('telefone') as string) || '',
+                telefoneComercial: (formData.get('telefoneComercial') as string) || '',
+                celularAluno: (formData.get('celularAluno') as string) || '',
+                operadora: (formData.get('operadora') as string) || '',
+                contatoWhatsapp: (formData.get('contatoWhatsapp') as string) || 'Celular (Aluno)',
+                email: (formData.get('email') as string) || '',
+                naoReceberEmail: formData.get('naoReceberEmail') === 'on',
+                naoReceberSms: formData.get('naoReceberSms') === 'on',
+                correspondencia: (formData.get('correspondencia') as string) || '',
+                
+                nomeResponsavel: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.nome || (formData.get('nomeResponsavel') as string) || '',
+                contatoResponsavel: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.contato || (formData.get('contatoResponsavel') as string) || '',
+                cpfResponsavel: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.cpf || (formData.get('cpfResponsavel') as string) || '',
+                rgResponsavel: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.rg || (formData.get('rgResponsavel') as string) || '',
+                emailResponsavel: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.email || (formData.get('emailResponsavel') as string) || '',
+                parentescoResponsavel: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.parentesco || 'Mãe',
+                responsavelFinanceiro: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.responsavelFinanceiro ?? true,
+                responsavelOpcional: (formData.get('responsavelOpcional') as string) || '',
+                responsavelDidatico: (formResponsaveis.find((r) => r.responsavelFinanceiro) || formResponsaveis[0])?.responsavelDidatico ?? true,
+                responsaveis: formResponsaveis,
+                condutorIda: (formData.get('condutorIda') as string) || '',
+                condutorVolta: (formData.get('condutorVolta') as string) || '',
+
+                // Turma e Parâmetros Financeiros
+                setor: matriculaTurmaInfo ? matriculaTurmaInfo.split('|')[0] : ((formData.get('setor') as string) || ''),
+                classe: matriculaTurmaInfo ? matriculaTurmaInfo.split('|')[1] : ((formData.get('classe') as string) || ''),
+                turma: matriculaTurmaInfo ? matriculaTurmaInfo.split('|')[2] : ((formData.get('turma') as string) || 'A'),
+                valorBase: matriculaValorBase || ((formData.get('valorBase') as string) || ''),
+                descontoMensalidade: matriculaDesconto || ((formData.get('descontoMensalidade') as string) || ''),
+                diaVencimento: matriculaVencimento || ((formData.get('diaVencimento') as string) || '5'),
               };
-              setAlunos([...alunos, novoAluno]);
-              toast.success(`Aluno cadastrado! Matrícula: ${matriculaGerada}`);
-            }
-            setIsAlunoFormOpen(false);
-            setEditingAlunoId(null);
-          }} className="space-y-4">
+
+              let savedAlunoId = editingAlunoId;
+
+              if (editingAlunoId) {
+                setAlunos(alunos.map(a => {
+                  if (a.id === editingAlunoId) {
+                    return { ...a, ...extractedData };
+                  }
+                  return a;
+                }));
+                toast.success('Matrícula atualizada com sucesso!');
+              } else {
+                const currentYear = new Date().getFullYear().toString();
+                let proximoNumero = 1;
+                const matriculasAnoAtual = alunos
+                  .map(a => a.matricula)
+                  .filter(m => m.startsWith(currentYear))
+                  .map(m => parseInt(m.substring(4)))
+                  .filter(n => !isNaN(n));
+                  
+                if (matriculasAnoAtual.length > 0) {
+                  proximoNumero = Math.max(...matriculasAnoAtual) + 1;
+                }
+                const matriculaGerada = `${currentYear}${proximoNumero.toString().padStart(3, '0')}`;
+                savedAlunoId = crypto.randomUUID();
+                
+                const novoAluno: Aluno = {
+                  id: savedAlunoId,
+                  matricula: matriculaGerada,
+                  status: 'Ativo',
+                  ...extractedData
+                };
+                setAlunos([...alunos, novoAluno]);
+                toast.success(`Matrícula concluída com sucesso! Matrícula nº ${matriculaGerada}`);
+              }
+
+              // Se turma configurada no Passo 4, gerar parcelas automáticas
+              if (extractedData.classe && extractedData.valorBase && savedAlunoId) {
+                const currentYear = new Date().getFullYear();
+                const vBase = parseFloat(extractedData.valorBase) || 0;
+                const desc = parseFloat(extractedData.descontoMensalidade || '0') || 0;
+                const vFinal = Math.max(0, vBase - desc);
+                const venc = parseInt(extractedData.diaVencimento || '5') || 5;
+
+                const novasMensalidades = [...mensalidades];
+                let parcelasAdicionadas = 0;
+
+                for (let i = 1; i <= 11; i++) {
+                  const mesRef = `${currentYear}-${String(i).padStart(2, '0')}`;
+                  const dataVenc = new Date(currentYear, i - 1, venc).toISOString();
+
+                  const mIndex = novasMensalidades.findIndex(m => m.alunoId === savedAlunoId && m.mesReferencia === mesRef);
+                  if (mIndex === -1) {
+                    novasMensalidades.push({
+                      id: crypto.randomUUID(),
+                      alunoId: savedAlunoId,
+                      mesReferencia: mesRef,
+                      valorFinal: vFinal,
+                      dataVencimento: dataVenc,
+                      status: 'Pendente',
+                    });
+                    parcelasAdicionadas++;
+                  } else if (novasMensalidades[mIndex].status === 'Pendente') {
+                    novasMensalidades[mIndex] = {
+                      ...novasMensalidades[mIndex],
+                      valorFinal: vFinal,
+                      dataVencimento: dataVenc,
+                    };
+                  }
+                }
+
+                if (parcelasAdicionadas > 0) {
+                  setMensalidades(novasMensalidades);
+                  toast.info(`${parcelasAdicionadas} mensalidades do contrato geradas com sucesso.`);
+                }
+              }
+
+              setIsAlunoFormOpen(false);
+              setEditingAlunoId(null);
+              setMatriculaFormStep(1);
+            }}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
             {(() => {
               const a = editingAlunoId ? alunos.find(al => al.id === editingAlunoId) : null;
               return (
-                <Tabs defaultValue="dados" className="w-full mt-4">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="dados">Dados Pessoais & Docs</TabsTrigger>
-                    <TabsTrigger value="endereco">Endereço & Contato</TabsTrigger>
-                    <TabsTrigger value="responsaveis">Responsáveis</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="dados" className="space-y-4 mt-4">
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* ETAPA 1: DADOS DO ALUNO & DOCUMENTOS */}
+                  <div className={matriculaFormStep === 1 ? 'space-y-4' : 'hidden'}>
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <User className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-bold text-slate-800">Dados Pessoais do Estudante</h4>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Nome do Aluno *</label>
-                        <Input name="nome" required placeholder="Nome completo" defaultValue={a?.nome} />
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-semibold text-slate-700">Nome Completo do Aluno *</label>
+                        <Input name="nome" placeholder="Digite o nome completo do estudante" defaultValue={a?.nome} className="text-xs font-medium" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Data de Nasc. *</label>
-                        <Input name="dataNascimento" type="date" required defaultValue={a?.dataNascimento} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Data de Nascimento *</label>
+                        <Input name="dataNascimento" type="date" defaultValue={a?.dataNascimento} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Estado Civil</label>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Estado Civil</label>
                         <Select name="estadoCivil" defaultValue={a?.estadoCivil || "Solteiro"}>
-                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectTrigger className="text-xs"><SelectValue placeholder="Selecione" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Solteiro">Solteiro(a)</SelectItem>
                             <SelectItem value="Casado">Casado(a)</SelectItem>
@@ -2019,377 +2444,1257 @@ const Alunos = () => {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Cidade Natal</label>
-                        <Input name="cidadeNatal" defaultValue={a?.cidadeNatal} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Naturalidade / Cidade Natal</label>
+                        <Input name="cidadeNatal" placeholder="Ex: Feira de Santana - BA" defaultValue={a?.cidadeNatal} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Nacionalidade</label>
-                        <Input name="nacionalidade" defaultValue={a?.nacionalidade || 'Brasileiro(a)'} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Nacionalidade</label>
+                        <Input name="nacionalidade" defaultValue={a?.nacionalidade || 'Brasileiro(a)'} className="text-xs" />
                       </div>
-                      <div className="flex items-center space-x-4 pt-6">
+                      <div className="flex items-center space-x-4 pt-2 md:col-span-2">
                         <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
-                          <input type="checkbox" name="estrangeiro" defaultChecked={a?.estrangeiro} className="rounded border-gray-300" />
+                          <input type="checkbox" name="estrangeiro" defaultChecked={a?.estrangeiro} className="rounded border-gray-300 text-primary" />
                           <span>Estrangeiro(a)</span>
                         </label>
                         <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
-                          <input type="checkbox" name="bloquearRematricula" defaultChecked={a?.bloquearRematricula} className="rounded border-gray-300" />
-                          <span>Bloquear Rematrícula</span>
+                          <input type="checkbox" name="bloquearRematricula" defaultChecked={a?.bloquearRematricula} className="rounded border-gray-300 text-primary" />
+                          <span>Bloquear Rematrícula Futura</span>
                         </label>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Profissão / Formação</label>
-                        <Input name="profissao" defaultValue={a?.profissao} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Profissão / Formação</label>
+                        <Input name="profissao" placeholder="Opcional" defaultValue={a?.profissao} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Empresa / Local de Trabalho</label>
-                        <Input name="empresaTrabalho" defaultValue={a?.empresaTrabalho} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Empresa / Local de Trabalho</label>
+                        <Input name="empresaTrabalho" placeholder="Opcional" defaultValue={a?.empresaTrabalho} className="text-xs" />
                       </div>
                     </div>
                     
-                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Documentos</h4>
+                    <div className="flex items-center gap-2 pt-4 pb-2 border-b">
+                      <FileText className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-bold text-slate-800">Documentação do Estudante</h4>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">RG</label>
-                        <Input name="rg" defaultValue={a?.rg} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">CPF do Aluno *</label>
+                        <Input name="cpf" placeholder="000.000.000-00" defaultValue={a?.cpf} className="text-xs font-mono" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Órgão Exp.</label>
-                        <Input name="rgOrgao" defaultValue={a?.rgOrgao} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">RG</label>
+                        <Input name="rg" placeholder="Número do RG" defaultValue={a?.rg} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Data Exp. RG</label>
-                        <Input name="rgDataExpedicao" type="date" defaultValue={a?.rgDataExpedicao} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Órgão Expedidor</label>
+                        <Input name="rgOrgao" placeholder="Ex: SSP/BA" defaultValue={a?.rgOrgao} className="text-xs" />
                       </div>
-                      
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">CPF *</label>
-                        <Input name="cpf" required defaultValue={a?.cpf} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Data Expedição RG</label>
+                        <Input name="rgDataExpedicao" type="date" defaultValue={a?.rgDataExpedicao} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Passaporte</label>
-                        <Input name="passaporte" defaultValue={a?.passaporte} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Passaporte</label>
+                        <Input name="passaporte" placeholder="Opcional" defaultValue={a?.passaporte} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Certidão Nascimento/Casamento</label>
-                        <Input name="certidaoNascimento" defaultValue={a?.certidaoNascimento} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Certidão Nascimento / Casamento</label>
+                        <Input name="certidaoNascimento" placeholder="Termo / Livro / Folha" defaultValue={a?.certidaoNascimento} className="text-xs" />
                       </div>
                     </div>
-                  </TabsContent>
+                  </div>
 
-                  <TabsContent value="endereco" className="space-y-4 mt-4">
-                    <h4 className="text-sm font-bold border-b pb-1">Endereço</h4>
+                  {/* ETAPA 2: ENDEREÇO & CONTATO */}
+                  <div className={matriculaFormStep === 2 ? 'space-y-4' : 'hidden'}>
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <MapPin className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-bold text-slate-800">Endereço Residencial do Aluno</h4>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="space-y-2 md:col-span-1">
-                        <label className="text-xs font-medium">CEP</label>
-                        <Input name="cep" defaultValue={a?.cep} />
+                      <div className="space-y-1.5 md:col-span-1">
+                        <label className="text-xs font-semibold text-slate-700">CEP</label>
+                        <Input name="cep" placeholder="00000-000" defaultValue={a?.cep} className="text-xs font-mono" />
                       </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-xs font-medium">Rua/Avenida</label>
-                        <Input name="rua" defaultValue={a?.rua} />
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-semibold text-slate-700">Rua / Logradouro</label>
+                        <Input name="rua" placeholder="Av. / Rua / Travessa" defaultValue={a?.rua} className="text-xs" />
                       </div>
-                      <div className="space-y-2 md:col-span-1">
-                        <label className="text-xs font-medium">Nº</label>
-                        <Input name="numero" defaultValue={a?.numero} />
+                      <div className="space-y-1.5 md:col-span-1">
+                        <label className="text-xs font-semibold text-slate-700">Número</label>
+                        <Input name="numero" placeholder="Nº ou S/N" defaultValue={a?.numero} className="text-xs" />
                       </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-xs font-medium">Complemento</label>
-                        <Input name="complemento" defaultValue={a?.complemento} />
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-semibold text-slate-700">Complemento / Apto</label>
+                        <Input name="complemento" placeholder="Apto, Bloco, Casa" defaultValue={a?.complemento} className="text-xs" />
                       </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-xs font-medium">Bairro</label>
-                        <Input name="bairro" defaultValue={a?.bairro} />
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-semibold text-slate-700">Bairro</label>
+                        <Input name="bairro" placeholder="Nome do bairro" defaultValue={a?.bairro} className="text-xs" />
                       </div>
-                      <div className="space-y-2 md:col-span-3">
-                        <label className="text-xs font-medium">Cidade</label>
-                        <Input name="cidade" defaultValue={a?.cidade} />
+                      <div className="space-y-1.5 md:col-span-3">
+                        <label className="text-xs font-semibold text-slate-700">Cidade</label>
+                        <Input name="cidade" placeholder="Cidade" defaultValue={a?.cidade || 'Feira de Santana'} className="text-xs" />
                       </div>
-                      <div className="space-y-2 md:col-span-1">
-                        <label className="text-xs font-medium">UF</label>
-                        <Input name="uf" maxLength={2} defaultValue={a?.uf} />
+                      <div className="space-y-1.5 md:col-span-1">
+                        <label className="text-xs font-semibold text-slate-700">UF</label>
+                        <Input name="uf" maxLength={2} defaultValue={a?.uf || 'BA'} className="text-xs uppercase" />
                       </div>
                     </div>
 
-                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Comunicação</h4>
+                    <div className="flex items-center gap-2 pt-4 pb-2 border-b">
+                      <Users className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-bold text-slate-800">Canais de Comunicação & Notificações</h4>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Telefone Fixo</label>
-                        <Input name="telefone" defaultValue={a?.telefone} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Telefone Residencial / Fixo</label>
+                        <Input name="telefone" placeholder="(00) 0000-0000" defaultValue={a?.telefone} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Celular (Aluno)</label>
-                        <Input name="celularAluno" defaultValue={a?.celularAluno} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Celular do Estudante</label>
+                        <Input name="celularAluno" placeholder="(00) 00000-0000" defaultValue={a?.celularAluno} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Contato WhatsApp</label>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Contato WhatsApp Principal</label>
                         <Select name="contatoWhatsapp" defaultValue={a?.contatoWhatsapp || 'Celular (Aluno)'}>
-                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectTrigger className="text-xs"><SelectValue placeholder="Selecione" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Celular (Aluno)">Celular (Aluno)</SelectItem>
-                            <SelectItem value="Celular (Responsável)">Celular (Responsável)</SelectItem>
+                            <SelectItem value="Celular (Aluno)">Celular do Aluno</SelectItem>
+                            <SelectItem value="Celular (Responsável)">Celular do Responsável</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2 md:col-span-3">
-                        <label className="text-xs font-medium">E-mail</label>
-                        <Input name="email" type="email" defaultValue={a?.email} />
+                      <div className="space-y-1.5 md:col-span-3">
+                        <label className="text-xs font-semibold text-slate-700">E-mail Principal</label>
+                        <Input name="email" type="email" placeholder="aluno@email.com" defaultValue={a?.email} className="text-xs" />
                       </div>
-                      <div className="flex items-center space-x-4 md:col-span-3 pt-2">
+                      <div className="flex items-center space-x-4 md:col-span-3 pt-1">
                         <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
-                          <input type="checkbox" name="naoReceberEmail" defaultChecked={a?.naoReceberEmail} className="rounded border-gray-300" />
-                          <span>Não quero receber e-mail</span>
+                          <input type="checkbox" name="naoReceberEmail" defaultChecked={a?.naoReceberEmail} className="rounded border-gray-300 text-primary" />
+                          <span>Não enviar informativos por e-mail</span>
                         </label>
                         <label className="flex items-center space-x-2 text-xs font-medium cursor-pointer">
-                          <input type="checkbox" name="naoReceberSms" defaultChecked={a?.naoReceberSms} className="rounded border-gray-300" />
-                          <span>Não quero receber SMS</span>
+                          <input type="checkbox" name="naoReceberSms" defaultChecked={a?.naoReceberSms} className="rounded border-gray-300 text-primary" />
+                          <span>Não enviar SMS</span>
                         </label>
                       </div>
                     </div>
-                  </TabsContent>
+                  </div>
 
-                  <TabsContent value="responsaveis" className="space-y-4 mt-4">
-                    <h4 className="text-sm font-bold border-b pb-1">Dados do Responsável Principal</h4>
+                  {/* ETAPA 3: RESPONSÁVEIS & LOGÍSTICA */}
+                  <div className={matriculaFormStep === 3 ? 'space-y-5' : 'hidden'}>
+                    <div className="flex items-center justify-between pb-2 border-b">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-primary" />
+                        <h4 className="text-sm font-bold text-slate-800">
+                          Responsáveis pelo Estudante ({formResponsaveis.length})
+                        </h4>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setFormResponsaveis([
+                            ...formResponsaveis,
+                            {
+                              id: crypto.randomUUID(),
+                              nome: '',
+                              contato: '',
+                              parentesco: formResponsaveis.length === 1 ? 'Pai' : 'Outro',
+                              cpf: '',
+                              rg: '',
+                              email: '',
+                              responsavelFinanceiro: false,
+                              responsavelDidatico: true,
+                            },
+                          ]);
+                        }}
+                        className="text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5 font-semibold h-8"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Adicionar Responsável
+                      </Button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {formResponsaveis.map((resp, index) => (
+                        <div
+                          key={resp.id}
+                          className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-4 transition-all"
+                        >
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-200/70">
+                            <div className="flex items-center gap-2">
+                              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary font-bold text-xs flex items-center justify-center">
+                                {index + 1}
+                              </span>
+                              <span className="font-bold text-xs text-slate-800">
+                                {index === 0 ? 'Responsável 1 (Principal)' : `Responsável ${index + 1}`}
+                              </span>
+                              {resp.responsavelFinanceiro && (
+                                <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] py-0">
+                                  Financeiro
+                                </Badge>
+                              )}
+                              {resp.responsavelDidatico && (
+                                <Badge variant="outline" className="text-[10px] py-0 text-slate-600 bg-white">
+                                  Pedagógico
+                                </Badge>
+                              )}
+                            </div>
+
+                            {formResponsaveis.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setFormResponsaveis(formResponsaveis.filter((r) => r.id !== resp.id));
+                                }}
+                                className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 gap-1 px-2"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Remover
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5 md:col-span-2">
+                              <label className="text-xs font-semibold text-slate-700">
+                                Nome Completo do Responsável *
+                              </label>
+                              <Input
+                                placeholder="Nome completo do pai, mãe ou tutor legal"
+                                value={resp.nome}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => (r.id === resp.id ? { ...r, nome: val } : r))
+                                  );
+                                }}
+                                className="text-xs font-medium bg-white"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-semibold text-slate-700">Telefone / WhatsApp *</label>
+                              <Input
+                                placeholder="(00) 00000-0000"
+                                value={resp.contato}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => (r.id === resp.id ? { ...r, contato: val } : r))
+                                  );
+                                }}
+                                className="text-xs bg-white"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-semibold text-slate-700">Grau de Parentesco</label>
+                              <Select
+                                value={resp.parentesco || 'Mãe'}
+                                onValueChange={(val) => {
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => (r.id === resp.id ? { ...r, parentesco: val } : r))
+                                  );
+                                }}
+                              >
+                                <SelectTrigger className="text-xs bg-white"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Mãe">Mãe</SelectItem>
+                                  <SelectItem value="Pai">Pai</SelectItem>
+                                  <SelectItem value="Padrasto">Padrasto</SelectItem>
+                                  <SelectItem value="Madrasta">Madrasta</SelectItem>
+                                  <SelectItem value="Tutor">Tutor(a) Legal</SelectItem>
+                                  <SelectItem value="Avô">Avô/Avó</SelectItem>
+                                  <SelectItem value="Tio">Tio/Tia</SelectItem>
+                                  <SelectItem value="Irmão">Irmão/Irmã</SelectItem>
+                                  <SelectItem value="Outro">Outro Familiar</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-semibold text-slate-700">CPF do Responsável</label>
+                              <Input
+                                placeholder="000.000.000-00"
+                                value={resp.cpf || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => (r.id === resp.id ? { ...r, cpf: val } : r))
+                                  );
+                                }}
+                                className="text-xs font-mono bg-white"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-semibold text-slate-700">RG do Responsável</label>
+                              <Input
+                                placeholder="Número do RG"
+                                value={resp.rg || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => (r.id === resp.id ? { ...r, rg: val } : r))
+                                  );
+                                }}
+                                className="text-xs bg-white"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5 md:col-span-2">
+                              <label className="text-xs font-semibold text-slate-700">E-mail do Responsável</label>
+                              <Input
+                                type="email"
+                                placeholder="responsavel@email.com"
+                                value={resp.email || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => (r.id === resp.id ? { ...r, email: val } : r))
+                                  );
+                                }}
+                                className="text-xs bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                            <div className="flex items-center justify-between p-3 border rounded-lg bg-white">
+                              <div className="space-y-0.5">
+                                <label className="text-xs font-bold text-slate-800">Responsável Financeiro</label>
+                                <p className="text-[10px] text-muted-foreground">Responsável pelo contrato e pagamentos.</p>
+                              </div>
+                              <Switch
+                                checked={resp.responsavelFinanceiro ?? false}
+                                onCheckedChange={(checked) => {
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => ({
+                                      ...r,
+                                      responsavelFinanceiro:
+                                        r.id === resp.id ? checked : checked ? false : r.responsavelFinanceiro,
+                                    }))
+                                  );
+                                }}
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 border rounded-lg bg-white">
+                              <div className="space-y-0.5">
+                                <label className="text-xs font-bold text-slate-800">Responsável Didático</label>
+                                <p className="text-[10px] text-muted-foreground">Acompanha notas, avisos e ocorrências.</p>
+                              </div>
+                              <Switch
+                                checked={resp.responsavelDidatico ?? true}
+                                onCheckedChange={(checked) => {
+                                  setFormResponsaveis((prev) =>
+                                    prev.map((r) => (r.id === resp.id ? { ...r, responsavelDidatico: checked } : r))
+                                  );
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormResponsaveis([
+                          ...formResponsaveis,
+                          {
+                            id: crypto.randomUUID(),
+                            nome: '',
+                            contato: '',
+                            parentesco: formResponsaveis.length === 1 ? 'Pai' : 'Outro',
+                            cpf: '',
+                            rg: '',
+                            email: '',
+                            responsavelFinanceiro: false,
+                            responsavelDidatico: true,
+                          },
+                        ]);
+                      }}
+                      className="w-full py-3 border-2 border-dashed border-primary/40 rounded-xl text-primary font-semibold text-xs flex items-center justify-center gap-2 hover:bg-primary/5 transition-all bg-white shadow-xs"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Adicionar Outro Responsável (Pai, Mãe, Tutor ou Familiar)
+                    </button>
+
+                    <div className="flex items-center gap-2 pt-4 pb-2 border-b">
+                      <Users className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-bold text-slate-800">Logística & Condutores Autorizados</h4>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Nome do Responsável *</label>
-                        <Input name="nomeResponsavel" required placeholder="Nome completo do principal responsável" defaultValue={a?.nomeResponsavel} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Condutor Ida (Leva o Aluno)</label>
+                        <Input name="condutorIda" placeholder="Nome da pessoa autorizada a trazer o aluno" defaultValue={a?.condutorIda} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Contato (Telefone/Celular) *</label>
-                        <Input name="contatoResponsavel" required placeholder="(00) 00000-0000" defaultValue={a?.contatoResponsavel} />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Condutor Volta (Busca o Aluno)</label>
+                        <Input name="condutorVolta" placeholder="Nome da pessoa autorizada a buscar o aluno" defaultValue={a?.condutorVolta} className="text-xs" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Parentesco</label>
-                        <Select name="parentescoResponsavel" defaultValue={a?.parentescoResponsavel || "Mãe"}>
-                          <SelectTrigger><SelectValue placeholder="Selecione o parentesco" /></SelectTrigger>
+                    </div>
+                  </div>
+
+                  {/* ETAPA 4: TURMA, CONTRATO & RESUMO */}
+                  <div className={matriculaFormStep === 4 ? 'space-y-5' : 'hidden'}>
+                    <div className="flex items-center gap-2 pb-2 border-b">
+                      <GraduationCap className="h-4 w-4 text-primary" />
+                      <h4 className="text-sm font-bold text-slate-800">Turma e Condições da Matrícula</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-xs font-semibold text-slate-700">Selecione a Turma Escolar *</label>
+                        <Select 
+                          value={matriculaTurmaInfo || (a?.setor ? `${a.setor}|${a.classe}|${a.turma || 'A'}` : '')}
+                          onValueChange={(val) => {
+                            setMatriculaTurmaInfo(val);
+                            const [setor, classe] = val.split('|');
+                            const turmaObj = turmas.find(t => t.setor === setor && t.nome === classe);
+                            if (turmaObj && turmaObj.valorPadrao !== undefined) {
+                              setMatriculaValorBase(String(turmaObj.valorPadrao));
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="text-xs bg-white font-medium">
+                            <SelectValue placeholder="Escolha a turma do estudante..." />
+                          </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Mãe">Mãe</SelectItem>
-                            <SelectItem value="Pai">Pai</SelectItem>
-                            <SelectItem value="Tutor">Tutor(a)</SelectItem>
-                            <SelectItem value="Avô">Avô/Avó</SelectItem>
-                            <SelectItem value="Tio">Tio/Tia</SelectItem>
-                            <SelectItem value="Outro">Outro</SelectItem>
+                            {turmas.map(t => {
+                              if (t.letras.length === 0) {
+                                return (
+                                  <SelectItem key={`${t.setor}|${t.nome}|Geral`} value={`${t.setor}|${t.nome}|Geral`}>
+                                    {t.setor} - {t.nome} (Geral)
+                                  </SelectItem>
+                                );
+                              }
+                              return t.letras.map(l => (
+                                <SelectItem key={`${t.setor}|${t.nome}|${l}`} value={`${t.setor}|${t.nome}|${l}`}>
+                                  {t.setor} - {t.nome} (Turma {l})
+                                </SelectItem>
+                              ));
+                            })}
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">CPF do Responsável</label>
-                        <Input name="cpfResponsavel" placeholder="000.000.000-00" defaultValue={a?.cpfResponsavel} />
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Valor Base da Mensalidade (R$) *</label>
+                        <Input 
+                          name="valorBase" 
+                          type="number" 
+                          min="0" 
+                          step="0.01" 
+                          placeholder="Ex: 650.00" 
+                          value={matriculaValorBase || (a?.valorBase || '')} 
+                          onChange={(e) => setMatriculaValorBase(e.target.value)} 
+                          className="text-xs font-bold"
+                        />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">RG do Responsável</label>
-                        <Input name="rgResponsavel" placeholder="Número do RG" defaultValue={a?.rgResponsavel} />
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Desconto Pontualidade (R$)</label>
+                        <Input 
+                          name="descontoMensalidade" 
+                          type="number" 
+                          min="0" 
+                          step="0.01" 
+                          placeholder="Ex: 50.00" 
+                          value={matriculaDesconto || (a?.descontoMensalidade || '')} 
+                          onChange={(e) => setMatriculaDesconto(e.target.value)} 
+                          className="text-xs"
+                        />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">E-mail do Responsável</label>
-                        <Input name="emailResponsavel" type="email" placeholder="email@exemplo.com" defaultValue={a?.emailResponsavel} />
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Dia de Vencimento da Mensalidade</label>
+                        <Select 
+                          value={matriculaVencimento || (a?.diaVencimento || '5')} 
+                          onValueChange={setMatriculaVencimento}
+                        >
+                          <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">Dia 05 de cada mês</SelectItem>
+                            <SelectItem value="10">Dia 10 de cada mês</SelectItem>
+                            <SelectItem value="15">Dia 15 de cada mês</SelectItem>
+                            <SelectItem value="20">Dia 20 de cada mês</SelectItem>
+                            <SelectItem value="25">Dia 25 de cada mês</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-700">Ano Letivo de Matrícula</label>
+                        <Input disabled value="Ano Letivo 2026" className="text-xs bg-slate-100 font-semibold" />
                       </div>
                     </div>
-                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Atribuições do Responsável Principal</h4>
-                    <div className="grid grid-cols-1 gap-4 mt-2">
-                      <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="space-y-0.5">
-                          <label className="text-sm font-medium">Responsável Financeiro</label>
-                          <p className="text-xs text-muted-foreground">Este é o responsável pelos pagamentos e contratos.</p>
+
+                    {/* Resumo da Matrícula */}
+                    <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/60 space-y-2.5">
+                      <div className="flex items-center gap-2 font-bold text-xs text-emerald-900">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        Resumo da Efetivação da Matrícula
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1">
+                        <div>
+                          <span className="text-emerald-700 font-medium block">Turma Contratada:</span>
+                          <span className="font-bold text-slate-800">
+                            {matriculaTurmaInfo ? matriculaTurmaInfo.replace(/\|/g, ' - ') : (a?.classe ? `${a.setor} - ${a.classe}` : 'Não selecionada')}
+                          </span>
                         </div>
-                        <Switch name="responsavelFinanceiro" defaultChecked={a?.responsavelFinanceiro} />
-                      </div>
-                      <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="space-y-0.5">
-                          <label className="text-sm font-medium">Responsável Didático</label>
-                          <p className="text-xs text-muted-foreground">Este é o responsável pelo acompanhamento escolar e notas.</p>
+                        <div>
+                          <span className="text-emerald-700 font-medium block">Mensalidade Líquida:</span>
+                          <span className="font-bold text-emerald-900 text-sm">
+                            {(() => {
+                              const base = parseFloat(matriculaValorBase || a?.valorBase || '0') || 0;
+                              const desc = parseFloat(matriculaDesconto || a?.descontoMensalidade || '0') || 0;
+                              return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.max(0, base - desc));
+                            })()}
+                          </span>
                         </div>
-                        <Switch name="responsavelDidatico" defaultChecked={a?.responsavelDidatico} />
+                        <div>
+                          <span className="text-emerald-700 font-medium block">Vencimento & Parcelas:</span>
+                          <span className="font-bold text-slate-800">
+                            Dia {matriculaVencimento || a?.diaVencimento || '5'} • 11 Mensalidades
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    
-                    <h4 className="text-sm font-bold border-b pb-1 mt-4">Logística / Transporte</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Condutor Ida</label>
-                        <Input name="condutorIda" placeholder="Nome do responsável por trazer o aluno" defaultValue={a?.condutorIda} />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium">Condutor Volta</label>
-                        <Input name="condutorVolta" placeholder="Nome do responsável por buscar o aluno" defaultValue={a?.condutorVolta} />
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                </div>
               );
             })()}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => { setIsAlunoFormOpen(false); setEditingAlunoId(null); }}>Cancelar</Button>
-              <Button type="submit">{editingAlunoId ? 'Salvar Alterações' : 'Cadastrar Aluno'}</Button>
+
+            {/* BARRA DE NAVEGAÇÃO MULTI-STEP */}
+            <div className="flex items-center justify-between p-4 border-t bg-slate-50/80">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsAlunoFormOpen(false);
+                  setEditingAlunoId(null);
+                  setMatriculaFormStep(1);
+                }}
+                className="text-xs"
+              >
+                Cancelar
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={matriculaFormStep === 1}
+                  onClick={() => setMatriculaFormStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3 | 4) : 1))}
+                  className="text-xs gap-1.5"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Voltar
+                </Button>
+
+                {matriculaFormStep < 4 ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (matriculaFormRef.current) {
+                        const form = matriculaFormRef.current;
+                        if (matriculaFormStep === 1) {
+                          const nome = (form.elements.namedItem('nome') as HTMLInputElement)?.value?.trim();
+                          if (!nome) {
+                            toast.error('Por favor, informe o nome do aluno antes de avançar.');
+                            return;
+                          }
+                        } else if (matriculaFormStep === 3) {
+                          if (formResponsaveis.length === 0) {
+                            toast.error('Por favor, adicione pelo menos um responsável.');
+                            return;
+                          }
+                          const invalidIndex = formResponsaveis.findIndex((r) => !r.nome.trim() || !r.contato.trim());
+                          if (invalidIndex !== -1) {
+                            toast.error(`Por favor, preencha o Nome e Telefone do Responsável ${invalidIndex + 1}.`);
+                            return;
+                          }
+                        }
+                      }
+                      setMatriculaFormStep((prev) => (prev < 4 ? ((prev + 1) as 1 | 2 | 3 | 4) : 4));
+                    }}
+                    className="text-xs gap-1.5 bg-primary hover:bg-primary/90 text-white font-semibold"
+                  >
+                    Próximo Passo
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    {editingAlunoId ? 'Salvar Alterações' : 'Concluir Matrícula'}
+                  </Button>
+                )}
+              </div>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isEnturmarOpen} onOpenChange={setIsEnturmarOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{selectedAlunosIds.length > 1 ? `Enturmar ${selectedAlunosIds.length} Alunos` : 'Enturmar Aluno'}</DialogTitle>
-            <DialogDescription>Vincule {selectedAlunosIds.length > 1 ? 'os alunos' : 'o aluno'} a uma classe e configure os pagamentos.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            const formData = new FormData(e.currentTarget);
-            const turmaInfo = enturmarTurmaInfo;
-            if (!turmaInfo) {
-              toast.error('Selecione uma turma válida.');
-              return;
-            }
-            
-            const [setor, classe, turmaStr] = turmaInfo.split('|');
-            const valorBase = enturmarValorBase;
-            
-            const isGroup = selectedAlunosIds.length > 1;
-            
-            setAlunos(alunos.map(a => {
-              if (selectedAlunosIds.includes(a.id)) {
-                const descontoMensalidade = isGroup ? (formData.get(`desconto_${a.id}`) as string) : (formData.get('desconto') as string);
-                const diaVencimento = isGroup ? (formData.get(`vencimento_${a.id}`) as string) : (formData.get('vencimento') as string);
-                
-                return { 
-                  ...a, 
-                  setor, 
-                  classe, 
-                  turma: turmaStr,
-                  valorBase,
-                  descontoMensalidade,
-                  diaVencimento
-                };
-              }
-              return a;
-            }));
-            
-            // Gerar 11 parcelas automaticamente (Janeiro a Novembro)
-            const currentYear = new Date().getFullYear();
-            const vBase = parseFloat(valorBase);
+      <Dialog open={isMatricularOpen} onOpenChange={(open) => {
+        setIsMatricularOpen(open);
+        if (!open) setMatricularStep(1);
+      }}>
+        <DialogContent className="max-w-3xl max-h-[92vh] flex flex-col p-0">
+          <DialogHeader className="p-5 border-b bg-slate-50/80">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <GraduationCap className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    {selectedAlunosIds.length > 1
+                      ? `Matrícula em Lote (${selectedAlunosIds.length} Alunos)`
+                      : 'Matrícula do Aluno'}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500">
+                    {matricularStep === 1
+                      ? 'Passo 1: Selecione a turma, o turno das aulas e a participação no contraturno escolar.'
+                      : matricularStep === 2
+                      ? 'Passo 2: Defina quando iniciará a cobrança, quantidade de parcelas e descontos.'
+                      : 'Passo 3: Confira o resumo do contrato e imprima os documentos escolares.'}
+                  </DialogDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-white border-slate-200">
+                Passo {matricularStep} de 3
+              </Badge>
+            </div>
 
-            const novasMensalidades = [...mensalidades];
-            
-            selectedAlunosIds.forEach(id => {
-              const descStr = isGroup ? (formData.get(`desconto_${id}`) as string) : (formData.get('desconto') as string);
-              const vencStr = isGroup ? (formData.get(`vencimento_${id}`) as string) : (formData.get('vencimento') as string);
-              
-              const desc = parseFloat(descStr || '0');
-              const vFinal = Math.max(0, vBase - desc);
-              const venc = vencStr || '5';
-              
-              for (let i = 1; i <= 11; i++) {
-                const mesRef = `${currentYear}-${String(i).padStart(2, '0')}`;
-                const dataVenc = new Date(currentYear, i - 1, parseInt(venc)).toISOString();
-                
-                const mIndex = novasMensalidades.findIndex(m => m.alunoId === id && m.mesReferencia === mesRef);
-                if (mIndex === -1) {
-                  novasMensalidades.push({
-                    id: crypto.randomUUID(),
-                    alunoId: id,
-                    mesReferencia: mesRef,
-                    valorFinal: vFinal,
-                    dataVencimento: dataVenc,
-                    status: 'Pendente'
-                  });
-                } else if (novasMensalidades[mIndex].status === 'Pendente') {
-                  novasMensalidades[mIndex] = {
-                    ...novasMensalidades[mIndex],
-                    valorFinal: vFinal,
-                    dataVencimento: dataVenc
-                  };
-                }
-              }
-            });
-            setMensalidades(novasMensalidades);
-            
-            toast.success(`${selectedAlunosIds.length} contrato(s) atualizado(s) e parcelas sincronizadas com sucesso!`);
-            setIsEnturmarOpen(false);
-            setSelectedAlunosIds([]);
-          }} className="space-y-4 py-2">
-            {(() => {
-              const alunoEdit = selectedAlunosIds.length === 1 ? alunos.find(a => a.id === selectedAlunosIds[0]) : null;
-              const isGroup = selectedAlunosIds.length > 1;
-              const selectedAlunosObj = alunos.filter(a => selectedAlunosIds.includes(a.id));
-              
-              return (
-                <>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Selecione a Turma *</label>
-                    <Select 
-                      name="turmaInfo" 
-                      required 
-                      value={enturmarTurmaInfo}
-                      onValueChange={(val) => {
-                        setEnturmarTurmaInfo(val);
-                        const [setor, classe] = val.split('|');
-                        const turmaObj = turmas.find(t => t.setor === setor && t.nome === classe);
-                        if (turmaObj && turmaObj.valorPadrao !== undefined) {
-                          setEnturmarValorBase(String(turmaObj.valorPadrao));
+            {/* Stepper Progress Bar */}
+            <div className="w-full bg-slate-200 rounded-full h-1.5 mt-4 overflow-hidden">
+              <div
+                className="bg-primary h-1.5 transition-all duration-300 rounded-full"
+                style={{
+                  width:
+                    matricularStep === 1
+                      ? '33.33%'
+                      : matricularStep === 2
+                      ? '66.66%'
+                      : '100%',
+                }}
+              />
+            </div>
+
+            {/* Stepper Pills */}
+            <div className="grid grid-cols-3 gap-2 pt-3">
+              {[
+                { step: 1, label: '1. Turma', icon: GraduationCap },
+                { step: 2, label: '2. Financeiro', icon: CreditCard },
+                { step: 3, label: '3. Contrato', icon: FileText },
+              ].map((s) => {
+                const Icon = s.icon;
+                const isActive = matricularStep === s.step;
+                const isCompleted = matricularStep > s.step;
+                return (
+                  <button
+                    key={s.step}
+                    type="button"
+                    onClick={() => {
+                      if (s.step === 2 || s.step === 3) {
+                        if (!matricularTurmaInfo) {
+                          toast.error('Por favor, selecione uma turma antes de avançar.');
+                          return;
                         }
-                      }}
+                      }
+                      setMatricularStep(s.step as 1 | 2 | 3);
+                    }}
+                    className={`flex items-center gap-2 p-2 rounded-lg text-xs font-semibold transition-all border text-left ${
+                      isActive
+                        ? 'bg-primary text-white border-primary shadow-xs'
+                        : isCompleted
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 font-bold ${
+                        isActive
+                          ? 'bg-white text-primary'
+                          : isCompleted
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-200 text-slate-700'
+                      }`}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Escolha a turma" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {turmas.map(t => {
-                          if (t.letras.length === 0) {
-                            return <SelectItem key={`${t.setor}|${t.nome}|Geral`} value={`${t.setor}|${t.nome}|Geral`}>{t.setor} - {t.nome} (Geral)</SelectItem>;
-                          }
-                          return t.letras.map(l => (
-                            <SelectItem key={`${t.setor}|${t.nome}|${l}`} value={`${t.setor}|${t.nome}|${l}`}>
-                              {t.setor} - {t.nome} (Turma {l})
+                      {isCompleted ? <CheckCircle2 className="h-3.5 w-3.5" /> : s.step}
+                    </div>
+                    <span className="truncate">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!matricularTurmaInfo) {
+                toast.error('Por favor, selecione a turma do aluno.');
+                setMatricularStep(1);
+                return;
+              }
+
+              const [setor, classe, turmaStr] = matricularTurmaInfo.split('|');
+              const vBase = parseFloat(matricularValorBase) || 0;
+              const vContra = matricularTemContraturno ? (parseFloat(matricularValorContraturno) || 0) : 0;
+              const vDesc = parseFloat(matricularDesconto) || 0;
+              const vFinal = Math.max(0, vBase + vContra - vDesc);
+              const diaVenc = parseInt(matricularDiaVencimento) || 10;
+              const mesIni = matricularMesInicio || 2;
+              const qtdParc = matricularQtdParcelas || 11;
+              const anoLet = parseInt(matricularAnoLetivo) || new Date().getFullYear();
+
+              // 1. Atualizar o cadastro dos alunos
+              setAlunos(
+                alunos.map((a) => {
+                  if (selectedAlunosIds.includes(a.id)) {
+                    return {
+                      ...a,
+                      setor,
+                      classe,
+                      turma: turmaStr || 'A',
+                      turno: matricularTurno,
+                      temContraturno: matricularTemContraturno,
+                      classeContraturno: matricularTemContraturno ? matricularClasseContraturno : '',
+                      turnoContraturno: matricularTemContraturno ? matricularTurnoContraturno : '',
+                      valorContraturno: matricularTemContraturno ? matricularValorContraturno : '0',
+                      valorBase: matricularValorBase,
+                      descontoMensalidade: matricularDesconto,
+                      diaVencimento: matricularDiaVencimento,
+                      mesInicio: matricularMesInicio,
+                      parcelasContratadas: matricularQtdParcelas,
+                      dataMatricula: new Date().toISOString(),
+                    };
+                  }
+                  return a;
+                })
+              );
+
+              // 2. Gerar as mensalidades contratadas
+              const novasMensalidades = [...mensalidades];
+              let parcelasCriadasOuAtualizadas = 0;
+
+              selectedAlunosIds.forEach((id) => {
+                for (let i = 0; i < qtdParc; i++) {
+                  const targetMonth = ((mesIni - 1 + i) % 12) + 1;
+                  const yearOffset = Math.floor((mesIni - 1 + i) / 12);
+                  const targetYear = anoLet + yearOffset;
+                  const mesRef = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+                  const dataVenc = new Date(targetYear, targetMonth - 1, diaVenc).toISOString();
+
+                  const mIndex = novasMensalidades.findIndex(
+                    (m) => m.alunoId === id && m.mesReferencia === mesRef
+                  );
+
+                  if (mIndex === -1) {
+                    novasMensalidades.push({
+                      id: crypto.randomUUID(),
+                      alunoId: id,
+                      mesReferencia: mesRef,
+                      valorFinal: vFinal,
+                      dataVencimento: dataVenc,
+                      status: 'Pendente',
+                    });
+                    parcelasCriadasOuAtualizadas++;
+                  } else if (novasMensalidades[mIndex].status === 'Pendente') {
+                    novasMensalidades[mIndex] = {
+                      ...novasMensalidades[mIndex],
+                      valorFinal: vFinal,
+                      dataVencimento: dataVenc,
+                    };
+                    parcelasCriadasOuAtualizadas++;
+                  }
+                }
+              });
+
+              setMensalidades(novasMensalidades);
+              toast.success(
+                `Matrícula concluída com sucesso! ${selectedAlunosIds.length} estudante(s) matriculado(s) e ${qtdParc} parcelas contratuais geradas.`
+              );
+              setIsMatricularOpen(false);
+              setMatricularStep(1);
+            }}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Informações do Aluno Selecionado */}
+              {selectedAlunosIds.length === 1 && (() => {
+                const al = alunos.find((a) => a.id === selectedAlunosIds[0]);
+                if (!al) return null;
+                return (
+                  <div className="p-3 bg-slate-50 border rounded-xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
+                        {al.nome.charAt(0)}
+                      </div>
+                      <div>
+                        <span className="font-bold text-slate-800 text-sm block">{al.nome}</span>
+                        <span className="text-slate-500">Matrícula: {al.matricula || 'Pendente'} • Resp: {al.nomeResponsavel || 'Não informado'}</span>
+                      </div>
+                    </div>
+                    {al.classe && (
+                      <Badge variant="secondary" className="text-[11px]">
+                        Turma Atual: {al.classe} ({al.turma || 'A'})
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* PASSO 1: TURMA, TURNO E CONTRATURNO */}
+              <div className={matricularStep === 1 ? 'space-y-5' : 'hidden'}>
+                {/* 1.1 Seleção da Turma Regular */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <GraduationCap className="h-4 w-4 text-primary" />
+                    Qual a Turma do Estudante? *
+                  </label>
+                  <Select
+                    value={matricularTurmaInfo}
+                    onValueChange={(val) => {
+                      setMatricularTurmaInfo(val);
+                      const [setor, classe] = val.split('|');
+                      const turmaObj = turmas.find((t) => t.setor === setor && t.nome === classe);
+                      if (turmaObj && turmaObj.valorPadrao !== undefined) {
+                        setMatricularValorBase(String(turmaObj.valorPadrao));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="text-xs bg-white h-10 border-slate-300">
+                      <SelectValue placeholder="Selecione a turma escolar desejada..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {turmas.map((t) => {
+                        if (t.letras.length === 0) {
+                          return (
+                            <SelectItem key={`${t.setor}|${t.nome}|Geral`} value={`${t.setor}|${t.nome}|Geral`}>
+                              {t.setor} - {t.nome} (Geral)
                             </SelectItem>
-                          ));
-                        })}
+                          );
+                        }
+                        return t.letras.map((l) => (
+                          <SelectItem key={`${t.setor}|${t.nome}|${l}`} value={`${t.setor}|${t.nome}|${l}`}>
+                            {t.setor} - {t.nome} (Turma {l})
+                          </SelectItem>
+                        ));
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* 1.2 Qual o Turno da Aula */}
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-primary" />
+                      Qual o Turno da Aula? *
+                    </label>
+                    <span className="text-[11px] text-slate-500">Selecione o turno caso a turma tenha mais de um</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[
+                      { id: 'Matutino', label: 'Matutino', desc: 'Manhã (07h30 às 11h50)', icon: Sun },
+                      { id: 'Vespertino', label: 'Vespertino', desc: 'Tarde (13h10 às 17h30)', icon: Sun },
+                      { id: 'Integral', label: 'Integral', desc: 'Dia Todo (07h30 às 17h30)', icon: Clock },
+                      { id: 'Noturno', label: 'Noturno', desc: 'Noite (18h30 às 22h00)', icon: Moon },
+                    ].map((turn) => {
+                      const TurnIcon = turn.icon;
+                      const isSelected = matricularTurno === turn.id;
+                      return (
+                        <button
+                          key={turn.id}
+                          type="button"
+                          onClick={() => setMatricularTurno(turn.id)}
+                          className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                            isSelected
+                              ? 'border-primary bg-primary/5 text-primary shadow-xs ring-1 ring-primary'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-xs">{turn.label}</span>
+                            <TurnIcon className={`h-4 w-4 ${isSelected ? 'text-primary' : 'text-slate-400'}`} />
+                          </div>
+                          <span className="text-[10px] text-slate-500 leading-tight">{turn.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 1.3 Participará do Contraturno ou Não */}
+                <div className="pt-2">
+                  <div className={`p-4 rounded-xl border transition-all ${matricularTemContraturno ? 'bg-indigo-50/60 border-indigo-200' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className={`h-4 w-4 ${matricularTemContraturno ? 'text-indigo-600' : 'text-slate-400'}`} />
+                          <label htmlFor="switch-contraturno" className="text-xs font-bold text-slate-800 cursor-pointer">
+                            Aluno Participará do Contraturno?
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Atividades complementares, acompanhamento pedagógico, oficinas e reforço escolar.
+                        </p>
+                      </div>
+                      <Switch
+                        id="switch-contraturno"
+                        checked={matricularTemContraturno}
+                        onCheckedChange={setMatricularTemContraturno}
+                      />
+                    </div>
+
+                    {matricularTemContraturno && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 mt-3 border-t border-indigo-100">
+                        <div className="space-y-1.5 sm:col-span-1">
+                          <label className="text-[11px] font-semibold text-slate-700">Modalidade / Turma Contraturno</label>
+                          <Select value={matricularClasseContraturno} onValueChange={setMatricularClasseContraturno}>
+                            <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Contraturno Regular">Contraturno Geral</SelectItem>
+                              <SelectItem value="Contraturno Infantil">Contraturno Infantil</SelectItem>
+                              <SelectItem value="Robótica Educativa Maker">Robótica Maker</SelectItem>
+                              <SelectItem value="Oficina de Redação & Leitura">Redação & Leitura</SelectItem>
+                              <SelectItem value="Esportes & Judô Escolar">Esportes & Judô</SelectItem>
+                              <SelectItem value="Inglês Bilíngue">Inglês Bilíngue</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-1">
+                          <label className="text-[11px] font-semibold text-slate-700">Turno do Contraturno</label>
+                          <Select value={matricularTurnoContraturno} onValueChange={setMatricularTurnoContraturno}>
+                            <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Vespertino">Vespertino (Tarde)</SelectItem>
+                              <SelectItem value="Matutino">Matutino (Manhã)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-1">
+                          <label className="text-[11px] font-semibold text-slate-700">Adicional Contraturno (R$)</label>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={matricularValorContraturno}
+                            onChange={(e) => setMatricularValorContraturno(e.target.value)}
+                            className="text-xs bg-white font-semibold"
+                            placeholder="Ex: 350.00"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* PASSO 2: FINANCEIRO, PARCELAS E DESCONTOS */}
+              <div className={matricularStep === 2 ? 'space-y-5' : 'hidden'}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Quando começará a ser cobrado */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      Início da Cobrança (Mês) *
+                    </label>
+                    <Select
+                      value={String(matricularMesInicio)}
+                      onValueChange={(val) => setMatricularMesInicio(parseInt(val, 10))}
+                    >
+                      <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 - Janeiro</SelectItem>
+                        <SelectItem value="2">2 - Fevereiro (Início Letivo)</SelectItem>
+                        <SelectItem value="3">3 - Março</SelectItem>
+                        <SelectItem value="4">4 - Abril</SelectItem>
+                        <SelectItem value="5">5 - Maio</SelectItem>
+                        <SelectItem value="6">6 - Junho</SelectItem>
+                        <SelectItem value="7">7 - Julho</SelectItem>
+                        <SelectItem value="8">8 - Agosto</SelectItem>
+                        <SelectItem value="9">9 - Setembro</SelectItem>
+                        <SelectItem value="10">10 - Outubro</SelectItem>
+                        <SelectItem value="11">11 - Novembro</SelectItem>
+                        <SelectItem value="12">12 - Dezembro</SelectItem>
                       </SelectContent>
                     </Select>
+                    <span className="text-[10px] text-slate-500">Mês de referência da 1ª mensalidade</span>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Valor Base da Mensalidade (R$) *</label>
-                    <Input name="valorBase" type="number" min="0" step="0.01" required placeholder="Ex: 500.00" value={enturmarValorBase} onChange={(e) => setEnturmarValorBase(e.target.value)} />
+
+                  {/* Quantas parcelas */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5 text-primary" />
+                      Quantidade de Parcelas *
+                    </label>
+                    <Select
+                      value={String(matricularQtdParcelas)}
+                      onValueChange={(val) => setMatricularQtdParcelas(parseInt(val, 10))}
+                    >
+                      <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="11">11 Parcelas (Fev a Dez)</SelectItem>
+                        <SelectItem value="12">12 Parcelas (Ano Completo)</SelectItem>
+                        <SelectItem value="10">10 Parcelas</SelectItem>
+                        <SelectItem value="6">6 Parcelas (Semestral)</SelectItem>
+                        <SelectItem value="1">1 Parcela Única</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-[10px] text-slate-500">Total de boletos contratuais</span>
                   </div>
-                  
-                  {!isGroup ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Desconto Mensalidade (R$)</label>
-                        <Input name="desconto" type="number" min="0" step="0.01" placeholder="Ex: 50.00" defaultValue={alunoEdit?.descontoMensalidade} />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Dia de Vencimento</label>
-                        <Input name="vencimento" type="number" min="1" max="31" defaultValue={alunoEdit?.diaVencimento || "5"} />
-                      </div>
+
+                  {/* Dia de vencimento */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      Dia de Vencimento *
+                    </label>
+                    <Select value={matricularDiaVencimento} onValueChange={setMatricularDiaVencimento}>
+                      <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">Dia 05 de cada mês</SelectItem>
+                        <SelectItem value="10">Dia 10 de cada mês</SelectItem>
+                        <SelectItem value="15">Dia 15 de cada mês</SelectItem>
+                        <SelectItem value="20">Dia 20 de cada mês</SelectItem>
+                        <SelectItem value="25">Dia 25 de cada mês</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-[10px] text-slate-500">Vencimento mensal recorrente</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800">Valor Base da Mensalidade (R$) *</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      placeholder="Ex: 650.00"
+                      value={matricularValorBase}
+                      onChange={(e) => setMatricularValorBase(e.target.value)}
+                      className="text-xs font-bold bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800">Desconto Pontualidade / Bolsa (R$)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ex: 50.00"
+                      value={matricularDesconto}
+                      onChange={(e) => setMatricularDesconto(e.target.value)}
+                      className="text-xs bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Card de Simulação Financeira em Tempo Real */}
+                <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/70 space-y-3 mt-4">
+                  <div className="flex items-center justify-between font-bold text-xs text-emerald-950">
+                    <div className="flex items-center gap-1.5">
+                      <DollarSign className="h-4 w-4 text-emerald-700" />
+                      <span>Simulação das Condições Financeiras</span>
                     </div>
-                  ) : (
-                    <div className="mt-4 space-y-4">
-                      <label className="text-sm font-medium border-b pb-2 block">Personalização Individualizada</label>
-                      <div className="max-h-60 overflow-y-auto pr-2 space-y-4">
-                        {selectedAlunosObj.map(aluno => (
-                          <div key={aluno.id} className="p-3 border rounded-md bg-muted/30">
-                            <div className="font-semibold text-sm mb-2 truncate" title={aluno.nome}>{aluno.nome}</div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Desconto (R$)</label>
-                                <Input name={`desconto_${aluno.id}`} type="number" min="0" step="0.01" placeholder="Ex: 50.00" defaultValue={aluno.descontoMensalidade} className="h-8 text-sm" />
-                              </div>
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-muted-foreground">Dia Vencimento</label>
-                                <Input name={`vencimento_${aluno.id}`} type="number" min="1" max="31" defaultValue={aluno.diaVencimento || "5"} className="h-8 text-sm" />
-                              </div>
-                            </div>
+                    <Badge variant="outline" className="border-emerald-300 text-emerald-800 bg-white">
+                      Ano Letivo {matricularAnoLetivo}
+                    </Badge>
+                  </div>
+
+                  {(() => {
+                    const base = parseFloat(matricularValorBase) || 0;
+                    const contra = matricularTemContraturno ? (parseFloat(matricularValorContraturno) || 0) : 0;
+                    const desc = parseFloat(matricularDesconto) || 0;
+                    const vFinal = Math.max(0, base + contra - desc);
+                    const totalContrato = vFinal * matricularQtdParcelas;
+
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
+                        <div>
+                          <span className="text-emerald-700 font-medium block text-[11px]">Valor Base:</span>
+                          <span className="font-bold text-slate-800">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(base)}
+                          </span>
+                        </div>
+                        {matricularTemContraturno && (
+                          <div>
+                            <span className="text-emerald-700 font-medium block text-[11px]">Contraturno:</span>
+                            <span className="font-bold text-indigo-700">
+                              +{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contra)}
+                            </span>
                           </div>
-                        ))}
+                        )}
+                        <div>
+                          <span className="text-emerald-700 font-medium block text-[11px]">Desconto:</span>
+                          <span className="font-bold text-rose-600">
+                            -{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(desc)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-800 font-bold block text-[11px]">Mensalidade Líquida:</span>
+                          <span className="font-black text-emerald-950 text-base">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(vFinal)}
+                          </span>
+                        </div>
+                        <div className="col-span-2 sm:col-span-4 pt-2 border-t border-emerald-200/70 flex flex-wrap items-center justify-between text-[11px] text-emerald-900">
+                          <span>
+                            Plano: <strong>{matricularQtdParcelas} parcelas</strong> com vencimento todo <strong>dia {matricularDiaVencimento}</strong>
+                          </span>
+                          <span>
+                            Total do Contrato: <strong className="text-emerald-950 text-xs">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalContrato)}</strong>
+                          </span>
+                        </div>
                       </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* PASSO 3: CONTRATO & DOCUMENTOS COM OPÇÃO DE IMPRESSÃO */}
+              <div className={matricularStep === 3 ? 'space-y-5' : 'hidden'}>
+                {/* Resumo do Contrato */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    Resumo das Condições Contratuais
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-500 font-medium block text-[11px]">Turma & Turno:</span>
+                      <span className="font-bold text-slate-800">
+                        {matricularTurmaInfo.replace(/\|/g, ' - ')} ({matricularTurno})
+                      </span>
                     </div>
-                  )}
-                </>
-              );
-            })()}
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setIsEnturmarOpen(false)}>Cancelar</Button>
-              <Button type="submit">Salvar Contrato</Button>
+                    <div>
+                      <span className="text-slate-500 font-medium block text-[11px]">Contraturno:</span>
+                      <span className="font-bold text-slate-800">
+                        {matricularTemContraturno ? `${matricularClasseContraturno} (${matricularTurnoContraturno})` : 'Não participa'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-medium block text-[11px]">Plano de Cobrança:</span>
+                      <span className="font-bold text-slate-800">
+                        {matricularQtdParcelas} parcelas a partir do Mês {matricularMesInicio}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card de Documentos e Impressão */}
+                <div className="p-5 rounded-xl border-2 border-dashed border-purple-300 bg-purple-50/50 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-purple-700" />
+                        <h4 className="font-bold text-sm text-purple-950">Documentos Escolares Prontos para Impressão</h4>
+                      </div>
+                      <p className="text-xs text-purple-800/80">
+                        O contrato oficial de prestação de serviços educacionais e adendos foram gerados com as informações desta matrícula.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      onClick={() => setIsDocImpressaoOpen(true)}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs gap-2 shrink-0 shadow-sm"
+                    >
+                      <Printer className="h-4 w-4" />
+                      Imprimir Documentos
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-purple-200">
+                    <Badge variant="outline" className="bg-white text-purple-800 border-purple-200 text-xs">
+                      ✓ Contrato de Prestação de Serviços Educacionais
+                    </Badge>
+                    {matricularTemContraturno && (
+                      <Badge variant="outline" className="bg-white text-purple-800 border-purple-200 text-xs">
+                        ✓ Adendo Contratual de Contraturno
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="bg-white text-purple-800 border-purple-200 text-xs">
+                      ✓ Ficha e Requerimento de Matrícula
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* BARRA DE NAVEGAÇÃO DOS PASSOS */}
+            <div className="flex items-center justify-between p-4 border-t bg-slate-50/80">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsMatricularOpen(false);
+                  setMatricularStep(1);
+                }}
+                className="text-xs"
+              >
+                Cancelar
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={matricularStep === 1}
+                  onClick={() => setMatricularStep((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3) : 1))}
+                  className="text-xs gap-1.5"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Voltar
+                </Button>
+
+                {matricularStep < 3 ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (matricularStep === 1) {
+                        if (!matricularTurmaInfo) {
+                          toast.error('Por favor, selecione a turma do aluno para avançar.');
+                          return;
+                        }
+                      }
+                      setMatricularStep((prev) => (prev < 3 ? ((prev + 1) as 1 | 2 | 3) : 3));
+                    }}
+                    className="text-xs gap-1.5 bg-primary hover:bg-primary/90 text-white font-semibold"
+                  >
+                    Próximo Passo
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Concluir Matrícula
+                  </Button>
+                )}
+              </div>
             </div>
           </form>
         </DialogContent>
@@ -2418,7 +3723,7 @@ const Alunos = () => {
                     <div className="font-bold text-primary">Total: {valorCobrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
                   </div>
                   
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <div className="space-y-1">
                       <label className="text-xs font-medium">Data do Pagamento</label>
                       <Input type="date" value={detail.dataPagamento} onChange={(e) => updatePaymentDetail(m.id, 'dataPagamento', e.target.value)} />
@@ -2435,6 +3740,27 @@ const Alunos = () => {
                           <SelectItem value="Boleto">Boleto</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium">Qual Caixa?</label>
+                      <Select 
+                        value={detail.caixaId || caixas[0]?.id || ''} 
+                        onValueChange={(val) => updatePaymentDetail(m.id, 'caixaId', val)}
+                      >
+                        <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {caixas.map(c => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {detail.formaPagamento === 'Boleto' && (
+                        <span className="text-[10px] text-indigo-700 font-semibold block truncate">
+                          {getBankDisplayName(detectBankFromCaixa(detail.caixaId || caixas[0]?.id, caixas))}
+                        </span>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-destructive">Desconto (R$)</label>
@@ -2457,6 +3783,40 @@ const Alunos = () => {
         </DialogContent>
       </Dialog>
 
+      <DocumentosImpressaoModal
+        isOpen={isDocImpressaoOpen}
+        onClose={() => setIsDocImpressaoOpen(false)}
+        documentos={documentosTemplates.filter(d => {
+          if (!d.ativo) return false;
+          if (d.tipoVinculo === 'todos') return true;
+          if (d.tipoVinculo === 'contraturno') return matricularTemContraturno;
+          return false;
+        })}
+        aluno={{
+          ...(selectedAlunosIds.length === 1 ? alunos.find(a => a.id === selectedAlunosIds[0]) : (alunos[0] || {})),
+          setor: matricularTurmaInfo ? matricularTurmaInfo.split('|')[0] : '',
+          classe: matricularTurmaInfo ? matricularTurmaInfo.split('|')[1] : '',
+          turma: matricularTurmaInfo ? matricularTurmaInfo.split('|')[2] : 'A',
+          turno: matricularTurno,
+          temContraturno: matricularTemContraturno,
+          classeContraturno: matricularClasseContraturno,
+          turmaContraturno: matricularTurnoContraturno,
+          valorContraturno: matricularValorContraturno,
+          valorBase: matricularValorBase,
+          descontoMensalidade: matricularDesconto,
+          diaVencimento: matricularDiaVencimento,
+          parcelasContratadas: matricularQtdParcelas,
+        }}
+        dadosFinanceiros={{
+          valorMensalidade: Math.max(0, (parseFloat(matricularValorBase) || 0) + (matricularTemContraturno ? (parseFloat(matricularValorContraturno) || 0) : 0) - (parseFloat(matricularDesconto) || 0)),
+          qtdParcelas: matricularQtdParcelas,
+          diaVencimento: matricularDiaVencimento,
+          valorContraturno: matricularTemContraturno ? (parseFloat(matricularValorContraturno) || 0) : 0,
+          anoLetivo: matricularAnoLetivo,
+        }}
+        escolaNome={school?.name || 'Colégio Interagir Papagaio'}
+      />
+
       <TransferirTurmaModal
         isOpen={isTransferModalOpen}
         onClose={() => {
@@ -2475,6 +3835,31 @@ const Alunos = () => {
         isOpen={isTutorialOpen}
         onClose={() => setIsTutorialOpen(false)}
         steps={MATRICULA_TUTORIAL_STEPS}
+      />
+
+      {/* Modal de QR Code Pix */}
+      <PixQrCodeModal
+        isOpen={pixModalData.isOpen}
+        onClose={() => setPixModalData(prev => ({ ...prev, isOpen: false }))}
+        valor={pixModalData.valor}
+        descricao={pixModalData.descricao}
+        copiaCola={pixModalData.copiaCola}
+        alunoNome={pixModalData.alunoNome}
+        responsavelNome={pixModalData.responsavelNome}
+        instituicaoNome={pixModalData.instituicaoNome}
+      />
+
+      {/* Modal de Confirmação do Boleto Aberto */}
+      <BoletoGeradoModal
+        isOpen={boletoModalData.isOpen}
+        onClose={() => setBoletoModalData(prev => ({ ...prev, isOpen: false }))}
+        valor={boletoModalData.valor}
+        descricao={boletoModalData.descricao}
+        linhaDigitavel={boletoModalData.linhaDigitavel}
+        barcodeNumber={boletoModalData.barcodeNumber}
+        boletoUrl={boletoModalData.boletoUrl}
+        alunoNome={boletoModalData.alunoNome}
+        bancoNome={boletoModalData.bancoNome}
       />
     </div>
   );

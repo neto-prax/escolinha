@@ -36,7 +36,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             {error.message || 'Erro inesperado ao carregar esta tela.'}
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
-            <Button onClick={() => this.setState({ error: null })}>Tentar novamente</Button>
+            <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
             <Button variant="outline" onClick={() => { window.location.href = '/login'; }}>
               Voltar para o login
             </Button>

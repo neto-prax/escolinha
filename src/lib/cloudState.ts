@@ -37,12 +37,12 @@ export function getSchoolStorageKey(key: string, schoolId: string): string {
 }
 
 /** Read a persisted value from the cloud. Returns undefined when there is no row. */
-export async function loadCloudState<T>(key: string, requestedSchoolId?: string): Promise<T | undefined> {
+export async function loadCloudState<T>(key: string, requestedSchoolId?: string): Promise<{ data: T; updatedAt?: string } | undefined> {
   const schoolId = requestedSchoolId ?? await getSchoolId();
   if (!schoolId) return undefined;
   const { data, error } = await supabase
     .from('app_state')
-    .select('value')
+    .select('value, updated_at')
     .eq('school_id', schoolId)
     .eq('key', key)
     .maybeSingle();
@@ -51,7 +51,10 @@ export async function loadCloudState<T>(key: string, requestedSchoolId?: string)
     return undefined;
   }
   if (!data) return undefined;
-  return (data.value as { data?: T })?.data as T | undefined;
+  const rawValue = data.value as any;
+  const unpacked = rawValue && typeof rawValue === 'object' && 'data' in rawValue ? rawValue.data : rawValue;
+  if (unpacked === undefined || unpacked === null) return undefined;
+  return { data: unpacked as T, updatedAt: data.updated_at };
 }
 
 /** Persist a value in the cloud (one row per school + key). */

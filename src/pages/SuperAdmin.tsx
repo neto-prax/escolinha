@@ -22,6 +22,8 @@ import { usePlatformBillingSettings } from '@/hooks/usePlatformBillingSettings';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface SchoolWithCounts {
   id: string;
@@ -409,6 +411,16 @@ export default function SuperAdmin() {
     return matchesSearch && matchesSchool;
   });
 
+  const paginationSchools = usePagination({
+    items: filteredSchools,
+    pageSize: 30,
+  });
+
+  const paginationUsers = usePagination({
+    items: filteredUsers,
+    pageSize: 30,
+  });
+
   // Loading state
   if (authLoading || isLoading) {
     return (
@@ -561,7 +573,7 @@ export default function SuperAdmin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredSchools.map((school) => {
+                    {paginationSchools.paginatedItems.map((school) => {
                       const sub = schoolSubscriptions[school.id];
                       return (
                         <TableRow key={school.id}>
@@ -661,6 +673,17 @@ export default function SuperAdmin() {
                     )}
                   </TableBody>
                 </Table>
+                <DataTablePagination
+                  currentPage={paginationSchools.currentPage}
+                  totalPages={paginationSchools.totalPages}
+                  totalItems={paginationSchools.totalItems}
+                  pageSize={paginationSchools.pageSize}
+                  startIndex={paginationSchools.startIndex}
+                  endIndex={paginationSchools.endIndex}
+                  onPageChange={paginationSchools.goToPage}
+                  onPageSizeChange={paginationSchools.setPageSize}
+                  itemName="escolas"
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -734,7 +757,7 @@ export default function SuperAdmin() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.map((userItem) => (
+                    {paginationUsers.paginatedItems.map((userItem) => (
                       <TableRow key={userItem.id} className={selectedUserIds.includes(userItem.id) ? 'bg-muted/50' : ''}>
                         <TableCell>
                           <input
@@ -835,6 +858,17 @@ export default function SuperAdmin() {
                     )}
                   </TableBody>
                 </Table>
+                <DataTablePagination
+                  currentPage={paginationUsers.currentPage}
+                  totalPages={paginationUsers.totalPages}
+                  totalItems={paginationUsers.totalItems}
+                  pageSize={paginationUsers.pageSize}
+                  startIndex={paginationUsers.startIndex}
+                  endIndex={paginationUsers.endIndex}
+                  onPageChange={paginationUsers.goToPage}
+                  onPageSizeChange={paginationUsers.setPageSize}
+                  itemName="usuários"
+                />
               </CardContent>
             </Card>
           </TabsContent>

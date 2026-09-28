@@ -63,9 +63,9 @@ export const ROLE_PERMISSIONS: Record<AppRole, string[]> = {
 };
 
 export const ROLE_LABELS: Record<AppRole, string> = {
-  teacher: 'Professora',
-  secretary: 'Secretaria',
+  teacher: 'Professor(a)',
+  secretary: 'Secretária',
   admin: 'Administrativo',
-  seller: 'Vendedor',
-  director: 'Diretora',
+  seller: 'Vendedor(a)',
+  director: 'Diretor(a)',
 };

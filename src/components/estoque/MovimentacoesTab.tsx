@@ -29,6 +29,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { MovimentacaoEstoque, TipoMovimentacaoEstoque } from '@/types/estoque';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface MovimentacoesTabProps {
   movimentacoes: MovimentacaoEstoque[];
@@ -78,6 +80,11 @@ export const MovimentacoesTab: React.FC<MovimentacoesTabProps> = ({
         return true;
       });
   }, [movimentacoes, searchTerm, tipoFilter]);
+
+  const paginationMovimentacoes = usePagination({
+    items: filteredMovimentacoes,
+    pageSize: 30,
+  });
 
   const getTipoBadge = (tipo: TipoMovimentacaoEstoque) => {
     switch (tipo) {
@@ -186,7 +193,7 @@ export const MovimentacoesTab: React.FC<MovimentacoesTabProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody className="text-xs">
-                {filteredMovimentacoes.map((mov) => {
+                {paginationMovimentacoes.paginatedItems.map((mov) => {
                   const isEntrada = mov.tipo === 'entrada';
 
                   return (
@@ -261,6 +268,18 @@ export const MovimentacoesTab: React.FC<MovimentacoesTabProps> = ({
           )}
         </CardContent>
       </Card>
+
+      <DataTablePagination
+        currentPage={paginationMovimentacoes.currentPage}
+        totalPages={paginationMovimentacoes.totalPages}
+        totalItems={paginationMovimentacoes.totalItems}
+        pageSize={paginationMovimentacoes.pageSize}
+        startIndex={paginationMovimentacoes.startIndex}
+        endIndex={paginationMovimentacoes.endIndex}
+        onPageChange={paginationMovimentacoes.goToPage}
+        onPageSizeChange={paginationMovimentacoes.setPageSize}
+        itemName="movimentações"
+      />
     </div>
   );
 };

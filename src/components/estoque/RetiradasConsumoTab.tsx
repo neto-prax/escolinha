@@ -37,6 +37,8 @@ import {
   MOTIVOS_RETIRADA,
   SETORES_ESCOLA,
 } from '@/types/estoque';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface RetiradasConsumoTabProps {
   movimentacoes: MovimentacaoEstoque[];
@@ -93,6 +95,11 @@ export const RetiradasConsumoTab: React.FC<RetiradasConsumoTabProps> = ({
       return true;
     });
   }, [retiradas, searchTerm, motivoFilter, setorFilter]);
+
+  const paginationRetiradas = usePagination({
+    items: filteredRetiradas,
+    pageSize: 30,
+  });
 
   const formatDateBR = (iso: string) => {
     try {
@@ -268,7 +275,7 @@ export const RetiradasConsumoTab: React.FC<RetiradasConsumoTabProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody className="text-xs">
-                {filteredRetiradas.map((retirada) => (
+                {paginationRetiradas.paginatedItems.map((retirada) => (
                   <TableRow key={retirada.id} className="hover:bg-slate-50/60">
                     <TableCell className="font-mono text-[11px] text-slate-500">
                       {formatDateBR(retirada.data)}
@@ -317,6 +324,18 @@ export const RetiradasConsumoTab: React.FC<RetiradasConsumoTabProps> = ({
           )}
         </CardContent>
       </Card>
+
+      <DataTablePagination
+        currentPage={paginationRetiradas.currentPage}
+        totalPages={paginationRetiradas.totalPages}
+        totalItems={paginationRetiradas.totalItems}
+        pageSize={paginationRetiradas.pageSize}
+        startIndex={paginationRetiradas.startIndex}
+        endIndex={paginationRetiradas.endIndex}
+        onPageChange={paginationRetiradas.goToPage}
+        onPageSizeChange={paginationRetiradas.setPageSize}
+        itemName="retiradas"
+      />
     </div>
   );
 };

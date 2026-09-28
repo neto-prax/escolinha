@@ -24,6 +24,7 @@ import {
   Calendar,
   Clock,
   BookOpen,
+  CalendarDays,
   CheckCircle2,
   ListOrdered,
   Sparkles,
@@ -225,18 +226,18 @@ export const PlanejamentoTab: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 border rounded-xl shadow-sm">
         <div>
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <BookOpen className="text-purple-600" size={22} />
-            Diário de Classe e Registro de Aulas
+            <CalendarDays className="text-purple-600" size={22} />
+            Planejamento de Aulas & BNCC
           </h2>
           <p className="text-xs text-slate-500">
-            Registre e acompanhe as aulas ministradas, objetivos BNCC, metodologia e status por turma.
+            Cadastre e acompanhe os planos de aula, metodologia, objetivos BNCC e conteúdos programáticos por turma.
           </p>
         </div>
         <Button
           onClick={handleOpenNewPlan}
           className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2 shadow-sm"
         >
-          <Plus size={16} /> Novo Registro no Diário
+          <Plus size={16} /> Novo Plano de Aula
         </Button>
       </div>
 
@@ -281,13 +282,13 @@ export const PlanejamentoTab: React.FC = () => {
         </Select>
       </div>
 
-      {/* Lista de Registros do Diário */}
+      {/* Lista de Planos de Aula */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {planosFiltrados.length === 0 ? (
           <div className="col-span-full text-center py-12 bg-white rounded-xl border border-dashed text-slate-500">
-            <BookOpen size={40} className="mx-auto text-slate-300 mb-2" />
-            <p className="font-semibold">Nenhum registro encontrado para estes filtros.</p>
-            <p className="text-xs text-slate-400 mt-1">Crie um novo registro no diário clicando no botão acima.</p>
+            <CalendarDays size={40} className="mx-auto text-slate-300 mb-2" />
+            <p className="font-semibold">Nenhum plano de aula encontrado para estes filtros.</p>
+            <p className="text-xs text-slate-400 mt-1">Crie um novo plano de aula clicando no botão acima.</p>
           </div>
         ) : (
           planosFiltrados.map((p) => (
@@ -370,16 +371,16 @@ export const PlanejamentoTab: React.FC = () => {
         )}
       </div>
 
-      {/* Modal de Criação / Edição de Registro no Diário */}
+      {/* Modal de Criação / Edição de Plano de Aula */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <BookOpen className="text-purple-600" size={20} />
-              {editingPlan ? 'Editar Registro no Diário' : 'Novo Registro no Diário'}
+              <CalendarDays className="text-purple-600" size={20} />
+              {editingPlan ? 'Editar Plano de Aula' : 'Novo Plano de Aula'}
             </DialogTitle>
             <DialogDescription>
-              Registre a aula com objetivos de aprendizagem, metodologia e recursos didáticos.
+              Cadastre o planejamento da aula com objetivos de aprendizagem BNCC, metodologia e recursos didáticos.
             </DialogDescription>
           </DialogHeader>
 

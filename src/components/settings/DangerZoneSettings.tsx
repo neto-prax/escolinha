@@ -16,7 +16,7 @@ const clearKeys = async (keys: string[]) => {
 
 export const DangerZoneSettings = () => {
   const handleClearAlunos = async () => {
-    if (confirm('Tem certeza que deseja apagar TODOS os alunos, enturmações e mensalidades geradas? Esta ação não pode ser desfeita.')) {
+    if (confirm('Tem certeza que deseja apagar TODOS os alunos, matrículas e mensalidades geradas? Esta ação não pode ser desfeita.')) {
       await clearKeys(['escolinha_alunos', 'escolinha_mensalidades']);
       toast.success('Todos os alunos foram apagados com sucesso.');
       setTimeout(() => window.location.reload(), 1500);
@@ -92,7 +92,7 @@ export const DangerZoneSettings = () => {
                 <Users className="h-4 w-4 text-muted-foreground" />
                 Apagar todos os Alunos
               </div>
-              <p className="text-sm text-muted-foreground">Remove todos os alunos, enturmações e boletos/mensalidades.</p>
+              <p className="text-sm text-muted-foreground">Remove todos os alunos, matrículas e boletos/mensalidades.</p>
             </div>
             <Button variant="destructive" onClick={handleClearAlunos} className="whitespace-nowrap">
               <Trash2 className="mr-2 h-4 w-4" />

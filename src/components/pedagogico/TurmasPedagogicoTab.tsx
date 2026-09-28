@@ -32,6 +32,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TransferirTurmaModal } from '@/components/alunos/TransferirTurmaModal';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 import {
   DEFAULT_TURMAS_CONFIG,
   ensureDefaultTurmas,
@@ -1021,6 +1023,16 @@ export const TurmasPedagogicoTab: React.FC = () => {
     return nomeAluno.includes(term) || mat.includes(term) || resp.includes(term) || doc.includes(term);
   });
 
+  const paginationTurmas = usePagination({
+    items: turmasFiltradas,
+    pageSize: 30,
+  });
+
+  const paginationAlunosModal = usePagination({
+    items: alunosFiltradosNoModal,
+    pageSize: 30,
+  });
+
   return (
     <div className="space-y-6">
       {/* Barra Superior com Métricas e Botão de Nova Turma */}
@@ -1137,7 +1149,7 @@ export const TurmasPedagogicoTab: React.FC = () => {
             </div>
           </div>
         ) : (
-          turmasFiltradas.map((turma, index) => {
+          paginationTurmas.paginatedItems.map((turma, index) => {
             // Contagem de alunos matriculados nesta turma usando matchesAlunoTurma
             const alunosMatriculados = alunos.filter((a) => matchesAlunoTurma(a, turma.nome)).length;
             const percentualOcupacao = Math.min(
@@ -1332,6 +1344,18 @@ export const TurmasPedagogicoTab: React.FC = () => {
           })
         )}
       </div>
+
+      <DataTablePagination
+        currentPage={paginationTurmas.currentPage}
+        totalPages={paginationTurmas.totalPages}
+        totalItems={paginationTurmas.totalItems}
+        pageSize={paginationTurmas.pageSize}
+        startIndex={paginationTurmas.startIndex}
+        endIndex={paginationTurmas.endIndex}
+        onPageChange={paginationTurmas.goToPage}
+        onPageSizeChange={paginationTurmas.setPageSize}
+        itemName="turmas"
+      />
 
       {/* Modal de Criação / Edição de Turma */}
       <Dialog open={isTurmaModalOpen} onOpenChange={setIsTurmaModalOpen}>
@@ -2234,12 +2258,13 @@ export const TurmasPedagogicoTab: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
                   {termoBuscaAlunosTurma
                     ? 'Tente pesquisar por outro termo, nome ou matrícula.'
-                    : 'Você pode enturmar ou transferir alunos para esta turma a qualquer momento no módulo Alunos ou usando o botão de transferência.'}
+                    : 'Você pode matricular ou transferir alunos para esta turma a qualquer momento no módulo Alunos ou usando o botão de transferência.'}
                 </p>
               </div>
             ) : (
-              <div className="rounded-md border overflow-hidden">
-                <Table>
+              <div className="space-y-4">
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
                   <TableHeader className="bg-slate-50">
                     <TableRow>
                       <TableHead className="w-10 text-center">
@@ -2267,7 +2292,7 @@ export const TurmasPedagogicoTab: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {alunosFiltradosNoModal.map((aluno) => {
+                    {paginationAlunosModal.paginatedItems.map((aluno) => {
                       const rawPhone =
                         aluno.contatoWhatsapp ||
                         aluno.contatoResponsavel ||
@@ -2374,6 +2399,19 @@ export const TurmasPedagogicoTab: React.FC = () => {
                   </TableBody>
                 </Table>
               </div>
+
+              <DataTablePagination
+                currentPage={paginationAlunosModal.currentPage}
+                totalPages={paginationAlunosModal.totalPages}
+                totalItems={paginationAlunosModal.totalItems}
+                pageSize={paginationAlunosModal.pageSize}
+                startIndex={paginationAlunosModal.startIndex}
+                endIndex={paginationAlunosModal.endIndex}
+                onPageChange={paginationAlunosModal.goToPage}
+                onPageSizeChange={paginationAlunosModal.setPageSize}
+                itemName="alunos"
+              />
+            </div>
             )}
           </div>
 

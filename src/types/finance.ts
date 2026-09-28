@@ -43,7 +43,10 @@ export interface Lancamento {
     subtotal: number;
   }[];
   reciboNumero?: string;
+  bancoEmissor?: BancoEmissorId;
 }
+
+export type BancoEmissorId = 'asaas' | 'cora' | 'sicoob' | 'bradesco' | 'bb' | 'itau' | 'santander' | 'caixa_gov' | 'inter' | 'nubank';
 
 // Para retrocompatibilidade caso algo use Expense
 export type Expense = Lancamento;

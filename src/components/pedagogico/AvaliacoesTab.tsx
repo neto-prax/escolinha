@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 import {
   TurmaPedagogica,
   Materia,
@@ -49,7 +51,7 @@ export interface ParecerAvaliativo {
   alunoNome: string;
   turma: string;
   disciplina: string;
-  bimestre: string;
+  bimestre: string;  
   nivelDesempenho: 'Abaixo do Esperado' | 'Em Desenvolvimento' | 'Adequado' | 'Excelente';
   parecerDescritivo: string;
   dataRegistro: string;
@@ -185,6 +187,16 @@ export const AvaliacoesTab: React.FC = () => {
     const matchesTurma = selectedTurma === 'todas' || item.turma === selectedTurma;
     const matchesBimestre = selectedBimestre === 'todos' || item.bimestre === selectedBimestre;
     return matchesSearch && matchesTurma && matchesBimestre;
+  });
+
+  const paginationAvaliacoes = usePagination({
+    items: filteredAvaliacoes,
+    pageSize: 30,
+  });
+
+  const paginationPareceres = usePagination({
+    items: filteredPareceres,
+    pageSize: 30,
   });
 
   const handleCreateAvaliacao = (e: React.FormEvent) => {
@@ -435,7 +447,8 @@ export const AvaliacoesTab: React.FC = () => {
 
       {/* Sub-tab 1: Quadro de Avaliações Planejadas */}
       {activeSubTab === 'planejamento' && (
-        <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
+        <div className="space-y-4">
+          <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
@@ -457,7 +470,7 @@ export const AvaliacoesTab: React.FC = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredAvaliacoes.map((av) => (
+                paginationAvaliacoes.paginatedItems.map((av) => (
                   <TableRow key={av.id} className="hover:bg-slate-50/80 transition-colors">
                     <TableCell className="font-medium text-slate-800">
                       <div>{av.titulo}</div>
@@ -509,11 +522,24 @@ export const AvaliacoesTab: React.FC = () => {
             </TableBody>
           </Table>
         </Card>
+        <DataTablePagination
+          currentPage={paginationAvaliacoes.currentPage}
+          totalPages={paginationAvaliacoes.totalPages}
+          totalItems={paginationAvaliacoes.totalItems}
+          pageSize={paginationAvaliacoes.pageSize}
+          startIndex={paginationAvaliacoes.startIndex}
+          endIndex={paginationAvaliacoes.endIndex}
+          onPageChange={paginationAvaliacoes.goToPage}
+          onPageSizeChange={paginationAvaliacoes.setPageSize}
+          itemName="avaliações"
+        />
+      </div>
       )}
 
       {/* Sub-tab 2: Pareceres Descritivos dos Alunos */}
       {activeSubTab === 'pareceres' && (
-        <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
+        <div className="space-y-4">
+          <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
@@ -534,7 +560,7 @@ export const AvaliacoesTab: React.FC = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPareceres.map((p) => (
+                paginationPareceres.paginatedItems.map((p) => (
                   <TableRow key={p.id} className="hover:bg-slate-50/80 transition-colors">
                     <TableCell className="font-medium text-slate-800">{p.alunoNome}</TableCell>
                     <TableCell>
@@ -567,6 +593,18 @@ export const AvaliacoesTab: React.FC = () => {
             </TableBody>
           </Table>
         </Card>
+        <DataTablePagination
+          currentPage={paginationPareceres.currentPage}
+          totalPages={paginationPareceres.totalPages}
+          totalItems={paginationPareceres.totalItems}
+          pageSize={paginationPareceres.pageSize}
+          startIndex={paginationPareceres.startIndex}
+          endIndex={paginationPareceres.endIndex}
+          onPageChange={paginationPareceres.goToPage}
+          onPageSizeChange={paginationPareceres.setPageSize}
+          itemName="pareceres"
+        />
+      </div>
       )}
 
       {/* Modal - Cadastrar Nova Avaliação */}

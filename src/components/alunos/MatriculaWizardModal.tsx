@@ -265,7 +265,7 @@ export const MatriculaWizardModal: React.FC<MatriculaWizardModalProps> = ({
       cep: cep.trim() || undefined,
       status: 'Ativo',
 
-      // Enturmação Regular
+      // Matrícula / Turma Regular
       setor: setorRegular,
       classe: classeRegular,
       turma: turmaLetraRegular,

@@ -1,3 +1,15 @@
+export interface Responsavel {
+  id: string;
+  nome: string;
+  contato: string;
+  parentesco?: string;
+  cpf?: string;
+  rg?: string;
+  email?: string;
+  responsavelFinanceiro?: boolean;
+  responsavelDidatico?: boolean;
+}
+
 export interface Aluno {
   id: string;
   nome: string;
@@ -57,13 +69,15 @@ export interface Aluno {
   responsavelFinanceiro?: boolean;
   responsavelOpcional?: string;
   responsavelDidatico?: boolean;
+  responsaveis?: Responsavel[];
   condutorIda?: string;
   condutorVolta?: string;
   
-  // Dados de Enturmação
+  // Dados de Matrícula e Turma
   setor?: string;
   classe?: string;
   turma?: string; // Letra da turma
+  turno?: string; // Matutino, Vespertino, Integral, Noturno
   descontoMensalidade?: string;
   diaVencimento?: string;
   valorBase?: string;
@@ -73,11 +87,13 @@ export interface Aluno {
   setorContraturno?: string;
   classeContraturno?: string;
   turmaContraturno?: string;
+  turnoContraturno?: string;
   valorContraturno?: string;
 
   // Matrícula & Parcelamento
   dataMatricula?: string;
   parcelasContratadas?: number;
+  mesInicio?: number;
 
   // Histórico Financeiro e Cobranças
   historicoFinanceiro?: CobrancaHistorico[];

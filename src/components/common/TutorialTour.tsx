@@ -119,18 +119,18 @@ export const MATRICULA_TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     target: '[data-tour="acoes-lote-alunos"]',
-    title: '3. Enturmação e Transferência em Lote',
+    title: '3. Matrícula e Transferência em Lote',
     content:
       'Selecione um ou vários alunos pelas caixas de seleção da tabela para atribuir a turma ou transferir turmas com apenas 1 clique.',
     actionHint:
-      'Como agir: Marque os alunos na tabela e use os botões que surgem no topo para enturmar ou transferir.',
+      'Como agir: Marque os alunos na tabela e use os botões que surgem no topo para matricular ou transferir.',
     placement: 'bottom',
   },
   {
     target: '[data-tour="tabela-alunos"]',
     title: '4. Listagem e Gestão de Alunos',
     content:
-      'Visualize todos os alunos matriculados. Clique nos títulos das colunas para ordenar por Matrícula, Nome, Responsável ou Enturmação, e use o menu de ações ao final para editar ou gerar documentos.',
+      'Visualize todos os alunos matriculados. Clique nos títulos das colunas para ordenar por Matrícula, Nome, Responsável ou Turma/Matrícula, e use o menu de ações ao final para editar ou gerar documentos.',
     actionHint:
       'Como agir: Localize qualquer aluno e gerencie suas informações cadastrais.',
     placement: 'top',
@@ -232,6 +232,9 @@ export const TutorialTour: React.FC<TutorialTourProps> = ({
       el = document.querySelector('[data-tour="card-turma"] button') as HTMLElement | null;
     }
 
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
     if (!el) {
       setTargetRect(null);
       setPopoverPos({
@@ -252,9 +255,6 @@ export const TutorialTour: React.FC<TutorialTourProps> = ({
     const popoverWidth = 340;
     const popoverHeight = 240;
     const margin = 14;
-
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
 
     let calculatedPlacement: 'top' | 'bottom' | 'left' | 'right' =
       step.placement && step.placement !== 'auto' ? step.placement : 'bottom';

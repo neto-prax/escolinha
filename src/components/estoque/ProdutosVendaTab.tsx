@@ -31,6 +31,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ProdutoEstoque, CATEGORIAS_PRODUTO } from '@/types/estoque';
+import { usePagination } from '@/hooks/usePagination';
+import { DataTablePagination } from '@/components/common/DataTablePagination';
 
 interface ProdutosVendaTabProps {
   produtos: ProdutoEstoque[];
@@ -89,6 +91,11 @@ export const ProdutosVendaTab: React.FC<ProdutosVendaTabProps> = ({
       return true;
     });
   }, [produtosVenda, searchTerm, categoriaFilter, statusFilter]);
+
+  const paginationProdutos = usePagination({
+    items: filteredProdutos,
+    pageSize: 30,
+  });
 
   return (
     <div className="space-y-4">
@@ -183,7 +190,7 @@ export const ProdutosVendaTab: React.FC<ProdutosVendaTabProps> = ({
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredProdutos.map((produto) => {
+          {paginationProdutos.paginatedItems.map((produto) => {
             const totalEstoque = produto.temVariacoes && produto.variacoes
               ? produto.variacoes.reduce((acc, v) => acc + v.quantidadeEstoque, 0)
               : produto.quantidadeEstoque || 0;
@@ -341,6 +348,18 @@ export const ProdutosVendaTab: React.FC<ProdutosVendaTabProps> = ({
           })}
         </div>
       )}
+
+      <DataTablePagination
+        currentPage={paginationProdutos.currentPage}
+        totalPages={paginationProdutos.totalPages}
+        totalItems={paginationProdutos.totalItems}
+        pageSize={paginationProdutos.pageSize}
+        startIndex={paginationProdutos.startIndex}
+        endIndex={paginationProdutos.endIndex}
+        onPageChange={paginationProdutos.goToPage}
+        onPageSizeChange={paginationProdutos.setPageSize}
+        itemName="produtos"
+      />
     </div>
   );
 };

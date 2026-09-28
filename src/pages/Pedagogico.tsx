@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AnoLetivoSelector } from '@/components/pedagogico/AnoLetivoSelector';
 import {
@@ -13,44 +13,45 @@ import { DiarioTab } from '@/components/pedagogico/DiarioTab';
 import { PlanejamentoTab } from '@/components/pedagogico/PlanejamentoTab';
 import { AvaliacoesTab } from '@/components/pedagogico/AvaliacoesTab';
 import { TurmasPedagogicoTab } from '@/components/pedagogico/TurmasPedagogicoTab';
-import { PedagogicoSettings } from '@/components/settings/PedagogicoSettings';
+import { CalendarioEscolarTab } from '@/components/pedagogico/CalendarioEscolarTab';
 import {
   BookOpen,
   FileText,
   CalendarDays,
   ClipboardCheck,
   Users,
-  Settings2,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useSearchParams } from 'react-router-dom';
 
 const Pedagogico = () => {
   const { canAccessTab } = usePermissions();
-  const [activeTab, setActiveTab] = useState('turmas');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'diario');
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
-  const canAccessConfig =
-    canAccessTab('pedagogico', 'configuracoes') ||
-    canAccessTab('pedagogico', 'materias') ||
-    canAccessTab('pedagogico', 'ciclos-medias') ||
-    canAccessTab('pedagogico', 'notas') ||
-    canAccessTab('configuracoes', 'pedagogico');
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   const allTabs = [
-    {
-      id: 'planejamento',
-      label: (
-        <span className="flex items-center gap-2">
-          <CalendarDays size={16} /> Planejamento
-        </span>
-      ),
-      content: <DiarioTab />,
-    },
     {
       id: 'diario',
       label: (
         <span className="flex items-center gap-2">
           <BookOpen size={16} /> Diário de Classe
+        </span>
+      ),
+      content: <DiarioTab />,
+    },
+    {
+      id: 'planejamento',
+      label: (
+        <span className="flex items-center gap-2">
+          <CalendarDays size={16} /> Planejamento
         </span>
       ),
       content: <PlanejamentoTab />,
@@ -73,24 +74,22 @@ const Pedagogico = () => {
       ),
       content: <TurmasPedagogicoTab />,
     },
-    ...(canAccessConfig
-      ? [
-          {
-            id: 'configuracoes',
-            label: (
-              <span className="flex items-center gap-2">
-                <Settings2 size={16} /> Configurações
-              </span>
-            ),
-            content: <PedagogicoSettings />,
-          },
-        ]
-      : []),
+    {
+      id: 'calendario',
+      label: (
+        <span className="flex items-center gap-2">
+          <CalendarDays size={16} /> Calendário Escolar
+        </span>
+      ),
+      content: <CalendarioEscolarTab />,
+    },
   ];
 
-  const visibleTabs = allTabs.filter(
-    (t) => t.id === 'configuracoes' || canAccessTab('pedagogico', t.id)
-  );
+  const visibleTabs = allTabs.filter((t) => canAccessTab('pedagogico', t.id));
+
+  const effectiveActiveTab = visibleTabs.some((t) => t.id === activeTab)
+    ? activeTab
+    : (visibleTabs[0]?.id || 'diario');
 
   const contextualSteps =
     activeTab === 'turmas'
@@ -116,8 +115,11 @@ const Pedagogico = () => {
       </div>
       <Tabs
         tabs={visibleTabs}
-        activeTabId={activeTab}
-        onTabChange={setActiveTab}
+        activeTabId={effectiveActiveTab}
+        onTabChange={(id) => {
+          setActiveTab(id);
+          setSearchParams({ tab: id });
+        }}
       />
 
       {/* Tutorial Passo a Passo com Seta e Caixa de Mensagem */}
