@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   EventoCalendarioEscolar,
   TipoEventoCalendario,
@@ -79,6 +80,338 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+function formatPeriodoEvento(dataInicio: string, dataFim?: string): string {
+  try {
+    const [yIni, mIni, dIni] = dataInicio.split('-').map(Number);
+    if (!dataFim || dataFim === dataInicio) {
+      return `${String(dIni).padStart(2, '0')}/${String(mIni).padStart(2, '0')}`;
+    }
+    const [yFim, mFim, dFim] = dataFim.split('-').map(Number);
+    if (mIni === mFim) {
+      return `${String(dIni).padStart(2, '0')} a ${String(dFim).padStart(2, '0')}/${String(mIni).padStart(2, '0')}`;
+    }
+    return `${String(dIni).padStart(2, '0')}/${String(mIni).padStart(2, '0')} a ${String(dFim).padStart(2, '0')}/${String(mFim).padStart(2, '0')}`;
+  } catch {
+    return dataInicio;
+  }
+}
+
+interface CalendarioAnualImpressoProps {
+  anoLetivo: string;
+  eventos: EventoCalendarioEscolar[];
+  escolaNome?: string;
+  stats?: {
+    total: number;
+    semAulaCount: number;
+    eventosCulturaisCount: number;
+    reunioesCount: number;
+    paradasCount: number;
+    sabadosLetivosCount: number;
+  };
+}
+
+export const CalendarioAnualImpresso: React.FC<CalendarioAnualImpressoProps> = ({
+  anoLetivo,
+  eventos,
+  escolaNome = 'Colégio Interagir',
+  stats,
+}) => {
+  const anoNum = anoLetivo !== 'todos' ? parseInt(anoLetivo, 10) || 2026 : 2026;
+
+  const mesesDoAno = useMemo(() => {
+    return Array.from({ length: 12 }, (_, mesIdx) => {
+      const monthDate = new Date(anoNum, mesIdx, 1);
+      const monthStart = startOfMonth(monthDate);
+      const monthEnd = endOfMonth(monthDate);
+      const startDate = startOfWeek(monthStart, { weekStartsOn: 0 }); // Domingo
+      const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 }); // Sábado
+      const dias = eachDayOfInterval({ start: startDate, end: endDate });
+      return {
+        mesIdx,
+        nome: format(monthDate, 'MMMM', { locale: ptBR }),
+        date: monthDate,
+        dias,
+      };
+    });
+  }, [anoNum]);
+
+  const eventosOrdenados = useMemo(() => {
+    return [...eventos].sort((a, b) => a.dataInicio.localeCompare(b.dataInicio));
+  }, [eventos]);
+
+  return (
+    <div className="w-full text-slate-900 bg-white font-sans text-xs">
+      {/* ===================== CABEÇALHO DO DOCUMENTO ===================== */}
+      <div className="border-b-2 border-slate-800 pb-2.5 mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-lg bg-purple-700 text-white flex items-center justify-center font-bold text-base shrink-0">
+            <School size={20} />
+          </div>
+          <div>
+            <h1 className="text-base font-bold uppercase tracking-wider text-slate-900 leading-tight">
+              {escolaNome}
+            </h1>
+            <p className="text-[10px] text-slate-600 font-semibold tracking-wide">
+              CALENDÁRIO ESCOLAR OFICIAL — ANO LETIVO {anoLetivo}
+            </p>
+          </div>
+        </div>
+
+        <div className="text-right shrink-0">
+          <div className="inline-block bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-0.5 rounded text-[9.5px] font-bold">
+            Ano Letivo {anoLetivo}
+          </div>
+          <p className="text-[8px] text-slate-500 mt-0.5">
+            Documento Oficial • Homologado
+          </p>
+        </div>
+      </div>
+
+      {/* ===================== GRADE DOS 12 MESES (FORMATO ANUAL) ===================== */}
+      <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-2 mb-3">
+        {mesesDoAno.map((mes) => (
+          <div
+            key={mes.mesIdx}
+            className="border border-slate-300 rounded overflow-hidden bg-white flex flex-col justify-between"
+            style={{ pageBreakInside: 'avoid' }}
+          >
+            {/* Header do Mês */}
+            <div className="bg-slate-100 text-slate-800 font-bold text-[10px] uppercase tracking-wider py-1 px-1 text-center border-b border-slate-300">
+              {mes.nome}
+            </div>
+
+            {/* Cabeçalho dos Dias da Semana */}
+            <div className="grid grid-cols-7 text-[7.5px] font-bold text-center text-slate-600 bg-slate-50 border-b border-slate-200 py-0.5">
+              <span className="text-rose-600">D</span>
+              <span>S</span>
+              <span>T</span>
+              <span>Q</span>
+              <span>Q</span>
+              <span>S</span>
+              <span className="text-purple-700">S</span>
+            </div>
+
+            {/* Grade dos Dias */}
+            <div className="grid grid-cols-7 gap-y-0.5 gap-x-0.5 p-1 text-center items-center justify-items-center">
+              {mes.dias.map((dia, dIdx) => {
+                const diaIso = format(dia, 'yyyy-MM-dd');
+                const isDiaDoMes = isSameMonth(dia, mes.date);
+                const diaNum = format(dia, 'd');
+                const dayOfWeek = dia.getDay(); // 0 = Domingo, 6 = Sábado
+
+                if (!isDiaDoMes) {
+                  return (
+                    <span
+                      key={dIdx}
+                      className="text-slate-200 text-[8px] w-[18px] h-[18px] flex items-center justify-center"
+                    >
+                      {diaNum}
+                    </span>
+                  );
+                }
+
+                const eventosNoDia = getEventosNaData(diaIso, eventos);
+                const diaSemAula = getDiaSemAula(diaIso, eventos);
+
+                if (diaSemAula) {
+                  const isParada = diaSemAula.tipo === 'planejamento';
+                  return (
+                    <span
+                      key={dIdx}
+                      className={`w-[18px] h-[18px] rounded-full text-white font-bold text-[8px] flex items-center justify-center shrink-0 ${
+                        isParada ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      title={`${diaSemAula.titulo} (${isParada ? 'Parada Pedagógica' : 'Sem Aula'})`}
+                    >
+                      {diaNum}
+                    </span>
+                  );
+                }
+
+                if (eventosNoDia.length > 0) {
+                  const isLetivoEsp = eventosNoDia.some((e) => e.tipo === 'letivo_especial');
+                  const isReuniao = eventosNoDia.some((e) => e.tipo === 'reuniao_pais');
+                  const isAvaliacao = eventosNoDia.some((e) => e.tipo === 'avaliacao');
+
+                  const bgClass = isLetivoEsp
+                    ? 'bg-emerald-600'
+                    : isReuniao
+                    ? 'bg-blue-600'
+                    : isAvaliacao
+                    ? 'bg-indigo-600'
+                    : 'bg-purple-600';
+
+                  return (
+                    <span
+                      key={dIdx}
+                      className={`w-[18px] h-[18px] rounded-full text-white font-bold text-[8px] flex items-center justify-center shrink-0 ${bgClass}`}
+                      title={eventosNoDia.map((e) => e.titulo).join(', ')}
+                    >
+                      {diaNum}
+                    </span>
+                  );
+                }
+
+                return (
+                  <span
+                    key={dIdx}
+                    className={`w-[18px] h-[18px] flex items-center justify-center text-[8px] ${
+                      dayOfWeek === 0
+                        ? 'text-rose-600 font-semibold'
+                        : dayOfWeek === 6
+                        ? 'text-slate-400 font-normal'
+                        : 'text-slate-800 font-medium'
+                    }`}
+                  >
+                    {diaNum}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ===================== LEGENDA DE CORES ===================== */}
+      <div className="border border-slate-300 rounded p-2 bg-slate-50/80 mb-2.5">
+        <div className="text-[9px] font-bold text-slate-800 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+          Legenda de Cores do Calendário Escolar
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-[8.5px]">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-rose-500 text-white font-bold text-[7.5px] flex items-center justify-center shrink-0">
+              •
+            </span>
+            <span className="text-slate-800 font-medium">Feriado / Recesso (Sem Aula)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white font-bold text-[7.5px] flex items-center justify-center shrink-0">
+              •
+            </span>
+            <span className="text-slate-800 font-medium">Parada Pedagógica (Sem Aula)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-emerald-600 text-white font-bold text-[7.5px] flex items-center justify-center shrink-0">
+              •
+            </span>
+            <span className="text-slate-800 font-medium">Sábado Letivo (Com Aula)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-purple-600 text-white font-bold text-[7.5px] flex items-center justify-center shrink-0">
+              •
+            </span>
+            <span className="text-slate-800 font-medium">Evento Escolar / Cultural</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-blue-600 text-white font-bold text-[7.5px] flex items-center justify-center shrink-0">
+              •
+            </span>
+            <span className="text-slate-800 font-medium">Reunião de Pais e Mestres</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-indigo-600 text-white font-bold text-[7.5px] flex items-center justify-center shrink-0">
+              •
+            </span>
+            <span className="text-slate-800 font-medium">Avaliações / Provas</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ===================== RELAÇÃO DE DATAS E EVENTOS DO ANO LETIVO ===================== */}
+      <div className="border border-slate-300 rounded p-2 bg-white">
+        <div className="text-[9px] font-bold text-slate-800 uppercase tracking-wider mb-1.5 flex items-center justify-between border-b border-slate-200 pb-1">
+          <div className="flex items-center gap-1.5">
+            <CalendarCheck size={12} className="text-purple-600" />
+            <span>Relação de Datas e Eventos do Ano Letivo {anoLetivo}</span>
+          </div>
+          <span className="text-slate-500 font-normal text-[8px]">
+            {eventosOrdenados.length} datas registradas
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-x-3 gap-y-1 text-[8px]">
+          {eventosOrdenados.map((ev) => {
+            const periodoStr = formatPeriodoEvento(ev.dataInicio, ev.dataFim);
+            const isSemAula = ev.temAula === false;
+            const isParada = ev.tipo === 'planejamento';
+            const isLetivoEsp = ev.tipo === 'letivo_especial';
+            const isReuniao = ev.tipo === 'reuniao_pais';
+            const isAvaliacao = ev.tipo === 'avaliacao';
+
+            const badgeColor = isSemAula
+              ? isParada
+                ? 'bg-amber-500 text-white'
+                : 'bg-rose-500 text-white'
+              : isLetivoEsp
+              ? 'bg-emerald-600 text-white'
+              : isReuniao
+              ? 'bg-blue-600 text-white'
+              : isAvaliacao
+              ? 'bg-indigo-600 text-white'
+              : 'bg-purple-600 text-white';
+
+            const publicoStr = ev.publicoAlvo
+              ? Array.isArray(ev.publicoAlvo)
+                ? ev.publicoAlvo.join(', ')
+                : ev.publicoAlvo
+              : 'Toda a Escola';
+
+            return (
+              <div
+                key={ev.id}
+                className="flex items-start gap-1.5 py-0.5 border-b border-slate-100 min-w-0"
+                style={{ pageBreakInside: 'avoid' }}
+              >
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[7.5px] font-bold shrink-0 leading-none ${badgeColor}`}
+                >
+                  {periodoStr}
+                </span>
+                <div className="min-w-0 flex-1 leading-tight">
+                  <span className="font-semibold text-slate-800 block truncate" title={ev.titulo}>
+                    {ev.titulo}
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[7px] text-slate-500">
+                    <span
+                      className={
+                        isSemAula ? 'text-rose-600 font-semibold' : 'text-emerald-700 font-semibold'
+                      }
+                    >
+                      {isSemAula ? '❌ Sem Aula' : '✅ Com Aula'}
+                    </span>
+                    {publicoStr !== 'Toda a Escola' && (
+                      <span className="text-purple-700 truncate max-w-[105px]" title={publicoStr}>
+                        • {publicoStr}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ===================== ASSINATURAS INSTITUCIONAIS ===================== */}
+      <div className="mt-3 pt-2.5 border-t border-slate-300 grid grid-cols-3 text-center text-[8px] text-slate-600">
+        <div>
+          <div className="w-28 sm:w-36 border-b border-slate-400 mx-auto mb-1"></div>
+          <p className="font-semibold">Coordenação Pedagógica</p>
+        </div>
+        <div>
+          <div className="w-28 sm:w-36 border-b border-slate-400 mx-auto mb-1"></div>
+          <p className="font-semibold">Direção Geral</p>
+        </div>
+        <div>
+          <p className="text-slate-400">Homologado pelo Conselho Escolar</p>
+          <p className="font-bold text-slate-700">Ano Letivo {anoLetivo}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const CalendarioEscolarTab: React.FC = () => {
   const currentYear = new Date().getFullYear(); // 2026
   const [storedAno] = useLocalStorage<string>('escolinha_ano_letivo_ativo', String(currentYear));
@@ -104,8 +437,10 @@ export const CalendarioEscolarTab: React.FC = () => {
   const [filterTipo, setFilterTipo] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modais
+  // Contexto e Modais
+  const { school } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [editingEvento, setEditingEvento] = useState<EventoCalendarioEscolar | null>(null);
   const [selectedDiaDetail, setSelectedDiaDetail] = useState<{
     dataIso: string;
@@ -514,7 +849,7 @@ export const CalendarioEscolarTab: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xs print:hidden">
         <div>
           <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <CalendarDays className="text-purple-600" size={22} />
@@ -539,9 +874,9 @@ export const CalendarioEscolarTab: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
+            onClick={() => setIsPrintModalOpen(true)}
             className="text-xs text-slate-600 dark:text-slate-300"
-            title="Imprimir Calendário"
+            title="Visualizar e Imprimir Calendário Escolar Anual"
           >
             <Printer size={14} className="mr-1.5" />
             Imprimir
@@ -556,7 +891,7 @@ export const CalendarioEscolarTab: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:hidden">
         <Card className="border-slate-200 dark:border-slate-800 shadow-xs">
           <CardContent className="p-3.5 flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
@@ -621,7 +956,7 @@ export const CalendarioEscolarTab: React.FC = () => {
       </div>
 
       {/* Controles de Visualização, Mês e Filtros */}
-      <Card className="border-slate-200 dark:border-slate-800 shadow-xs">
+      <Card className="border-slate-200 dark:border-slate-800 shadow-xs print:hidden">
         <CardContent className="p-3.5 space-y-3">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             {/* Navegador de Mês */}
@@ -725,7 +1060,7 @@ export const CalendarioEscolarTab: React.FC = () => {
       </Card>
 
       {/* Legenda Visual Rápida */}
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 dark:text-slate-400 px-1">
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 dark:text-slate-400 px-1 print:hidden">
         <span className="font-semibold text-slate-700 dark:text-slate-300">Legenda:</span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
@@ -751,7 +1086,7 @@ export const CalendarioEscolarTab: React.FC = () => {
 
       {/* ======================= MODO GRADE MENSAL ======================= */}
       {viewMode === 'grid' && (
-        <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden print:hidden">
           <CardContent className="p-0">
             {/* Cabeçalho dos Dias da Semana */}
             <div className="grid grid-cols-7 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 py-2.5">
@@ -875,7 +1210,7 @@ export const CalendarioEscolarTab: React.FC = () => {
 
       {/* ======================= MODO LISTA / CRONOGRAMA ======================= */}
       {viewMode === 'list' && (
-        <div className="space-y-3">
+        <div className="space-y-3 print:hidden">
           {eventosFiltrados.length === 0 ? (
             <Card className="text-center p-8 border-dashed border-slate-200 dark:border-slate-800">
               <CardContent className="pt-6">
@@ -1008,7 +1343,7 @@ export const CalendarioEscolarTab: React.FC = () => {
 
       {/* ======================= MODAL DE CRIAÇÃO / EDIÇÃO ======================= */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto print:hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="text-purple-600" size={20} />
@@ -1387,7 +1722,7 @@ export const CalendarioEscolarTab: React.FC = () => {
         open={Boolean(selectedDiaDetail)}
         onOpenChange={(open) => !open && setSelectedDiaDetail(null)}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md print:hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="text-purple-600" size={20} />
@@ -1495,6 +1830,64 @@ export const CalendarioEscolarTab: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ======================= MODAL DE PRÉ-VISUALIZAÇÃO DE IMPRESSÃO (ANUAL) ======================= */}
+      <Dialog open={isPrintModalOpen} onOpenChange={setIsPrintModalOpen}>
+        <DialogContent className="max-w-5xl max-h-[95vh] flex flex-col p-0 print:m-0 print:p-0 print:max-w-none print:w-full print:h-auto print:border-none print:shadow-none bg-white">
+          <DialogHeader className="p-4 border-b bg-slate-50 dark:bg-slate-900 flex flex-row items-center justify-between print:hidden">
+            <div>
+              <DialogTitle className="text-base font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                <CalendarDays className="h-5 w-5 text-purple-600" />
+                <span>Calendário Escolar Anual ({anoLetivo}) — Pronto para Impressão</span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                Formato anual oficial com os 12 meses, legenda de cores e cronograma completo de datas.
+              </DialogDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => window.print()}
+                size="sm"
+                className="bg-purple-600 hover:bg-purple-700 text-white gap-1.5 text-xs shadow-xs"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir Agora (A4)
+              </Button>
+              <Button
+                onClick={() => setIsPrintModalOpen(false)}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+              >
+                Fechar
+              </Button>
+            </div>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 dark:bg-slate-950 print:p-0 print:bg-white print:overflow-visible">
+            <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-sm border border-slate-200 print:border-none print:shadow-none print:p-0 print:max-w-none">
+              <CalendarioAnualImpresso
+                anoLetivo={anoLetivo}
+                eventos={eventosDoAno}
+                escolaNome={school?.name}
+                stats={stats}
+              />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ======================= IMPRESSÃO DIRETA (FALLBACK PARA CTRL+P OU ATALHO) ======================= */}
+      {!isPrintModalOpen && (
+        <div className="hidden print:block print:w-full print:bg-white print:text-black print:p-0 print:m-0">
+          <CalendarioAnualImpresso
+            anoLetivo={anoLetivo}
+            eventos={eventosDoAno}
+            escolaNome={school?.name}
+            stats={stats}
+          />
+        </div>
+      )}
     </div>
   );
 };
