@@ -146,7 +146,7 @@ export function useWhatsAppTriggers() {
                 ...currentAutomation,
                 triggers: updatedTriggers,
               },
-            } as Json,
+            } as unknown as Json,
           })
           .eq('id', school.id);
       } catch (err) {

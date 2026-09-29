@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 
 export interface SystemBranding {
   logoUrl: string;
@@ -148,14 +149,15 @@ export function useSystemBranding() {
 
         const schoolId = profile?.school_id;
         if (schoolId) {
+          const cloudRow: Database['public']['Tables']['app_state']['Insert'] = {
+            school_id: schoolId,
+            key: 'system_branding',
+            value: { data: updated },
+            updated_at: new Date().toISOString(),
+          };
           await supabase
             .from('app_state')
-            .upsert([{
-              school_id: schoolId,
-              key: 'system_branding',
-              value: { data: updated },
-              updated_at: new Date().toISOString(),
-            }], { onConflict: 'school_id,key' });
+            .upsert(cloudRow, { onConflict: 'school_id,key' });
         }
       }
     } catch (e) {
@@ -189,14 +191,15 @@ export function useSystemBranding() {
 
         const schoolId = profile?.school_id;
         if (schoolId) {
+          const cloudRow: Database['public']['Tables']['app_state']['Insert'] = {
+            school_id: schoolId,
+            key: 'system_branding',
+            value: { data: resetted },
+            updated_at: new Date().toISOString(),
+          };
           await supabase
             .from('app_state')
-            .upsert([{
-              school_id: schoolId,
-              key: 'system_branding',
-              value: { data: resetted },
-              updated_at: new Date().toISOString(),
-            }], { onConflict: 'school_id,key' });
+            .upsert(cloudRow, { onConflict: 'school_id,key' });
         }
       }
     } catch (e) {
