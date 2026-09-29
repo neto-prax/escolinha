@@ -28,6 +28,7 @@ import {
   RefreshCw,
   ExternalLink,
   MessageCircle,
+  Copy,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -64,6 +65,24 @@ import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 
+function formatPhoneNumber(phone?: string | null): string {
+  if (!phone) return '';
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length === 13 && clean.startsWith('55')) {
+    return `+55 (${clean.slice(2, 4)}) ${clean.slice(4, 9)}-${clean.slice(9)}`;
+  }
+  if (clean.length === 12 && clean.startsWith('55')) {
+    return `+55 (${clean.slice(2, 4)}) ${clean.slice(4, 8)}-${clean.slice(8)}`;
+  }
+  if (clean.length === 11) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
+  }
+  if (clean.length === 10) {
+    return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+  }
+  return phone;
+}
+
 export function WhatsAppChatView() {
   const {
     conversations,
@@ -86,6 +105,8 @@ export function WhatsAppChatView() {
     isDemoMode,
     setIsDemoMode,
     isLoadingDbConversations,
+    onlyFromToday,
+    setOnlyFromToday,
   } = useWhatsAppInbox();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,6 +116,8 @@ export function WhatsAppChatView() {
   const [showRightDrawer, setShowRightDrawer] = useState(true);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [targetSectorId, setTargetSectorId] = useState('');
+  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   // Simulator modal state
   const [simulatorOpen, setSimulatorOpen] = useState(false);
@@ -253,6 +276,45 @@ export function WhatsAppChatView() {
     }
   };
 
+  // Group messages by date for visual clarity (Hoje, Ontem, 29 de janeiro de 2026)
+  const groupedMessages = useMemo(() => {
+    const groups: { dateKey: string; dateLabel: string; messages: WhatsAppChatMessage[] }[] = [];
+
+    for (const msg of activeMessages) {
+      let dateKey = 'outros';
+      let dateLabel = 'Mensagens';
+      try {
+        const d = new Date(msg.created_at);
+        if (!isNaN(d.getTime())) {
+          dateKey = format(d, 'yyyy-MM-dd');
+          if (isToday(d)) {
+            dateLabel = 'Hoje';
+          } else if (isYesterday(d)) {
+            dateLabel = 'Ontem';
+          } else {
+            dateLabel = format(d, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+          }
+        }
+      } catch {
+        dateKey = 'outros';
+        dateLabel = 'Mensagens';
+      }
+
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.dateKey === dateKey) {
+        lastGroup.messages.push(msg);
+      } else {
+        groups.push({
+          dateKey,
+          dateLabel,
+          messages: [msg],
+        });
+      }
+    }
+
+    return groups;
+  }, [activeMessages]);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'open':
@@ -269,7 +331,112 @@ export function WhatsAppChatView() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] min-h-[600px] border rounded-xl overflow-hidden bg-background shadow-sm">
+    <div className="flex flex-col gap-3">
+      {/* ---------------- BANNER SUPERIOR: WHATSAPP OFICIAL CONECTADO ---------------- */}
+      <div className="bg-gradient-to-r from-emerald-500/10 via-background to-primary/5 border border-emerald-500/25 rounded-xl p-3 sm:p-4 shadow-xs">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+          {/* Dados do WhatsApp Conectado visível para todos os usuários */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative flex-shrink-0">
+              <Avatar className="h-11 w-11 border-2 border-emerald-500/40 ring-2 ring-emerald-500/15">
+                {uaizapStatus.profilePicUrl ? (
+                  <AvatarImage src={uaizapStatus.profilePicUrl} alt={uaizapStatus.profileName || 'WhatsApp'} />
+                ) : null}
+                <AvatarFallback className="bg-emerald-600 text-white font-bold">
+                  {uaizapStatus.profileName ? uaizapStatus.profileName.slice(0, 2).toUpperCase() : 'WA'}
+                </AvatarFallback>
+              </Avatar>
+              <span
+                className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-background ${
+                  uaizapStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}
+                title={uaizapStatus.connected ? 'WhatsApp Online e Conectado' : 'Aguardando verificação'}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-sm sm:text-base text-foreground">
+                  {uaizapStatus.profileName || 'Neto Oliver'}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={
+                    uaizapStatus.connected
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[11px] font-medium'
+                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[11px] font-medium'
+                  }
+                >
+                  {uaizapStatus.connected ? '🟢 Conectado (Online)' : 'Aguardando Conexão'}
+                </Badge>
+                <span className="text-xs text-muted-foreground font-mono bg-muted/60 px-2 py-0.5 rounded-md border font-semibold">
+                  {formatPhoneNumber(uaizapStatus.ownerPhone || '557583690441')}
+                </span>
+                <Badge variant="secondary" className="text-[10px] h-5">
+                  Instância: {uaizapStatus.instanceName || 'Neto'}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                <span className="font-medium text-foreground">WhatsApp Oficial da Escola</span>
+                <span>•</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  Pronto para envio e recebimento em tempo real
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Filtro de Mensagens do Banco & Ações */}
+          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end">
+            <div className="flex items-center gap-1.5 bg-background/90 border rounded-lg px-2.5 py-1 text-xs shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              <span className="text-muted-foreground hidden sm:inline">Banco:</span>
+              <Badge
+                variant={onlyFromToday ? 'default' : 'outline'}
+                className="text-[10px] h-5 cursor-pointer font-medium"
+                onClick={() => setOnlyFromToday(!onlyFromToday)}
+                title="Clique para alternar entre mensagens a partir de hoje ou todo o histórico"
+              >
+                {onlyFromToday ? 'A partir de Hoje' : 'Todo o Histórico'}
+              </Badge>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-1.5 text-[11px] text-primary hover:bg-primary/10"
+                onClick={() => setOnlyFromToday(!onlyFromToday)}
+              >
+                {onlyFromToday ? 'Ver histórico antigo' : 'Filtrar apenas hoje'}
+              </Button>
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+              onClick={() => setWebhookModalOpen(true)}
+              title="Configurar Webhook no painel da sua Uaizap para receber mensagens"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Webhook</span>
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 px-2.5 text-xs gap-1.5"
+              onClick={syncWithUaizap}
+              disabled={isSyncing}
+              title="Verificar status e sincronizar com o WhatsApp"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------------- CONTAINER PRINCIPAL DO CHAT ---------------- */}
+      <div className="flex h-[calc(100vh-17rem)] min-h-[560px] border rounded-xl overflow-hidden bg-background shadow-sm">
       {/* ---------------- 1. PAINEL ESQUERDO: LISTA DE CONVERSAS ---------------- */}
       <div className="w-80 md:w-96 flex flex-col border-r bg-muted/20">
         {/* Cabeçalho do Painel com Filtros e Acesso */}
@@ -340,6 +507,16 @@ export function WhatsAppChatView() {
                   Modo Demo (Sair)
                 </Badge>
               ) : null}
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-1.5 text-[10px] gap-1 border-muted-foreground/30 text-muted-foreground hover:text-foreground"
+                onClick={() => setWebhookModalOpen(true)}
+                title="Configurar Webhook no painel da sua Uaizap para receber mensagens"
+              >
+                Webhook
+              </Button>
 
               <Button
                 size="sm"
@@ -615,72 +792,101 @@ export function WhatsAppChatView() {
               </div>
 
               {activeMessages.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground text-xs space-y-1">
+                <div className="text-center py-10 text-muted-foreground text-xs space-y-2">
                   <MessageSquare className="w-8 h-8 mx-auto opacity-30" />
-                  <p className="font-medium text-foreground">Nenhuma mensagem nesta conversa ainda</p>
-                  <p className="text-[11px]">Envie uma mensagem abaixo para falar com o responsável.</p>
+                  <p className="font-medium text-foreground">
+                    {onlyFromToday
+                      ? 'Nenhuma mensagem recebida ou enviada hoje'
+                      : 'Nenhuma mensagem nesta conversa ainda'}
+                  </p>
+                  <p className="text-[11px] max-w-sm mx-auto">
+                    {onlyFromToday
+                      ? 'O filtro do banco está configurado para mensagens a partir de hoje. Envie uma mensagem abaixo para iniciar ou clique para consultar mensagens anteriores.'
+                      : 'Envie uma mensagem abaixo para falar com o responsável.'}
+                  </p>
+                  {onlyFromToday && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5 mt-1"
+                      onClick={() => setOnlyFromToday(false)}
+                    >
+                      <Clock className="w-3.5 h-3.5 mr-1.5" />
+                      Ver mensagens de dias anteriores
+                    </Button>
+                  )}
                 </div>
               ) : (
-                activeMessages.map((msg) => {
-                  const isMe = msg.direction === 'outgoing';
-                  const isAuto = msg.is_automated;
-
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                    >
-                      <div
-                        className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-xs space-y-1 text-xs relative ${
-                          isMe
-                            ? isAuto
-                              ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs'
-                              : 'bg-primary text-primary-foreground rounded-br-xs'
-                            : 'bg-card text-card-foreground border rounded-bl-xs'
-                        }`}
-                      >
-                        {/* Remetente ou Badge de Gatilho / Trigger */}
-                        <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
-                          {isAuto ? (
-                            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
-                              <Bot className="w-3 h-3" />
-                              {msg.sender_name || 'Automação Purple Bot'}
-                            </span>
-                          ) : (
-                            <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
-                          )}
-                        </div>
-
-                        {/* Conteúdo de Texto */}
-                        <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
-                          {msg.body}
-                        </p>
-
-                        {/* Horário e Status de Entrega */}
-                        <div
-                          className={`flex items-center justify-end gap-1 text-[10px] pt-1 ${
-                            isMe && !isAuto ? 'text-primary-foreground/75' : 'text-muted-foreground'
-                          }`}
-                        >
-                          <span>{formatMessageTime(msg.created_at)}</span>
-                          {isMe && (
-                            <span>
-                              {msg.status === 'read' ? (
-                                <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
-                              ) : msg.status === 'delivered' ? (
-                                <CheckCheck className="w-3.5 h-3.5" />
-                              ) : msg.status === 'sending' ? (
-                                <Clock className="w-3.5 h-3.5 animate-pulse" />
-                              ) : (
-                                <Check className="w-3.5 h-3.5" />
-                              )}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                groupedMessages.map((group) => (
+                  <div key={group.dateKey} className="space-y-3">
+                    <div className="flex justify-center my-4 sticky top-1 z-10">
+                      <span className="bg-background/95 backdrop-blur-xs text-muted-foreground border shadow-xs text-[11px] font-medium px-3 py-0.5 rounded-full">
+                        {group.dateLabel}
+                      </span>
                     </div>
-                  );
-                })
+
+                    {group.messages.map((msg) => {
+                      const isMe = msg.direction === 'outgoing';
+                      const isAuto = msg.is_automated;
+
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                        >
+                          <div
+                            className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-xs space-y-1 text-xs relative ${
+                              isMe
+                                ? isAuto
+                                  ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs'
+                                  : 'bg-primary text-primary-foreground rounded-br-xs'
+                                : 'bg-card text-card-foreground border rounded-bl-xs'
+                            }`}
+                          >
+                            {/* Remetente ou Badge de Gatilho / Trigger */}
+                            <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
+                              {isAuto ? (
+                                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
+                                  <Bot className="w-3 h-3" />
+                                  {msg.sender_name || 'Automação Purple Bot'}
+                                </span>
+                              ) : (
+                                <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
+                              )}
+                            </div>
+
+                            {/* Conteúdo de Texto */}
+                            <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
+                              {msg.body}
+                            </p>
+
+                            {/* Horário e Status de Entrega */}
+                            <div
+                              className={`flex items-center justify-end gap-1 text-[10px] pt-1 ${
+                                isMe && !isAuto ? 'text-primary-foreground/75' : 'text-muted-foreground'
+                              }`}
+                            >
+                              <span>{formatMessageTime(msg.created_at)}</span>
+                              {isMe && (
+                                <span>
+                                  {msg.status === 'read' ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
+                                  ) : msg.status === 'delivered' ? (
+                                    <CheckCheck className="w-3.5 h-3.5" />
+                                  ) : msg.status === 'sending' ? (
+                                    <Clock className="w-3.5 h-3.5 animate-pulse" />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5" />
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
               )}
               <div ref={messagesEndRef} />
             </div>
@@ -911,6 +1117,7 @@ export function WhatsAppChatView() {
           </div>
         </div>
       )}
+      </div>
 
       {/* ---------------- MODAL DE TRANSFERÊNCIA DE SETOR ---------------- */}
       <Dialog open={transferModalOpen} onOpenChange={setTransferModalOpen}>
@@ -1177,6 +1384,80 @@ export function WhatsAppChatView() {
             <Button size="sm" onClick={handleRunSimulation} className="gap-1.5">
               <Send className="w-3.5 h-3.5" />
               Simular Recebimento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ---------------- MODAL CONFIGURAR WEBHOOK UAIZAP ---------------- */}
+      <Dialog open={webhookModalOpen} onOpenChange={setWebhookModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-primary">
+              <MessageCircle className="w-5 h-5 text-emerald-500" />
+              Receber Mensagens em Tempo Real (Webhook Uaizap)
+            </DialogTitle>
+            <DialogDescription>
+              Para que as mensagens recebidas no WhatsApp da escola apareçam instantaneamente com a data e hora de hoje, configure o Webhook no painel da sua Uaizap.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="p-3 bg-muted/60 rounded-lg space-y-2 border">
+              <span className="font-semibold text-foreground block">
+                URL do Webhook do Purple Edu:
+              </span>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value="https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook"
+                  className="font-mono text-[11px] h-8 bg-background selection:bg-primary/20"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 gap-1.5 px-3 flex-shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      'https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook'
+                    );
+                    setCopiedWebhook(true);
+                    toast.success('URL do Webhook copiada!');
+                    setTimeout(() => setCopiedWebhook(false), 3000);
+                  }}
+                >
+                  {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedWebhook ? 'Copiado' : 'Copiar'}</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
+              <p className="font-semibold text-foreground">Passo a passo no painel da Uaizap:</p>
+              <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground leading-relaxed">
+                <li>Acesse o painel web da sua <strong>Uaizap</strong>.</li>
+                <li>Selecione a instância conectada (<strong>Neto</strong> / 557583690441).</li>
+                <li>Clique na seção <strong>Webhooks</strong>.</li>
+                <li>Cole a <strong>URL do Webhook</strong> acima.</li>
+                <li>Ative os eventos de <strong>Mensagens (messages)</strong>.</li>
+                <li>Clique em <strong>Salvar</strong>.</li>
+              </ol>
+            </div>
+
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-800 dark:text-emerald-200 space-y-1">
+              <p className="font-semibold flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                Instância Conectada e Pronta
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-normal">
+                Sua instância <strong>{uaizapStatus.profileName || 'Neto Oliver'}</strong> já está cadastrada no sistema. Mensagens enviadas pelo chat do Purple Edu já saem direto pelo seu WhatsApp; após salvar o webhook, todas as respostas recebidas cairão automaticamente como <strong>Hoje</strong> nesta tela.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button size="sm" onClick={() => setWebhookModalOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>

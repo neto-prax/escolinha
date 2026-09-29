@@ -152,6 +152,16 @@ export function useWhatsAppInbox() {
     return saved === 'true';
   });
 
+  // Mode: Filter messages starting from today (default: true)
+  const [onlyFromToday, setOnlyFromToday] = useState<boolean>(() => {
+    const saved = localStorage.getItem('purple_whatsapp_only_today');
+    return saved !== 'false';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('purple_whatsapp_only_today', String(onlyFromToday));
+  }, [onlyFromToday]);
+
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -232,12 +242,16 @@ export function useWhatsAppInbox() {
   });
 
   const uaizapStatus: UaizapStatusData = useMemo(() => {
-    const isConn = Boolean(uaizapRawStatus?.status?.connected);
+    const isConn = Boolean(
+      uaizapRawStatus?.status?.connected ||
+      uaizapRawStatus?.instance?.status === 'connected' ||
+      uaizapRawStatus?.connected
+    );
     const instance = uaizapRawStatus?.instance;
 
     return {
       connected: isConn,
-      instanceName: instance?.name || 'Uaizap Principal',
+      instanceName: instance?.name || 'Neto',
       profileName: instance?.profileName || 'Neto Oliver',
       ownerPhone: instance?.owner || '557583690441',
       profilePicUrl: instance?.profilePicUrl,
@@ -339,7 +353,7 @@ export function useWhatsAppInbox() {
     refetch: refetchDbConversations,
     isLoading: isLoadingDbConversations,
   } = useQuery({
-    queryKey: ['inbox-db-conversations', schoolId],
+    queryKey: ['inbox-db-conversations', schoolId, onlyFromToday],
     queryFn: async () => {
       try {
         let query = supabase
@@ -361,13 +375,23 @@ export function useWhatsAppInbox() {
         }
         if (!convs || convs.length === 0) return [];
 
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayStartIso = todayStart.toISOString();
+
         // Fetch latest message for each conversation to accurately show preview text
         const convIds = convs.map((c: any) => c.id);
-        const { data: latestMsgs } = await supabase
+        let msgQuery = supabase
           .from('whatsapp_messages')
           .select('conversation_id, body, created_at')
           .in('conversation_id', convIds)
           .order('created_at', { ascending: false });
+
+        if (onlyFromToday) {
+          msgQuery = msgQuery.gte('created_at', todayStartIso);
+        }
+
+        const { data: latestMsgs } = await msgQuery;
 
         const latestMap = new Map<string, { body: string; created_at: string }>();
         if (latestMsgs) {
@@ -380,10 +404,14 @@ export function useWhatsAppInbox() {
 
         return convs.map((c: any) => {
           const last = latestMap.get(c.id);
+          const hasTodayMsg = Boolean(last);
+          const isTodayConv = c.last_message_at && c.last_message_at >= todayStartIso;
+
           return {
             ...c,
-            last_message: last?.body || c.last_message || null,
-            last_message_at: last?.created_at || c.last_message_at || c.created_at,
+            last_message: last?.body || (onlyFromToday ? null : c.last_message || null),
+            last_message_at: last?.created_at || (onlyFromToday && !isTodayConv ? c.created_at : c.last_message_at),
+            has_today_activity: hasTodayMsg || isTodayConv,
           };
         });
       } catch (err) {
@@ -656,7 +684,7 @@ export function useWhatsAppInbox() {
   );
 
   const { data: dbMessages = [], refetch: refetchDbMessages } = useQuery({
-    queryKey: ['inbox-db-messages', activeConversation?.id],
+    queryKey: ['inbox-db-messages', activeConversation?.id, onlyFromToday],
     queryFn: async () => {
       if (!activeConversation) return [];
 
@@ -678,11 +706,19 @@ export function useWhatsAppInbox() {
         }
       }
 
-      const { data, error } = await supabase
+      let msgQuery = supabase
         .from('whatsapp_messages')
         .select('*')
         .eq('conversation_id', conversationDbId)
         .order('created_at', { ascending: true });
+
+      if (onlyFromToday) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        msgQuery = msgQuery.gte('created_at', todayStart.toISOString());
+      }
+
+      const { data, error } = await msgQuery;
 
       if (error) {
         console.warn('Error fetching whatsapp_messages:', error);
@@ -701,6 +737,10 @@ export function useWhatsAppInbox() {
     if (isDemoMode) {
       return INITIAL_DEMO_MESSAGES[activeConversation.id] || [];
     }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartIso = todayStart.toISOString();
 
     if (dbMessages && dbMessages.length > 0) {
       const mapped = dbMessages.map((m: any) => ({
@@ -721,14 +761,21 @@ export function useWhatsAppInbox() {
 
       // Append any temporary local outgoing messages that haven't landed in DB query yet
       const localTemp = (localMessagesMap[activeConversation.id] || []).filter(
-        (lm) => lm.id.startsWith('msg-out-') && !mapped.some((dbm) => dbm.body === lm.body)
+        (lm) =>
+          lm.id.startsWith('msg-out-') &&
+          (!onlyFromToday || !lm.created_at || lm.created_at >= todayStartIso) &&
+          !mapped.some((dbm) => dbm.body === lm.body)
       );
 
       return [...mapped, ...localTemp];
     }
 
-    return localMessagesMap[activeConversation.id] || [];
-  }, [activeConversation, isDemoMode, dbMessages, localMessagesMap, profile?.full_name]);
+    const locals = localMessagesMap[activeConversation.id] || [];
+    if (onlyFromToday) {
+      return locals.filter((m) => !m.created_at || m.created_at >= todayStartIso);
+    }
+    return locals;
+  }, [activeConversation, isDemoMode, dbMessages, localMessagesMap, profile?.full_name, onlyFromToday]);
 
   // ----------------------------------------------------
   // 6. DISPATCH REAL MESSAGE VIA UAIZAP
@@ -1278,5 +1325,7 @@ export function useWhatsAppInbox() {
     isDemoMode,
     setIsDemoMode,
     isLoadingDbConversations,
+    onlyFromToday,
+    setOnlyFromToday,
   };
 }
