@@ -363,8 +363,9 @@ function useWhatsAppInboxState() {
   }, [roles]);
 
   const userPermittedSectors = useMemo(() => {
-    if (isDirector) return allAvailableSectors.map((s) => s.id);
-    return userAssignedSectors.map((s) => s.id);
+    if (isDirector) return allAvailableSectors;
+    const assignedIds = new Set(userAssignedSectors.map((s) => s.id));
+    return allAvailableSectors.filter((sector) => assignedIds.has(sector.id));
   }, [isDirector, allAvailableSectors, userAssignedSectors]);
 
   const permittedConversations = useMemo(() => {
