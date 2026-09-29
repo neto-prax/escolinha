@@ -402,6 +402,20 @@ export function useWhatsAppInbox() {
           }
         }
 
+        if (onlyFromToday) {
+          return convs
+            .filter((c: any) => latestMap.has(c.id) || (c.last_message_at && c.last_message_at >= todayStartIso))
+            .map((c: any) => {
+              const last = latestMap.get(c.id);
+              return {
+                ...c,
+                last_message: last?.body || null,
+                last_message_at: last?.created_at || c.last_message_at,
+                has_today_activity: true,
+              };
+            });
+        }
+
         return convs.map((c: any) => {
           const last = latestMap.get(c.id);
           const hasTodayMsg = Boolean(last);
@@ -409,8 +423,8 @@ export function useWhatsAppInbox() {
 
           return {
             ...c,
-            last_message: last?.body || (onlyFromToday ? null : c.last_message || null),
-            last_message_at: last?.created_at || (onlyFromToday && !isTodayConv ? c.created_at : c.last_message_at),
+            last_message: last?.body || c.last_message || null,
+            last_message_at: last?.created_at || c.last_message_at || c.created_at,
             has_today_activity: hasTodayMsg || isTodayConv,
           };
         });
@@ -583,7 +597,7 @@ export function useWhatsAppInbox() {
         ticket_status: 'open',
         priority: 'normal',
         last_message: null,
-        last_message_at: aluno.updated_at || new Date().toISOString(),
+        last_message_at: null,
         unread_count: 0,
         avatar_url: aluno.foto_url || aluno.foto || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`,
         tags: ['Aluno da Escola', aluno.turma || 'Regular'],

@@ -28,7 +28,6 @@ import {
   RefreshCw,
   ExternalLink,
   MessageCircle,
-  Copy,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -97,7 +96,6 @@ export function WhatsAppChatView() {
     sendMessage,
     transferSector,
     changeTicketStatus,
-    simulateIncomingMessage,
     syncWithUaizap,
     isSyncing,
     uaizapStatus,
@@ -116,15 +114,6 @@ export function WhatsAppChatView() {
   const [showRightDrawer, setShowRightDrawer] = useState(true);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [targetSectorId, setTargetSectorId] = useState('');
-  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
-
-  // Simulator modal state
-  const [simulatorOpen, setSimulatorOpen] = useState(false);
-  const [simName, setSimName] = useState('Mariana Silveira');
-  const [simPhone, setSimPhone] = useState('5511988887766');
-  const [simStudent, setSimStudent] = useState('Lucas Silveira');
-  const [simMessage, setSimMessage] = useState('Gostaria de solicitar a segunda via do boleto por favor.');
 
   // New Chat modal state
   const [newChatOpen, setNewChatOpen] = useState(false);
@@ -238,17 +227,6 @@ export function WhatsAppChatView() {
     if (!activeConversation || !targetSectorId) return;
     transferSector(activeConversation.id, targetSectorId);
     setTransferModalOpen(false);
-  };
-
-  const handleRunSimulation = () => {
-    if (!simMessage.trim()) return;
-    simulateIncomingMessage({
-      contactName: simName.trim() || 'Responsável',
-      phone: simPhone.trim() || '5511999990000',
-      message: simMessage.trim(),
-      studentName: simStudent.trim() || undefined,
-    });
-    setSimulatorOpen(false);
   };
 
   const formatMessageTime = (dateStr: string) => {
@@ -365,18 +343,7 @@ export function WhatsAppChatView() {
             <Button
               size="sm"
               variant="outline"
-              className="h-7 px-2 text-[11px] gap-1 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
-              onClick={() => setWebhookModalOpen(true)}
-              title="Configurar Webhook no painel da sua Uaizap para receber mensagens"
-            >
-              <MessageCircle className="w-3 h-3 text-emerald-500" />
-              <span>Webhook</span>
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-[11px] gap-1"
+              className="h-7 px-2.5 text-[11px] gap-1.5"
               onClick={syncWithUaizap}
               disabled={isSyncing}
               title="Verificar status e sincronizar com o WhatsApp"
@@ -410,28 +377,6 @@ export function WhatsAppChatView() {
               </div>
 
               <div className="flex items-center gap-1">
-                {isDemoMode ? (
-                  <Badge
-                    variant="outline"
-                    className="text-[9px] h-5 px-1.5 cursor-pointer bg-amber-500/10 text-amber-600 border-amber-300"
-                    onClick={() => setIsDemoMode(false)}
-                    title="Clique para desativar o modo demo"
-                  >
-                    Demo
-                  </Badge>
-                ) : null}
-
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-1.5 text-[11px] gap-1 text-primary border-primary/20 hover:bg-primary/5"
-                  onClick={() => setSimulatorOpen(true)}
-                  title="Simular mensagem recebida"
-                >
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span>Simular</span>
-                </Button>
-
                 <Button
                   size="sm"
                   variant="default"
@@ -491,10 +436,10 @@ export function WhatsAppChatView() {
           <div className="divide-y divide-border/40">
             {filteredConversations.length === 0 ? (
               <div className="p-6 text-center text-muted-foreground text-xs space-y-3">
-                <Building2 className="w-8 h-8 mx-auto opacity-30" />
-                <p className="font-semibold text-foreground">Nenhuma conversa encontrada</p>
+                <Building2 className="w-8 h-8 mx-auto opacity-30 text-emerald-600" />
+                <p className="font-semibold text-foreground">Aguardando mensagens de hoje</p>
                 <p className="text-[11px] max-w-[220px] mx-auto text-muted-foreground">
-                  A conexão com o Uaizap está pronta para receber mensagens de pais e alunos.
+                  O WhatsApp está conectado e pronto. Novas mensagens de pais e alunos aparecerão aqui automaticamente.
                 </p>
                 <div className="flex flex-col gap-2 pt-2">
                   <Button
@@ -513,18 +458,8 @@ export function WhatsAppChatView() {
                     disabled={isSyncing}
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    Sincronizar Uaizap
+                    Sincronizar Mensagens
                   </Button>
-                  {!isDemoMode && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-[11px] text-muted-foreground"
-                      onClick={() => setIsDemoMode(true)}
-                    >
-                      Ver Conversas de Demonstração
-                    </Button>
-                  )}
                 </div>
               </div>
             ) : (
@@ -1163,187 +1098,6 @@ export function WhatsAppChatView() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ---------------- MODAL SIMULADOR DE MENSAGENS E GATILHOS ---------------- */}
-      <Dialog open={simulatorOpen} onOpenChange={setSimulatorOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-primary">
-              <Sparkles className="w-5 h-5 text-amber-500" />
-              Simular Mensagem de WhatsApp
-            </DialogTitle>
-            <DialogDescription>
-              Envie uma mensagem simulando o WhatsApp de um pai/aluno para validar se os gatilhos (triggers)
-              respondem e direcionam para o setor correto.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3.5 py-2 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Nome do Contato</label>
-                <Input
-                  value={simName}
-                  onChange={(e) => setSimName(e.target.value)}
-                  placeholder="Ex: Carlos Santos"
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-foreground">Telefone</label>
-                <Input
-                  value={simPhone}
-                  onChange={(e) => setSimPhone(e.target.value)}
-                  placeholder="5511999990000"
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Aluno Vinculado</label>
-              <Input
-                value={simStudent}
-                onChange={(e) => setSimStudent(e.target.value)}
-                placeholder="Ex: Sofia Santos"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-semibold text-foreground">Mensagem Enviada pelo Responsável</label>
-              <Input
-                value={simMessage}
-                onChange={(e) => setSimMessage(e.target.value)}
-                placeholder="Digite palavras como 'boleto', 'matricula', 'declaracao' ou 'horario'..."
-                className="h-10 text-xs"
-              />
-            </div>
-
-            {/* Sugestões de teste */}
-            <div className="space-y-1.5 pt-2 border-t">
-              <span className="text-[11px] text-muted-foreground font-medium">
-                Testes sugeridos para acionar triggers cadastrados:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer hover:bg-primary/10 text-[10px]"
-                  onClick={() => setSimMessage('Boa tarde, qual o valor da mensalidade e matrícula para o 5º ano?')}
-                >
-                  🎒 Trigger: Matrículas
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer hover:bg-primary/10 text-[10px]"
-                  onClick={() => setSimMessage('Preciso da 2ª via do boleto vencido')}
-                >
-                  💳 Trigger: Boleto / Financeiro
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer hover:bg-primary/10 text-[10px]"
-                  onClick={() => setSimMessage('Gostaria de solicitar uma declaração de transferência')}
-                >
-                  📑 Trigger: Secretaria
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer hover:bg-primary/10 text-[10px]"
-                  onClick={() => setSimMessage('Qual o horário de funcionamento da secretaria?')}
-                >
-                  ⏰ Trigger: Horário
-                </Badge>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setSimulatorOpen(false)}>
-              Cancelar
-            </Button>
-            <Button size="sm" onClick={handleRunSimulation} className="gap-1.5">
-              <Send className="w-3.5 h-3.5" />
-              Simular Recebimento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ---------------- MODAL CONFIGURAR WEBHOOK UAIZAP ---------------- */}
-      <Dialog open={webhookModalOpen} onOpenChange={setWebhookModalOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-primary">
-              <MessageCircle className="w-5 h-5 text-emerald-500" />
-              Receber Mensagens em Tempo Real (Webhook Uaizap)
-            </DialogTitle>
-            <DialogDescription>
-              Para que as mensagens recebidas no WhatsApp da escola apareçam instantaneamente com a data e hora de hoje, configure o Webhook no painel da sua Uaizap.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2 text-xs">
-            <div className="p-3 bg-muted/60 rounded-lg space-y-2 border">
-              <span className="font-semibold text-foreground block">
-                URL do Webhook do Purple Edu:
-              </span>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value="https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook"
-                  className="font-mono text-[11px] h-8 bg-background selection:bg-primary/20"
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8 gap-1.5 px-3 flex-shrink-0"
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      'https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook'
-                    );
-                    setCopiedWebhook(true);
-                    toast.success('URL do Webhook copiada!');
-                    setTimeout(() => setCopiedWebhook(false), 3000);
-                  }}
-                >
-                  {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedWebhook ? 'Copiado' : 'Copiar'}</span>
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-t pt-3">
-              <p className="font-semibold text-foreground">Passo a passo no painel da Uaizap:</p>
-              <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground leading-relaxed">
-                <li>Acesse o painel web da sua <strong>Uaizap</strong>.</li>
-                <li>Selecione a instância conectada (<strong>Neto</strong> / 557583690441).</li>
-                <li>Clique na seção <strong>Webhooks</strong>.</li>
-                <li>Cole a <strong>URL do Webhook</strong> acima.</li>
-                <li>Ative os eventos de <strong>Mensagens (messages)</strong>.</li>
-                <li>Clique em <strong>Salvar</strong>.</li>
-              </ol>
-            </div>
-
-            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-emerald-800 dark:text-emerald-200 space-y-1">
-              <p className="font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Instância Conectada e Pronta
-              </p>
-              <p className="text-[11px] text-muted-foreground leading-normal">
-                Sua instância <strong>{uaizapStatus.profileName || 'Neto Oliver'}</strong> já está cadastrada no sistema. Mensagens enviadas pelo chat do Purple Edu já saem direto pelo seu WhatsApp; após salvar o webhook, todas as respostas recebidas cairão automaticamente como <strong>Hoje</strong> nesta tela.
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button size="sm" onClick={() => setWebhookModalOpen(false)}>
-              Fechar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
