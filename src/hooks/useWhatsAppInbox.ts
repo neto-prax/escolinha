@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useState, useEffect, useMemo, useCallback, useContext } from 'react';
+import { createContext, createElement, ReactNode, useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -812,7 +812,7 @@ const WhatsAppInboxContext = createContext<WhatsAppInboxContextValue | null>(nul
 
 export function WhatsAppInboxProvider({ children }: { children: ReactNode }) {
   const value = useWhatsAppInboxState();
-  return <WhatsAppInboxContext.Provider value={value}>{children}</WhatsAppInboxContext.Provider>;
+  return createElement(WhatsAppInboxContext.Provider, { value }, children);
 }
 
 export function useWhatsAppInbox() {
