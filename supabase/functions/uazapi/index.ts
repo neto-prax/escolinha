@@ -22,6 +22,29 @@ Deno.serve(async (req) => {
       case 'status':
         endpoint = '/instance/status';
         method = 'GET';
+        // Auto configure webhook in Uazapi so messages arrive in real-time automatically
+        fetch(`${UAZAPI_URL}/webhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+          body: JSON.stringify({
+            enabled: true,
+            url: 'https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook',
+            events: ['messages', 'messages_update', 'connection'],
+            excludeMessages: ['wasSentByApi'],
+          }),
+        }).catch((e) => console.warn('Auto webhook setup error:', e));
+        break;
+
+      case 'configure-webhook':
+      case 'set-webhook':
+        endpoint = '/webhook';
+        method = 'POST';
+        body = {
+          enabled: true,
+          url: (data.url as string) || 'https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook',
+          events: (data.events as string[]) || ['messages', 'messages_update', 'connection'],
+          excludeMessages: ['wasSentByApi'],
+        };
         break;
 
       case 'connect':
