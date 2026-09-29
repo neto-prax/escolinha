@@ -387,9 +387,9 @@ serve(async (req) => {
       });
     }
 
-    // Skip status messages and messages from self
-    if (isFromMe || isGroup) {
-      console.log('Skipping message from self or group');
+    // Skip group messages
+    if (isGroup) {
+      console.log('Skipping message from group');
       return new Response(JSON.stringify({ status: 'skipped' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -514,13 +514,13 @@ serve(async (req) => {
         .insert({
           conversation_id: conversation.id,
           external_id: messageId,
-          direction: 'incoming',
+          direction: isFromMe ? 'outgoing' : 'incoming',
           body,
           message_type: messageType,
           media_url: mediaUrl,
           media_filename: mediaFilename,
           media_caption: mediaCaption,
-          status: 'received',
+          status: isFromMe ? 'sent' : 'received',
         })
         .select()
         .single();
@@ -530,15 +530,17 @@ serve(async (req) => {
         throw msgError;
       }
 
-      console.log('Message saved:', insertedMessage.id);
+      console.log('Message saved:', insertedMessage.id, 'direction:', isFromMe ? 'outgoing' : 'incoming');
 
-      // Send welcome message if this is a new conversation
-      if (isNewConversation) {
-        console.log('New conversation - checking automation settings...');
-        await sendWelcomeMessage(supabase, instance, phone, schoolId, conversation.id);
-      } else {
-        // Check if user is responding to sector selection menu
-        await handleSectorSelection(supabase, conversation, body, schoolId, instance, phone);
+      // Only trigger automated welcome/sector selection for incoming messages from contacts
+      if (!isFromMe) {
+        if (isNewConversation) {
+          console.log('New conversation - checking automation settings...');
+          await sendWelcomeMessage(supabase, instance, phone, schoolId, conversation.id);
+        } else {
+          // Check if user is responding to sector selection menu
+          await handleSectorSelection(supabase, conversation, body, schoolId, instance, phone);
+        }
       }
 
       return new Response(JSON.stringify({ 

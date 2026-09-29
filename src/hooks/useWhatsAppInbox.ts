@@ -376,7 +376,7 @@ export function useWhatsAppInbox() {
         if (!convs || convs.length === 0) return [];
 
         const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        todayStart.setUTCHours(0, 0, 0, 0);
         const todayStartIso = todayStart.toISOString();
 
         // Fetch latest message for each conversation to accurately show preview text
@@ -707,10 +707,14 @@ export function useWhatsAppInbox() {
       // If active conversation is not a direct UUID (e.g. from school contact list), check if DB has a conversation by phone
       if (!isDbActiveConversation) {
         const cleanPhone = activeConversation.phone.replace(/\D/g, '');
+        const with55 = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+        const without55 = cleanPhone.replace(/^55/, '');
+        const last8 = cleanPhone.slice(-8);
+
         const { data: existing } = await supabase
           .from('whatsapp_conversations')
           .select('id')
-          .eq('phone', cleanPhone)
+          .or(`phone.eq.${cleanPhone},phone.eq.${with55},phone.eq.${without55},phone.ilike.%${last8}`)
           .maybeSingle();
 
         if (existing?.id) {
@@ -728,7 +732,7 @@ export function useWhatsAppInbox() {
 
       if (onlyFromToday) {
         const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        todayStart.setUTCHours(0, 0, 0, 0);
         msgQuery = msgQuery.gte('created_at', todayStart.toISOString());
       }
 
@@ -883,33 +887,45 @@ export function useWhatsAppInbox() {
         const isDbUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeConversation.id);
 
         if (!isDbUuid) {
+          const with55 = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
+          const without55 = phoneDigits.replace(/^55/, '');
+          const last8 = phoneDigits.slice(-8);
+
           // Check if conversation already exists by phone
           const { data: existing } = await supabase
             .from('whatsapp_conversations')
             .select('id')
-            .eq('phone', phoneDigits)
+            .or(`phone.eq.${phoneDigits},phone.eq.${with55},phone.eq.${without55},phone.ilike.%${last8}`)
             .maybeSingle();
 
           if (existing?.id) {
             dbConvId = existing.id;
-          } else if (schoolId) {
-            const { data: newRow } = await supabase
-              .from('whatsapp_conversations')
-              .insert({
-                school_id: schoolId,
-                phone: phoneDigits,
-                contact_name: activeConversation.contact_name,
-                sector_id: activeConversation.sector_id || null,
-                ticket_status: 'open',
-                unread_count: 0,
-                last_message_at: nowIso,
-              })
-              .select('id')
-              .single();
+          } else {
+            let targetSchoolId = schoolId;
+            if (!targetSchoolId) {
+              const { data: anySchool } = await supabase.from('schools').select('id').limit(1).maybeSingle();
+              targetSchoolId = anySchool?.id || null;
+            }
 
-            if (newRow?.id) {
-              dbConvId = newRow.id;
-              setActiveConversationId(dbConvId);
+            if (targetSchoolId) {
+              const { data: newRow } = await supabase
+                .from('whatsapp_conversations')
+                .insert({
+                  school_id: targetSchoolId,
+                  phone: formattedPhone,
+                  contact_name: activeConversation.contact_name,
+                  sector_id: activeConversation.sector_id || null,
+                  ticket_status: 'open',
+                  unread_count: 0,
+                  last_message_at: nowIso,
+                })
+                .select('id')
+                .maybeSingle();
+
+              if (newRow?.id) {
+                dbConvId = newRow.id;
+                setActiveConversationId(dbConvId);
+              }
             }
           }
         }
