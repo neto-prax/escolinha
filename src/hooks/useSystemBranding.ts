@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
+import type { Database, Json } from '@/integrations/supabase/types';
 
 export interface SystemBranding {
   logoUrl: string;
@@ -152,7 +152,7 @@ export function useSystemBranding() {
           const cloudRow: Database['public']['Tables']['app_state']['Insert'] = {
             school_id: schoolId,
             key: 'system_branding',
-            value: { data: updated },
+            value: { data: updated } as unknown as Json,
             updated_at: new Date().toISOString(),
           };
           await supabase
@@ -194,7 +194,7 @@ export function useSystemBranding() {
           const cloudRow: Database['public']['Tables']['app_state']['Insert'] = {
             school_id: schoolId,
             key: 'system_branding',
-            value: { data: resetted },
+            value: { data: resetted } as unknown as Json,
             updated_at: new Date().toISOString(),
           };
           await supabase
