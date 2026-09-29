@@ -67,30 +67,33 @@ async function sendWelcomeMessage(
 
     console.log('Sending welcome message:', { phone, message: welcomeMessage });
 
-    // Get Evolution API credentials
+    // Get Evolution API or Uazapi credentials
+    const UAZAPI_URL = Deno.env.get('UAZAPI_URL')?.replace(/\/$/, '');
+    const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN');
     const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
     const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
 
-    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-      console.error('Evolution API credentials not configured');
-      return;
+    let resultKeyId: string | null = null;
+
+    if (UAZAPI_URL && UAZAPI_TOKEN) {
+      console.log('Sending welcome message via Uazapi...');
+      const response = await fetch(`${UAZAPI_URL}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+        body: JSON.stringify({ number: phone, text: welcomeMessage }),
+      });
+      const resData = await response.json().catch(() => ({}));
+      resultKeyId = resData?.id || null;
+    } else if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+      console.log('Sending welcome message via Evolution API...');
+      const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+        body: JSON.stringify({ number: phone, text: welcomeMessage }),
+      });
+      const result = await response.json().catch(() => ({}));
+      resultKeyId = result?.key?.id || null;
     }
-
-    // Send message via Evolution API
-    const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY,
-      },
-      body: JSON.stringify({
-        number: phone,
-        text: welcomeMessage,
-      }),
-    });
-
-    const result = await response.json();
-    console.log('Welcome message sent:', result);
 
     // Save outgoing message to database
     const { error: msgError } = await supabase
@@ -101,7 +104,7 @@ async function sendWelcomeMessage(
         body: welcomeMessage,
         message_type: 'text',
         status: 'sent',
-        external_id: result.key?.id || null,
+        external_id: resultKeyId,
       });
 
     if (msgError) {
@@ -209,13 +212,10 @@ async function handleSectorSelection(
     console.log('Conversation sector updated successfully to:', selectedSector.name);
 
     // Send confirmation message
+    const UAZAPI_URL = Deno.env.get('UAZAPI_URL')?.replace(/\/$/, '');
+    const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN');
     const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
     const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
-
-    if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
-      console.error('Evolution API credentials not configured');
-      return;
-    }
 
     // Get sector-specific greeting if available
     let confirmationMessage = `Você foi direcionado para o setor *${selectedSector.name}*. Em breve um atendente entrará em contato!`;
@@ -226,21 +226,25 @@ async function handleSectorSelection(
       confirmationMessage = sectorGreeting;
     }
 
-    // Send confirmation via Evolution API
-    const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': EVOLUTION_API_KEY,
-      },
-      body: JSON.stringify({
-        number: phone,
-        text: confirmationMessage,
-      }),
-    });
+    let confResultKeyId: string | null = null;
 
-    const result = await response.json();
-    console.log('Confirmation message sent:', result);
+    if (UAZAPI_URL && UAZAPI_TOKEN) {
+      const response = await fetch(`${UAZAPI_URL}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+        body: JSON.stringify({ number: phone, text: confirmationMessage }),
+      });
+      const resData = await response.json().catch(() => ({}));
+      confResultKeyId = resData?.id || null;
+    } else if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+      const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+        body: JSON.stringify({ number: phone, text: confirmationMessage }),
+      });
+      const result = await response.json().catch(() => ({}));
+      confResultKeyId = result?.key?.id || null;
+    }
 
     // Save outgoing confirmation message to database
     const { error: msgError } = await supabase
@@ -251,7 +255,7 @@ async function handleSectorSelection(
         body: confirmationMessage,
         message_type: 'text',
         status: 'sent',
-        external_id: result.key?.id || null,
+        external_id: confResultKeyId,
       });
 
     if (msgError) {
@@ -278,32 +282,42 @@ serve(async (req) => {
     const payload = await req.json();
     console.log('Webhook received:', JSON.stringify(payload, null, 2));
 
-    const event = payload.event;
-    const instance = payload.instance;
-    const data = payload.data;
+    const isUazapi = payload.EventType === 'messages' || (payload.message && (payload.owner || payload.token));
+    const isEvolution = payload.event === 'messages.upsert';
 
-    // Handle incoming messages
-    if (event === 'messages.upsert') {
-      const message = data;
-      
-      // Skip status messages and messages from self
-      if (message.key?.fromMe || message.key?.remoteJid?.endsWith('@g.us')) {
-        console.log('Skipping message from self or group');
-        return new Response(JSON.stringify({ status: 'skipped' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+    let instance = payload.instanceName || payload.instance || payload.owner || 'Neto';
+    let phone = '';
+    let messageId = '';
+    let pushName = 'Desconhecido';
+    let body = '';
+    let messageType = 'text';
+    let mediaUrl: string | null = null;
+    let mediaFilename: string | null = null;
+    let mediaCaption: string | null = null;
+    let isFromMe = false;
+    let isGroup = false;
+
+    if (isUazapi) {
+      const msg = payload.message || {};
+      isFromMe = Boolean(msg.fromMe);
+      isGroup = Boolean(msg.isGroup || msg.chatid?.endsWith('@g.us'));
+      phone = String(msg.chatid || msg.sender || '').replace(/@.*/, '').replace(/\D/g, '');
+      messageId = String(msg.messageid || msg.id || `uaz-${Date.now()}`);
+      pushName = msg.senderName || payload.chat?.name || 'Responsável';
+      body = msg.text || (typeof msg.content === 'string' ? msg.content : '') || '';
+      messageType = (msg.messageType || 'text').toLowerCase();
+      if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
+        mediaUrl = msg.mediaUrl || msg.content?.file || msg.content?.url || null;
+        mediaFilename = msg.docName || msg.fileName || null;
+        mediaCaption = msg.text || msg.caption || null;
       }
-
-      const phone = message.key?.remoteJid?.replace('@s.whatsapp.net', '') || '';
-      const messageId = message.key?.id;
-      const pushName = message.pushName || 'Desconhecido';
-      
-      // Get message content
-      let body = '';
-      let messageType = 'text';
-      let mediaUrl = null;
-      let mediaFilename = null;
-      let mediaCaption = null;
+    } else if (isEvolution) {
+      const message = payload.data || {};
+      isFromMe = Boolean(message.key?.fromMe);
+      isGroup = Boolean(message.key?.remoteJid?.endsWith('@g.us'));
+      phone = String(message.key?.remoteJid || '').replace(/@.*/, '').replace(/\D/g, '');
+      messageId = String(message.key?.id || `evo-${Date.now()}`);
+      pushName = message.pushName || 'Desconhecido';
 
       if (message.message?.conversation) {
         body = message.message.conversation;
@@ -313,16 +327,13 @@ serve(async (req) => {
         messageType = 'image';
         mediaCaption = message.message.imageMessage.caption || '';
         body = mediaCaption || '[Imagem]';
-        // Get media URL from base64 or URL if available
         if (message.message.imageMessage.url) {
           mediaUrl = message.message.imageMessage.url;
         } else if (message.message.base64) {
-          // If base64 is provided, we'll need to upload it to storage
           mediaUrl = `data:image/jpeg;base64,${message.message.base64}`;
         }
-        // Check for mediaUrl in root data (some Evolution versions send it this way)
-        if (data.mediaUrl) {
-          mediaUrl = data.mediaUrl;
+        if (payload.data?.mediaUrl) {
+          mediaUrl = payload.data.mediaUrl;
         }
       } else if (message.message?.videoMessage) {
         messageType = 'video';
@@ -331,8 +342,8 @@ serve(async (req) => {
         if (message.message.videoMessage.url) {
           mediaUrl = message.message.videoMessage.url;
         }
-        if (data.mediaUrl) {
-          mediaUrl = data.mediaUrl;
+        if (payload.data?.mediaUrl) {
+          mediaUrl = payload.data.mediaUrl;
         }
       } else if (message.message?.audioMessage) {
         messageType = 'audio';
@@ -340,8 +351,8 @@ serve(async (req) => {
         if (message.message.audioMessage.url) {
           mediaUrl = message.message.audioMessage.url;
         }
-        if (data.mediaUrl) {
-          mediaUrl = data.mediaUrl;
+        if (payload.data?.mediaUrl) {
+          mediaUrl = payload.data.mediaUrl;
         }
       } else if (message.message?.documentMessage) {
         messageType = 'document';
@@ -350,8 +361,8 @@ serve(async (req) => {
         if (message.message.documentMessage.url) {
           mediaUrl = message.message.documentMessage.url;
         }
-        if (data.mediaUrl) {
-          mediaUrl = data.mediaUrl;
+        if (payload.data?.mediaUrl) {
+          mediaUrl = payload.data.mediaUrl;
         }
       } else if (message.message?.stickerMessage) {
         messageType = 'sticker';
@@ -359,109 +370,80 @@ serve(async (req) => {
         if (message.message.stickerMessage.url) {
           mediaUrl = message.message.stickerMessage.url;
         }
-        if (data.mediaUrl) {
-          mediaUrl = data.mediaUrl;
+        if (payload.data?.mediaUrl) {
+          mediaUrl = payload.data.mediaUrl;
         }
       } else {
         body = '[Mensagem não suportada]';
       }
+    } else if (payload.event === 'messages.update' || payload.EventType === 'messages_update') {
+      return new Response(JSON.stringify({ status: 'updated' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } else {
+      console.log('Skipping unhandled webhook event:', payload.EventType || payload.event);
+      return new Response(JSON.stringify({ status: 'ignored' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-      console.log('Processing message:', { phone, pushName, body, messageType, hasMediaUrl: !!mediaUrl });
+    // Skip status messages and messages from self
+    if (isFromMe || isGroup) {
+      console.log('Skipping message from self or group');
+      return new Response(JSON.stringify({ status: 'skipped' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-      // For media messages, ALWAYS download and upload to storage (WhatsApp URLs expire quickly)
-      if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType) && messageId) {
-        try {
-          const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL');
-          const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY');
-          
-          if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
-            console.log('Fetching media from Evolution API to upload to storage...');
-            const mediaResponse = await fetch(`${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instance}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': EVOLUTION_API_KEY,
-              },
-              body: JSON.stringify({
-                message: {
-                  key: message.key,
-                  message: message.message
-                }
-              }),
-            });
-            
-            if (mediaResponse.ok) {
-              const mediaData = await mediaResponse.json();
-              if (mediaData.base64) {
-                // Determine mime type
-                let mimeType = 'application/octet-stream';
-                if (messageType === 'image') mimeType = mediaData.mimetype || 'image/jpeg';
-                else if (messageType === 'video') mimeType = mediaData.mimetype || 'video/mp4';
-                else if (messageType === 'audio') mimeType = mediaData.mimetype || 'audio/ogg';
-                else if (messageType === 'document') mimeType = mediaData.mimetype || 'application/pdf';
-                else if (messageType === 'sticker') mimeType = mediaData.mimetype || 'image/webp';
-                
-                // Upload to Supabase Storage
-                const ext = mimeType.split('/')[1] || 'bin';
-                const fileName = `${messageId}.${ext}`;
-                const filePath = `${phone}/${fileName}`;
-                
-                // Decode base64 and upload
-                const binaryData = Uint8Array.from(atob(mediaData.base64), c => c.charCodeAt(0));
-                
-                const { data: uploadData, error: uploadError } = await supabase.storage
-                  .from('message-media')
-                  .upload(filePath, binaryData, {
-                    contentType: mimeType,
-                    upsert: true
-                  });
-                
-                if (uploadError) {
-                  console.error('Error uploading media:', uploadError);
-                  // Keep the WhatsApp URL as fallback (may work temporarily)
-                } else {
-                  // Get public URL - this URL will never expire
-                  const { data: publicUrl } = supabase.storage
-                    .from('message-media')
-                    .getPublicUrl(filePath);
-                  
-                  mediaUrl = publicUrl.publicUrl;
-                  console.log('Media uploaded successfully to storage:', mediaUrl);
-                }
-              } else {
-                console.log('No base64 data in Evolution response, keeping original URL');
-              }
-            } else {
-              console.log('Failed to fetch media from Evolution:', mediaResponse.status);
-              // Keep the WhatsApp URL as fallback
-            }
-          }
-        } catch (mediaError) {
-          console.error('Error fetching/uploading media:', mediaError);
-          // Keep the WhatsApp URL as fallback
-        }
-      }
+    console.log('Processing message:', { phone, pushName, body, messageType, instance });
 
-      // Find the instance in database to get school_id
-      const { data: instanceData, error: instanceError } = await supabase
+    // Find the instance in database to get school_id
+    let { data: instanceData, error: instanceError } = await supabase
+      .from('evolution_instances')
+      .select('id, school_id')
+      .eq('instance_name', instance)
+      .maybeSingle();
+
+    if (!instanceData) {
+      const { data: anyInst } = await supabase
         .from('evolution_instances')
         .select('id, school_id')
-        .eq('instance_name', instance)
+        .limit(1)
+        .maybeSingle();
+      instanceData = anyInst;
+    }
+
+    if (!instanceData) {
+      const { data: anySchool } = await supabase
+        .from('schools')
+        .select('id')
+        .limit(1)
         .maybeSingle();
 
-      if (instanceError) {
-        console.error('Error finding instance:', instanceError);
-        throw instanceError;
-      }
+      if (anySchool?.id) {
+        console.log('Auto-registering instance in evolution_instances:', instance);
+        const { data: created } = await supabase
+          .from('evolution_instances')
+          .insert({
+            school_id: anySchool.id,
+            instance_name: instance || 'Neto',
+            display_name: payload.instanceName || instance || 'Neto Oliver',
+            status: 'connected',
+            connected_phone: payload.owner || '557583690441',
+          })
+          .select('id, school_id')
+          .maybeSingle();
 
-      if (!instanceData) {
-        console.log('Instance not found in database:', instance);
-        return new Response(JSON.stringify({ status: 'instance_not_found' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        instanceData = created || { id: null, school_id: anySchool.id };
       }
+    }
 
-      const schoolId = instanceData.school_id;
+    if (!instanceData?.school_id) {
+      console.error('Error finding or creating instance:', instanceError);
+      return new Response(JSON.stringify({ status: 'school_not_found' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
       // Note: We no longer assign a sector automatically
       // The sector will be assigned when the user responds to the sector selection menu
