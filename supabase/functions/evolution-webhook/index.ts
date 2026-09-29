@@ -96,7 +96,6 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const payload = await req.json();
-    console.log('Webhook payload received:', JSON.stringify(payload, null, 2));
 
     // Support Uazapi format and Evolution format
     const isUazapi =
@@ -129,7 +128,16 @@ serve(async (req) => {
       });
     }
 
-    let instance = payload.instanceName || payload.instance || payload.owner || 'Neto';
+    const eventType = String(payload.EventType || payload.event || '').toLowerCase();
+    const messagePayload = payload.message && typeof payload.message === 'object' ? payload.message : {};
+    const instanceCandidates = [
+      payload.instanceName,
+      typeof payload.instance === 'string' ? payload.instance : payload.instance?.name,
+      payload.owner,
+      payload.token,
+      messagePayload.owner,
+      messagePayload.instanceName,
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
     let phone = '';
     let messageId = '';
     let pushName = 'Responsável';
@@ -142,14 +150,15 @@ serve(async (req) => {
     let isGroup = false;
 
     if (isUazapi) {
-      const msg = payload.message || {};
-      isFromMe = Boolean(msg.fromMe);
-      isGroup = Boolean(msg.isGroup || msg.chatid?.endsWith('@g.us'));
-      phone = String(msg.chatid || msg.sender || '').replace(/@.*/, '').replace(/\D/g, '');
-      messageId = String(msg.messageid || msg.id || `uaz-${Date.now()}`);
-      pushName = msg.senderName || payload.chat?.name || payload.contact?.name || 'Responsável';
-      body = msg.text || (typeof msg.content === 'string' ? msg.content : '') || '';
-      messageType = (msg.messageType || 'text').toLowerCase();
+      const msg = messagePayload;
+      isFromMe = Boolean(msg.fromMe ?? msg.fromme ?? payload.fromMe);
+      const chatId = String(msg.chatid || msg.chatId || msg.sender || payload.chatid || payload.sender || '');
+      isGroup = Boolean(msg.isGroup || chatId.endsWith('@g.us'));
+      phone = chatId.replace(/@.*/, '').replace(/\D/g, '');
+      messageId = String(msg.messageid || msg.messageId || msg.id || payload.messageid || payload.id || '');
+      pushName = msg.senderName || msg.pushName || payload.chat?.name || payload.contact?.name || 'Responsável';
+      body = msg.text || msg.body || (typeof msg.content === 'string' ? msg.content : '') || '';
+      messageType = String(msg.messageType || msg.type || 'text').toLowerCase();
 
       if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
         mediaUrl = msg.mediaUrl || msg.content?.file || msg.content?.url || null;
@@ -200,6 +209,7 @@ serve(async (req) => {
     }
 
     if (!phone) {
+      console.warn('Inbound message ignored: phone not found', { eventType });
       return new Response(JSON.stringify({ status: 'ignored_no_phone' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -212,29 +222,54 @@ serve(async (req) => {
     const without55 = phone.replace(/^55/, '');
     const last8 = phone.slice(-8);
 
-    // Resolve school_id
-    let schoolId: string | null = null;
+    if (!messageId) {
+      messageId = `uaz-${phone}-${payload.timestamp || messagePayload.timestamp || Date.now()}`;
+    }
 
-    const { data: instanceData } = await supabase
-      .from('evolution_instances')
-      .select('school_id')
-      .eq('instance_name', instance)
+    const { data: duplicate } = await supabase
+      .from('whatsapp_messages')
+      .select('id, conversation_id')
+      .eq('external_id', messageId)
       .maybeSingle();
 
-    if (instanceData?.school_id) {
-      schoolId = instanceData.school_id;
-    } else {
-      const { data: anySchool } = await supabase
-        .from('schools')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-      schoolId = anySchool?.id || null;
+    if (duplicate) {
+      return new Response(JSON.stringify({ status: 'duplicate', messageId: duplicate.id }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Resolve school_id only through the configured instance. Never guess a tenant.
+    let schoolId: string | null = null;
+
+    for (const candidate of instanceCandidates) {
+      const { data: rows } = await supabase
+        .from('evolution_instances')
+        .select('school_id')
+        .or(`instance_name.eq.${candidate},connected_phone.eq.${candidate}`)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (rows?.[0]?.school_id) {
+        schoolId = rows[0].school_id;
+        break;
+      }
     }
 
     if (!schoolId) {
-      console.warn('No school found to link WhatsApp message.');
+      const { data: connectedInstances } = await supabase
+        .from('evolution_instances')
+        .select('school_id')
+        .eq('status', 'connected')
+        .order('updated_at', { ascending: false })
+        .limit(2);
+
+      const connectedSchoolIds = [...new Set((connectedInstances || []).map((row: { school_id: string }) => row.school_id))];
+      if (connectedSchoolIds.length === 1) schoolId = connectedSchoolIds[0];
+    }
+
+    if (!schoolId) {
+      console.warn('Inbound message rejected: configured school not found', { eventType, instanceCandidates });
       return new Response(JSON.stringify({ status: 'school_not_found' }), {
+        status: 422,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -279,6 +314,7 @@ serve(async (req) => {
     } else {
       // Update existing conversation
       const updates: Record<string, unknown> = {
+        last_message: body,
         last_message_at: nowIso,
       };
       if (!isFromMe) {
@@ -288,10 +324,11 @@ serve(async (req) => {
         updates.contact_name = pushName;
       }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from('whatsapp_conversations')
         .update(updates)
         .eq('id', conversation.id);
+      if (updateError) throw updateError;
     }
 
     // Insert message into whatsapp_messages
@@ -319,7 +356,7 @@ serve(async (req) => {
 
     // Send welcome message if it's a new incoming conversation
     if (isNewConversation && !isFromMe) {
-      await sendWelcomeMessage(supabase, instance, formattedPhone, schoolId, conversation.id);
+      await sendWelcomeMessage(supabase, instanceCandidates[0] || '', formattedPhone, schoolId, conversation.id);
     }
 
     return new Response(

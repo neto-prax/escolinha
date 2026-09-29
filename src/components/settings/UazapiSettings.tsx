@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { Loader2, QrCode, RefreshCw, Send, Power } from 'lucide-react';
+import { Loader2, QrCode, RefreshCw, Send, Power, Webhook } from 'lucide-react';
 
 interface StatusResponse {
   instance?: { name?: string; status?: string; profileName?: string; owner?: string; qrcode?: string; paircode?: string };
@@ -29,11 +29,12 @@ export function UazapiSettings() {
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('Teste de integração Uazapi ✅');
   const [sending, setSending] = useState(false);
+  const [configuringWebhook, setConfiguringWebhook] = useState(false);
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['uazapi-status'],
     queryFn: () => callUazapi<StatusResponse>('status'),
-    refetchInterval: 15000,
+    staleTime: Infinity,
   });
 
   const connected = data?.status?.connected ?? false;
@@ -51,6 +52,18 @@ export function UazapiSettings() {
       toast.error(e instanceof Error ? e.message : 'Erro ao gerar QR Code');
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const handleConfigureWebhook = async () => {
+    setConfiguringWebhook(true);
+    try {
+      await callUazapi('configure-webhook');
+      toast.success('Recebimento de mensagens configurado');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao configurar recebimento');
+    } finally {
+      setConfiguringWebhook(false);
     }
   };
 
@@ -111,6 +124,14 @@ export function UazapiSettings() {
             <Button variant="outline" onClick={() => refetch()} disabled={isRefetching}>
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`} />
               Atualizar status
+            </Button>
+            <Button variant="outline" onClick={handleConfigureWebhook} disabled={configuringWebhook}>
+              {configuringWebhook ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Webhook className="mr-2 h-4 w-4" />
+              )}
+              Configurar recebimento
             </Button>
             {!connected && (
               <Button onClick={handleConnect} disabled={connecting}>
