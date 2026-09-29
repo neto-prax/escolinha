@@ -1,7 +1,5 @@
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { z } from 'npm:zod@3.25.76';
 
 const UAZAPI_URL = (Deno.env.get('UAZAPI_URL') ?? '').replace(/\/$/, '');
 const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN') ?? '';
@@ -12,7 +10,28 @@ Deno.serve(async (req) => {
   try {
     if (!UAZAPI_URL || !UAZAPI_TOKEN) throw new Error('Credenciais da Uazapi não configuradas');
 
-    const { action, data = {} } = await req.json();
+    const parsed = z.object({
+      action: z.enum([
+        'status',
+        'configure-webhook',
+        'set-webhook',
+        'get-webhook',
+        'connect',
+        'disconnect',
+        'send-text',
+        'send-media',
+      ]),
+      data: z.record(z.unknown()).optional().default({}),
+    }).safeParse(await req.json());
+
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: parsed.error.flatten().fieldErrors }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { action, data } = parsed.data;
 
     let endpoint = '';
     let method = 'POST';
@@ -22,17 +41,6 @@ Deno.serve(async (req) => {
       case 'status':
         endpoint = '/instance/status';
         method = 'GET';
-        // Auto configure webhook in Uazapi so messages arrive in real-time automatically
-        fetch(`${UAZAPI_URL}/webhook`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
-          body: JSON.stringify({
-            enabled: true,
-            url: 'https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook',
-            events: ['messages', 'messages_update', 'connection'],
-            excludeMessages: ['wasSentByApi'],
-          }),
-        }).catch((e) => console.warn('Auto webhook setup error:', e));
         break;
 
       case 'configure-webhook':
@@ -81,8 +89,6 @@ Deno.serve(async (req) => {
         };
         break;
 
-      default:
-        throw new Error(`Ação desconhecida: ${action}`);
     }
 
     const res = await fetch(`${UAZAPI_URL}${endpoint}`, {

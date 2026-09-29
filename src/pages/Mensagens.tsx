@@ -10,10 +10,10 @@ import { WhatsAppChatView } from '@/components/mensagens/WhatsAppChatView';
 import { WhatsAppTriggersTab } from '@/components/mensagens/WhatsAppTriggersTab';
 import { WhatsAppSectorsTab } from '@/components/mensagens/WhatsAppSectorsTab';
 import { WhatsAppSectorPermissionsTab } from '@/components/mensagens/WhatsAppSectorPermissionsTab';
-import { useWhatsAppInbox } from '@/hooks/useWhatsAppInbox';
+import { useWhatsAppInbox, WhatsAppInboxProvider } from '@/hooks/useWhatsAppInbox';
 import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
 
-export default function Mensagens() {
+function MensagensContent() {
   const [activeTab, setActiveTab] = useState<string>('chat');
   const { conversations, allAvailableSectors } = useWhatsAppInbox();
   const { triggers } = useWhatsAppTriggers();
@@ -80,5 +80,13 @@ export default function Mensagens() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function Mensagens() {
+  return (
+    <WhatsAppInboxProvider>
+      <MensagensContent />
+    </WhatsAppInboxProvider>
   );
 }
