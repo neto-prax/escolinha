@@ -276,45 +276,6 @@ export function WhatsAppChatView() {
     }
   };
 
-  // Group messages by date for visual clarity (Hoje, Ontem, 29 de janeiro de 2026)
-  const groupedMessages = useMemo(() => {
-    const groups: { dateKey: string; dateLabel: string; messages: WhatsAppChatMessage[] }[] = [];
-
-    for (const msg of activeMessages) {
-      let dateKey = 'outros';
-      let dateLabel = 'Mensagens';
-      try {
-        const d = new Date(msg.created_at);
-        if (!isNaN(d.getTime())) {
-          dateKey = format(d, 'yyyy-MM-dd');
-          if (isToday(d)) {
-            dateLabel = 'Hoje';
-          } else if (isYesterday(d)) {
-            dateLabel = 'Ontem';
-          } else {
-            dateLabel = format(d, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-          }
-        }
-      } catch {
-        dateKey = 'outros';
-        dateLabel = 'Mensagens';
-      }
-
-      const lastGroup = groups[groups.length - 1];
-      if (lastGroup && lastGroup.dateKey === dateKey) {
-        lastGroup.messages.push(msg);
-      } else {
-        groups.push({
-          dateKey,
-          dateLabel,
-          messages: [msg],
-        });
-      }
-    }
-
-    return groups;
-  }, [activeMessages]);
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'open':
@@ -507,16 +468,6 @@ export function WhatsAppChatView() {
                   Modo Demo (Sair)
                 </Badge>
               ) : null}
-
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 px-1.5 text-[10px] gap-1 border-muted-foreground/30 text-muted-foreground hover:text-foreground"
-                onClick={() => setWebhookModalOpen(true)}
-                title="Configurar Webhook no painel da sua Uaizap para receber mensagens"
-              >
-                Webhook
-              </Button>
 
               <Button
                 size="sm"
@@ -792,101 +743,72 @@ export function WhatsAppChatView() {
               </div>
 
               {activeMessages.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground text-xs space-y-2">
+                <div className="text-center py-10 text-muted-foreground text-xs space-y-1">
                   <MessageSquare className="w-8 h-8 mx-auto opacity-30" />
-                  <p className="font-medium text-foreground">
-                    {onlyFromToday
-                      ? 'Nenhuma mensagem recebida ou enviada hoje'
-                      : 'Nenhuma mensagem nesta conversa ainda'}
-                  </p>
-                  <p className="text-[11px] max-w-sm mx-auto">
-                    {onlyFromToday
-                      ? 'O filtro do banco está configurado para mensagens a partir de hoje. Envie uma mensagem abaixo para iniciar ou clique para consultar mensagens anteriores.'
-                      : 'Envie uma mensagem abaixo para falar com o responsável.'}
-                  </p>
-                  {onlyFromToday && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs text-primary border-primary/20 hover:bg-primary/5 mt-1"
-                      onClick={() => setOnlyFromToday(false)}
-                    >
-                      <Clock className="w-3.5 h-3.5 mr-1.5" />
-                      Ver mensagens de dias anteriores
-                    </Button>
-                  )}
+                  <p className="font-medium text-foreground">Nenhuma mensagem nesta conversa ainda</p>
+                  <p className="text-[11px]">Envie uma mensagem abaixo para falar com o responsável.</p>
                 </div>
               ) : (
-                groupedMessages.map((group) => (
-                  <div key={group.dateKey} className="space-y-3">
-                    <div className="flex justify-center my-4 sticky top-1 z-10">
-                      <span className="bg-background/95 backdrop-blur-xs text-muted-foreground border shadow-xs text-[11px] font-medium px-3 py-0.5 rounded-full">
-                        {group.dateLabel}
-                      </span>
-                    </div>
+                activeMessages.map((msg) => {
+                  const isMe = msg.direction === 'outgoing';
+                  const isAuto = msg.is_automated;
 
-                    {group.messages.map((msg) => {
-                      const isMe = msg.direction === 'outgoing';
-                      const isAuto = msg.is_automated;
-
-                      return (
-                        <div
-                          key={msg.id}
-                          className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                        >
-                          <div
-                            className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-xs space-y-1 text-xs relative ${
-                              isMe
-                                ? isAuto
-                                  ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs'
-                                  : 'bg-primary text-primary-foreground rounded-br-xs'
-                                : 'bg-card text-card-foreground border rounded-bl-xs'
-                            }`}
-                          >
-                            {/* Remetente ou Badge de Gatilho / Trigger */}
-                            <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
-                              {isAuto ? (
-                                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
-                                  <Bot className="w-3 h-3" />
-                                  {msg.sender_name || 'Automação Purple Bot'}
-                                </span>
-                              ) : (
-                                <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
-                              )}
-                            </div>
-
-                            {/* Conteúdo de Texto */}
-                            <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
-                              {msg.body}
-                            </p>
-
-                            {/* Horário e Status de Entrega */}
-                            <div
-                              className={`flex items-center justify-end gap-1 text-[10px] pt-1 ${
-                                isMe && !isAuto ? 'text-primary-foreground/75' : 'text-muted-foreground'
-                              }`}
-                            >
-                              <span>{formatMessageTime(msg.created_at)}</span>
-                              {isMe && (
-                                <span>
-                                  {msg.status === 'read' ? (
-                                    <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
-                                  ) : msg.status === 'delivered' ? (
-                                    <CheckCheck className="w-3.5 h-3.5" />
-                                  ) : msg.status === 'sending' ? (
-                                    <Clock className="w-3.5 h-3.5 animate-pulse" />
-                                  ) : (
-                                    <Check className="w-3.5 h-3.5" />
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-xs space-y-1 text-xs relative ${
+                          isMe
+                            ? isAuto
+                              ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs'
+                              : 'bg-primary text-primary-foreground rounded-br-xs'
+                            : 'bg-card text-card-foreground border rounded-bl-xs'
+                        }`}
+                      >
+                        {/* Remetente ou Badge de Gatilho / Trigger */}
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
+                          {isAuto ? (
+                            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
+                              <Bot className="w-3 h-3" />
+                              {msg.sender_name || 'Automação Purple Bot'}
+                            </span>
+                          ) : (
+                            <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                ))
+
+                        {/* Conteúdo de Texto */}
+                        <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
+                          {msg.body}
+                        </p>
+
+                        {/* Horário e Status de Entrega */}
+                        <div
+                          className={`flex items-center justify-end gap-1 text-[10px] pt-1 ${
+                            isMe && !isAuto ? 'text-primary-foreground/75' : 'text-muted-foreground'
+                          }`}
+                        >
+                          <span>{formatMessageTime(msg.created_at)}</span>
+                          {isMe && (
+                            <span>
+                              {msg.status === 'read' ? (
+                                <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
+                              ) : msg.status === 'delivered' ? (
+                                <CheckCheck className="w-3.5 h-3.5" />
+                              ) : msg.status === 'sending' ? (
+                                <Clock className="w-3.5 h-3.5 animate-pulse" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5" />
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
               )}
               <div ref={messagesEndRef} />
             </div>
