@@ -60,6 +60,13 @@ import {
 } from '@/components/ui/select';
 import { useWhatsAppInbox } from '@/hooks/useWhatsAppInbox';
 import { WhatsAppChatConversation, WhatsAppChatMessage } from '@/types/mensagens';
+import { WhatsAppMediaRenderer } from './WhatsAppMediaRenderer';
+import { WhatsAppEmojiPicker } from './WhatsAppEmojiPicker';
+import {
+  WhatsAppImageLightboxModal,
+  WhatsAppViewOnceModal,
+  WhatsAppAttachmentModal,
+} from './WhatsAppMediaModals';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -103,6 +110,8 @@ export function WhatsAppChatView() {
     isLoadingDbConversations,
     onlyFromToday,
     setOnlyFromToday,
+    toggleViewOnceOpened,
+    reactToMessage,
   } = useWhatsAppInbox();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +121,14 @@ export function WhatsAppChatView() {
   const [showRightDrawer, setShowRightDrawer] = useState(true);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [targetSectorId, setTargetSectorId] = useState('');
+
+  // Media modals state
+  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; caption?: string | null } | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [viewOnceMessage, setViewOnceMessage] = useState<WhatsAppChatMessage | null>(null);
+  const [viewOnceOpen, setViewOnceOpen] = useState(false);
+  const [attachmentModalOpen, setAttachmentModalOpen] = useState(false);
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
 
   // New Chat modal state
   const [newChatOpen, setNewChatOpen] = useState(false);
@@ -659,42 +676,104 @@ export function WhatsAppChatView() {
                 activeMessages.map((msg) => {
                   const isMe = msg.direction === 'outgoing';
                   const isAuto = msg.is_automated;
+                  const isSticker = msg.message_type === 'sticker';
+                  const hasMedia = Boolean(
+                    (msg.message_type && msg.message_type !== 'text' && msg.message_type !== 'location') ||
+                    Boolean(msg.media_url) ||
+                    msg.is_view_once
+                  );
 
                   return (
                     <div
                       key={msg.id}
-                      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group relative py-1`}
+                      onMouseEnter={() => setHoveredMessageId(msg.id)}
+                      onMouseLeave={() => setHoveredMessageId(null)}
                     >
+                      {/* Barra de Reações Rápidas no Hover */}
+                      {hoveredMessageId === msg.id && (
+                        <div
+                          className={`absolute -top-3.5 ${
+                            isMe ? 'right-2' : 'left-2'
+                          } z-20 flex items-center gap-1 px-2 py-0.5 bg-popover/95 border border-border shadow-md rounded-full backdrop-blur-xs animate-in fade-in zoom-in-95 duration-100`}
+                        >
+                          {['❤️', '👍', '😂', '😮', '😢', '🙏'].map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => reactToMessage(msg.id, emoji)}
+                              className="text-xs hover:scale-135 transition-transform p-0.5 rounded-full hover:bg-muted"
+                              title={`Reagir com ${emoji}`}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       <div
-                        className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-xs space-y-1 text-xs relative ${
-                          isMe
-                            ? isAuto
-                              ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs'
-                              : 'bg-primary text-primary-foreground rounded-br-xs'
-                            : 'bg-card text-card-foreground border rounded-bl-xs'
+                        className={`max-w-[85%] sm:max-w-[70%] rounded-2xl shadow-xs space-y-1 text-xs relative ${
+                          isSticker
+                            ? 'bg-transparent border-none shadow-none p-1'
+                            : `p-3 ${
+                                isMe
+                                  ? isAuto
+                                    ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs'
+                                    : 'bg-primary text-primary-foreground rounded-br-xs'
+                                  : 'bg-card text-card-foreground border rounded-bl-xs'
+                              }`
                         }`}
                       >
                         {/* Remetente ou Badge de Gatilho / Trigger */}
-                        <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
-                          {isAuto ? (
-                            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
-                              <Bot className="w-3 h-3" />
-                              {msg.sender_name || 'Automação Purple Bot'}
-                            </span>
-                          ) : (
-                            <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
-                          )}
-                        </div>
+                        {!isSticker && (
+                          <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
+                            {isAuto ? (
+                              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
+                                <Bot className="w-3 h-3" />
+                                {msg.sender_name || 'Automação Purple Bot'}
+                              </span>
+                            ) : (
+                              <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Renderizador de Mídia (Fotos, Stickers, GIFs, Áudio, Visualização Única, PDF) */}
+                        {hasMedia && (
+                          <WhatsAppMediaRenderer
+                            message={msg}
+                            isMe={isMe}
+                            onOpenImageModal={(url, caption) => {
+                              setLightboxMedia({ url, caption });
+                              setLightboxOpen(true);
+                            }}
+                            onOpenViewOnceModal={(m) => {
+                              setViewOnceMessage(m);
+                              setViewOnceOpen(true);
+                            }}
+                          />
+                        )}
 
                         {/* Conteúdo de Texto */}
-                        <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
-                          {msg.body}
-                        </p>
+                        {(!hasMedia ||
+                          (!['[Figurinha]', '[GIF]', '[Áudio]', '[Imagem]', '[Foto única]', '[Documento]'].includes(
+                            msg.body || ''
+                          ) &&
+                            msg.body !== msg.media_caption)) &&
+                          msg.body && (
+                            <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
+                              {msg.body}
+                            </p>
+                          )}
 
                         {/* Horário e Status de Entrega */}
                         <div
                           className={`flex items-center justify-end gap-1 text-[10px] pt-1 ${
-                            isMe && !isAuto ? 'text-primary-foreground/75' : 'text-muted-foreground'
+                            isSticker
+                              ? 'text-muted-foreground font-medium'
+                              : isMe && !isAuto
+                              ? 'text-primary-foreground/75'
+                              : 'text-muted-foreground'
                           }`}
                         >
                           <span>{formatMessageTime(msg.created_at)}</span>
@@ -712,6 +791,18 @@ export function WhatsAppChatView() {
                             </span>
                           )}
                         </div>
+
+                        {/* Reação ativa no balão */}
+                        {msg.reaction && (
+                          <span
+                            className={`absolute -bottom-2.5 ${
+                              isMe ? 'right-2' : 'left-2'
+                            } bg-card border rounded-full px-1.5 py-0.5 text-xs shadow-xs flex items-center justify-center select-none z-10`}
+                            title={`Reação: ${msg.reaction}`}
+                          >
+                            {msg.reaction}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -759,24 +850,33 @@ export function WhatsAppChatView() {
             </div>
 
             <form onSubmit={handleSend} className="flex items-center gap-2">
+              {/* Seletor de Emojis, Figurinhas e GIFs */}
+              <WhatsAppEmojiPicker
+                onSelectEmoji={(emoji) => setInputText((prev) => prev + emoji)}
+                onSendSticker={(stickerUrl, caption) => {
+                  sendMessage(caption || '', {
+                    url: stickerUrl,
+                    type: 'sticker',
+                    caption,
+                  });
+                }}
+                onSendGif={(gifUrl, caption) => {
+                  sendMessage(caption || '', {
+                    url: gifUrl,
+                    type: 'gif',
+                    caption,
+                  });
+                }}
+              />
+
+              {/* Botão de Anexo (Fotos, Áudio, Visualização Única, PDF) */}
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-10 w-10 p-0 text-muted-foreground hover:text-foreground"
-                title="Anexar arquivo ou imagem"
-                onClick={() => {
-                  const mediaUrl = window.prompt('Informe a URL da imagem ou documento que deseja enviar via WhatsApp:');
-                  if (mediaUrl?.trim()) {
-                    const isImg = /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(mediaUrl);
-                    sendMessage(inputText.trim() || (isImg ? 'Segue imagem em anexo' : 'Segue documento em anexo'), {
-                      url: mediaUrl.trim(),
-                      filename: isImg ? 'imagem.jpg' : 'documento.pdf',
-                      type: isImg ? 'image' : 'document',
-                    });
-                    setInputText('');
-                  }
-                }}
+                className="h-10 w-10 p-0 text-muted-foreground hover:text-foreground shrink-0"
+                title="Anexar arquivo, foto, áudio ou foto única"
+                onClick={() => setAttachmentModalOpen(true)}
               >
                 <Paperclip className="w-4 h-4" />
               </Button>
@@ -788,7 +888,7 @@ export function WhatsAppChatView() {
                 className="h-10 text-sm"
               />
 
-              <Button type="submit" size="sm" className="h-10 px-4 gap-1.5">
+              <Button type="submit" size="sm" className="h-10 px-4 gap-1.5 shrink-0">
                 <Send className="w-4 h-4" />
                 <span className="hidden sm:inline">Enviar</span>
               </Button>
@@ -1114,6 +1214,29 @@ export function WhatsAppChatView() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 4. MODAIS DE MÍDIA WHATSAPP (LIGHTBOX, VISUALIZAÇÃO ÚNICA, ANEXO) */}
+      <WhatsAppImageLightboxModal
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+        imageUrl={lightboxMedia?.url || null}
+        caption={lightboxMedia?.caption || null}
+      />
+
+      <WhatsAppViewOnceModal
+        open={viewOnceOpen}
+        onOpenChange={setViewOnceOpen}
+        message={viewOnceMessage}
+        onCloseAndExpire={(msgId) => toggleViewOnceOpened(msgId)}
+      />
+
+      <WhatsAppAttachmentModal
+        open={attachmentModalOpen}
+        onOpenChange={setAttachmentModalOpen}
+        onSendMedia={(payload) => {
+          sendMessage(payload.caption || '', payload);
+        }}
+      />
     </div>
   );
 }

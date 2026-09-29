@@ -16,20 +16,35 @@ export interface WhatsAppTrigger {
 
 export type MessageDeliveryStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
+export type WhatsAppMessageType =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'document'
+  | 'video'
+  | 'location'
+  | 'sticker'
+  | 'gif'
+  | 'view_once';
+
 export interface WhatsAppChatMessage {
   id: string;
   conversation_id: string;
   body: string | null;
   direction: 'incoming' | 'outgoing';
-  message_type: 'text' | 'image' | 'audio' | 'document' | 'video' | 'location';
+  message_type: WhatsAppMessageType;
   media_url?: string | null;
   media_caption?: string | null;
   media_filename?: string | null;
+  media_duration?: number | null; // Duração em segundos (áudio)
+  is_view_once?: boolean; // Imagem temporária / visualização única do WhatsApp
+  view_once_opened?: boolean; // Se a foto de visualização única já foi aberta
   status: MessageDeliveryStatus;
   created_at: string;
   sender_name?: string;
   is_automated?: boolean;
   reply_to_id?: string | null;
+  reaction?: string | null; // Reação emoji (ex: ❤️, 👍, 😂)
 }
 
 export interface WhatsAppChatConversation {

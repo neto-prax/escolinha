@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   WhatsAppChatConversation,
   WhatsAppChatMessage,
+  WhatsAppMessageType,
   WhatsAppSectorItem,
 } from '@/types/mensagens';
 import { toast } from 'sonner';
@@ -448,19 +449,34 @@ function useWhatsAppInboxState() {
   const activeMessages: WhatsAppChatMessage[] = useMemo(() => {
     if (!activeConversation) return [];
 
-    const dbList: WhatsAppChatMessage[] = dbMessages.map((m: any) => ({
-      id: m.id,
-      conversation_id: m.conversation_id,
-      body: m.body,
-      direction: m.direction as 'incoming' | 'outgoing',
-      message_type: (m.message_type || 'text') as any,
-      media_url: m.media_url,
-      media_caption: m.media_caption,
-      media_filename: m.media_filename,
-      status: (m.status || 'sent') as any,
-      created_at: m.created_at,
-      sender_name: m.direction === 'outgoing' ? profile?.full_name || 'Escola' : activeConversation.contact_name,
-    }));
+    const dbList: WhatsAppChatMessage[] = dbMessages.map((m: any) => {
+      let detectedType = (m.message_type || 'text').toLowerCase();
+      const mUrl = m.media_url || '';
+      if (detectedType === 'text' && mUrl) {
+        if (/\.(webp)($|\?)/i.test(mUrl) || m.body === '[Figurinha]') detectedType = 'sticker';
+        else if (/\.(gif)($|\?)/i.test(mUrl) || m.body === '[GIF]') detectedType = 'gif';
+        else if (/\.(mp3|ogg|wav|m4a|aac)($|\?)/i.test(mUrl) || m.body === '[Áudio]') detectedType = 'audio';
+        else if (/\.(jpg|jpeg|png)($|\?)/i.test(mUrl) || m.body === '[Imagem]') detectedType = 'image';
+      }
+
+      return {
+        id: m.id,
+        conversation_id: m.conversation_id,
+        body: m.body,
+        direction: m.direction as 'incoming' | 'outgoing',
+        message_type: detectedType as WhatsAppMessageType,
+        media_url: m.media_url,
+        media_caption: m.media_caption,
+        media_filename: m.media_filename,
+        media_duration: m.media_duration || null,
+        is_view_once: Boolean(m.is_view_once || m.view_once),
+        view_once_opened: Boolean(m.view_once_opened),
+        reaction: m.reaction || null,
+        status: (m.status || 'sent') as any,
+        created_at: m.created_at,
+        sender_name: m.direction === 'outgoing' ? profile?.full_name || 'Escola' : activeConversation.contact_name,
+      };
+    });
 
     // Filter optimistic messages for this conversation that haven't appeared in DB yet
     const pending = optimisticMessages.filter((opt) => {
@@ -477,7 +493,14 @@ function useWhatsAppInboxState() {
   const sendMessage = useCallback(
     async (
       text: string,
-      mediaFile?: { url: string; filename: string; type: 'image' | 'document' | 'audio' }
+      mediaFile?: {
+        url: string;
+        filename?: string;
+        type: WhatsAppMessageType;
+        caption?: string;
+        duration?: number;
+        isViewOnce?: boolean;
+      }
     ) => {
       if (!activeConversation) return;
       if (!text.trim() && !mediaFile) return;
@@ -487,15 +510,32 @@ function useWhatsAppInboxState() {
       const nowIso = new Date().toISOString();
       const tempId = `temp-${Date.now()}`;
 
+      const placeholderBody =
+        text.trim() ||
+        (mediaFile?.type === 'sticker'
+          ? '[Figurinha]'
+          : mediaFile?.type === 'gif'
+          ? '[GIF]'
+          : mediaFile?.type === 'audio'
+          ? '[Áudio]'
+          : mediaFile?.isViewOnce
+          ? '[Foto de visualização única]'
+          : mediaFile?.type === 'image'
+          ? '[Imagem]'
+          : '[Documento]');
+
       // Optimistic message
       const optMsg: WhatsAppChatMessage = {
         id: tempId,
         conversation_id: activeConversation.id,
-        body: text,
+        body: placeholderBody,
         direction: 'outgoing',
         message_type: mediaFile ? mediaFile.type : 'text',
         media_url: mediaFile?.url,
         media_filename: mediaFile?.filename,
+        media_duration: mediaFile?.duration,
+        is_view_once: Boolean(mediaFile?.isViewOnce),
+        view_once_opened: false,
         status: 'sending',
         created_at: nowIso,
         sender_name: profile?.full_name || 'Escola',
@@ -507,11 +547,15 @@ function useWhatsAppInboxState() {
       let dispatched = false;
       try {
         const uazAction = mediaFile ? 'send-media' : 'send-text';
+        let uazMediaType = mediaFile?.type || 'image';
+        if (uazMediaType === 'view_once') uazMediaType = 'image';
+        if (uazMediaType === 'gif') uazMediaType = 'video';
+
         const uazData = mediaFile
           ? {
               phone: formattedPhone,
               mediaUrl: mediaFile.url,
-              mediaType: mediaFile.type,
+              mediaType: uazMediaType,
               caption: text,
               fileName: mediaFile.filename,
             }
@@ -585,11 +629,14 @@ function useWhatsAppInboxState() {
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbConvId)) {
           await supabase.from('whatsapp_messages').insert({
             conversation_id: dbConvId,
-            body: text,
+            body: placeholderBody,
             direction: 'outgoing',
             message_type: mediaFile ? mediaFile.type : 'text',
             media_url: mediaFile?.url,
             media_filename: mediaFile?.filename,
+            media_duration: mediaFile?.duration,
+            is_view_once: Boolean(mediaFile?.isViewOnce),
+            view_once_opened: false,
             status: dispatched ? 'sent' : 'failed',
             created_at: nowIso,
           });
@@ -597,7 +644,7 @@ function useWhatsAppInboxState() {
           await supabase
             .from('whatsapp_conversations')
             .update({
-              last_message: text,
+              last_message: placeholderBody,
               last_message_at: nowIso,
               unread_count: 0,
             })
@@ -615,6 +662,36 @@ function useWhatsAppInboxState() {
     },
     [activeConversation, isDbUuid, profile?.full_name, schoolId, queryClient]
   );
+
+  // ----------------------------------------------------
+  // 6. TOGGLE VIEW ONCE & REACTIONS
+  // ----------------------------------------------------
+  const toggleViewOnceOpened = useCallback(async (messageId: string) => {
+    setOptimisticMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, view_once_opened: true } : m))
+    );
+    try {
+      await supabase
+        .from('whatsapp_messages')
+        .update({ view_once_opened: true })
+        .eq('id', messageId);
+      queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
+    } catch {
+      // ignore
+    }
+  }, [queryClient]);
+
+  const reactToMessage = useCallback(async (messageId: string, emoji: string) => {
+    try {
+      await supabase
+        .from('whatsapp_messages')
+        .update({ reaction: emoji })
+        .eq('id', messageId);
+      queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
+    } catch {
+      // ignore
+    }
+  }, [queryClient]);
 
   // ----------------------------------------------------
   // 6. TRANSFER SECTOR
@@ -804,6 +881,8 @@ function useWhatsAppInboxState() {
     isLoadingDbConversations,
     onlyFromToday,
     setOnlyFromToday,
+    toggleViewOnceOpened,
+    reactToMessage,
   };
 }
 
