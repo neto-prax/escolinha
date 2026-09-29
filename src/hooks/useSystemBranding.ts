@@ -150,12 +150,12 @@ export function useSystemBranding() {
         if (schoolId) {
           await supabase
             .from('app_state')
-            .upsert({
+            .upsert([{
               school_id: schoolId,
               key: 'system_branding',
               value: { data: updated },
               updated_at: new Date().toISOString(),
-            }, { onConflict: 'school_id,key' });
+            }], { onConflict: 'school_id,key' });
         }
       }
     } catch (e) {
@@ -191,12 +191,12 @@ export function useSystemBranding() {
         if (schoolId) {
           await supabase
             .from('app_state')
-            .upsert({
+            .upsert([{
               school_id: schoolId,
               key: 'system_branding',
               value: { data: resetted },
               updated_at: new Date().toISOString(),
-            }, { onConflict: 'school_id,key' });
+            }], { onConflict: 'school_id,key' });
         }
       }
     } catch (e) {

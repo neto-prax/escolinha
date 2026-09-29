@@ -3,6 +3,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { WhatsAppTrigger, TriggerMatchResult } from '@/types/mensagens';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 
 export const DEFAULT_TRIGGERS: WhatsAppTrigger[] = [
@@ -145,7 +146,7 @@ export function useWhatsAppTriggers() {
                 ...currentAutomation,
                 triggers: updatedTriggers,
               },
-            },
+            } as Json,
           })
           .eq('id', school.id);
       } catch (err) {

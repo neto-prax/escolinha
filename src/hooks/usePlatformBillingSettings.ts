@@ -184,12 +184,12 @@ export function usePlatformBillingSettings() {
 
         if (schoolId) {
           await supabase.from('app_state').upsert(
-            {
+            [{
               school_id: schoolId,
               key: 'platform_billing_settings',
               value: { data: payload },
               updated_at: new Date().toISOString(),
-            },
+            }],
             { onConflict: 'school_id,key' }
           );
         }
