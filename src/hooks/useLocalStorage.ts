@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSchoolStorageKey, loadCloudState, saveCloudState } from '@/lib/cloudState';
 
@@ -33,7 +33,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 
   latestValue.current = storedValue;
 
-  const setValue = (value: T | ((val: T) => T)) => {
+  const setValue = useCallback((value: T | ((val: T) => T)) => {
     try {
       const valueToStore = value instanceof Function ? value(latestValue.current) : value;
       latestValue.current = valueToStore;
@@ -65,7 +65,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     } catch (error) {
       console.warn(`Erro ao salvar "${scopedKey}":`, error);
     }
-  };
+  }, [key, scopedKey, schoolId]);
 
   useEffect(() => {
     activeScope.current = scopedKey;

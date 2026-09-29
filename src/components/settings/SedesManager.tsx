@@ -39,11 +39,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSedes } from '@/hooks/useSedes';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { AllUserPermissions } from '@/hooks/usePermissions';
 import { Sede } from '@/types/sede';
 import { toast } from 'sonner';
 
 export const SedesManager: React.FC = () => {
   const { sedes, addSede, updateSede, deleteSede } = useSedes();
+  const [permissionsStore] = useLocalStorage<AllUserPermissions>('escolinha_user_permissions_v2', {});
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSede, setEditingSede] = useState<Sede | null>(null);
@@ -242,6 +245,20 @@ export const SedesManager: React.FC = () => {
                           <span>Capacidade: {s.capacidadeAlunos} alunos</span>
                         </div>
                       )}
+                      {(() => {
+                        const specificUsersCount = Object.values(permissionsStore).filter(
+                          (cfg) => cfg.sedes && cfg.sedes.includes(s.id) && !cfg.sedes.includes('todas')
+                        ).length;
+                        if (specificUsersCount > 0) {
+                          return (
+                            <div className="flex items-center gap-1.5 text-purple-700 font-medium pt-0.5">
+                              <ShieldCheck className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+                              <span>{specificUsersCount} colaborador(es) com acesso exclusivo</span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
 

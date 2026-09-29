@@ -9,9 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { User, Building2, Wallet, CreditCard } from 'lucide-react';
+import { User, Building2, Wallet, CreditCard, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { UserWithRoles } from '@/hooks/useUsers';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useSedes } from '@/hooks/useSedes';
 import {
   useEmployeeDetails,
   useUserSectors,
@@ -27,6 +29,8 @@ interface UserDetailsModalProps {
 }
 
 export function UserDetailsModal({ user, open, onOpenChange }: UserDetailsModalProps) {
+  const { permissionsStore } = usePermissions();
+  const { sedes } = useSedes();
   const { data: employeeDetails, isLoading: loadingDetails } = useEmployeeDetails(user?.id ?? null);
   const { data: userSectors = [], isLoading: loadingSectors } = useUserSectors(user?.id ?? null);
   const { data: allSectors = [] } = useSectors();
@@ -137,12 +141,31 @@ export function UserDetailsModal({ user, open, onOpenChange }: UserDetailsModalP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Detalhes do Colaborador
-          </DialogTitle>
+          <div className="flex items-center justify-between pr-6">
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Detalhes do Colaborador
+            </DialogTitle>
+            {user && (() => {
+              const uConfig = permissionsStore[user.id];
+              const isGlobal = !uConfig?.sedes || uConfig.sedes.includes('todas');
+              if (isGlobal) {
+                return (
+                  <Badge variant="outline" className="text-xs bg-slate-50 text-slate-700 border-slate-200 flex items-center gap-1 font-normal">
+                    <Building2 className="h-3 w-3 text-slate-500" /> Todas as Sedes
+                  </Badge>
+                );
+              }
+              const sObj = sedes.find((s) => s.id === uConfig.sedes?.[0]);
+              return (
+                <Badge className="text-xs bg-purple-100 text-purple-800 border-purple-300 flex items-center gap-1 font-semibold">
+                  <MapPin className="h-3 w-3 text-[#6b26d9]" /> {sObj?.nome || uConfig.sedes?.[0]}
+                </Badge>
+              );
+            })()}
+          </div>
           <DialogDescription>
-            {user?.full_name}
+            {user?.full_name} {user?.email ? `• ${user.email}` : ''}
           </DialogDescription>
         </DialogHeader>
 

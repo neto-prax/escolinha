@@ -20,11 +20,18 @@ import { useSedes } from '@/hooks/useSedes';
 
 export const Topbar = () => {
   const { user, profile, roles, school, signOut } = useAuth();
-  const { sedes, activeSedeId, activeSede, setActiveSedeId } = useSedes();
+  const {
+    sedes,
+    userAllowedSedes,
+    activeSedeId,
+    activeSede,
+    setActiveSedeId,
+    canAccessAllSedes,
+    isRestrictedToSingleSede,
+    canSwitchSedes,
+  } = useSedes();
   const navigate = useNavigate();
   const isDirector = roles.includes('director') || roles.length === 0;
-
-  const activeSedesList = sedes.filter((s) => s.ativa);
 
   const initials = profile?.full_name
     ?.split(' ')
@@ -45,7 +52,11 @@ export const Topbar = () => {
           <button
             type="button"
             className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-purple-100/70 dark:hover:bg-purple-950/60 transition-all border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/30 text-left cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-[#6b26d9]"
-            title="Clique para alternar entre as sedes da instituição"
+            title={
+              isRestrictedToSingleSede
+                ? `Acesso exclusivo à unidade ${activeSede?.nome || 'fixa'}`
+                : 'Clique para alternar entre as sedes autorizadas'
+            }
           >
             <Logo size="sm" iconOnly />
             <div className="flex flex-col min-w-0">
@@ -53,7 +64,11 @@ export const Topbar = () => {
                 <span className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-[#6b26d9] transition-colors leading-none">
                   Purple Edu
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[#6b26d9] transition-transform group-data-[state=open]:rotate-180" />
+                {canSwitchSedes ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[#6b26d9] transition-transform group-data-[state=open]:rotate-180" />
+                ) : (
+                  <MapPin className="h-3 w-3 text-[#6b26d9]" />
+                )}
               </div>
               <span className="text-[11px] text-[#6b26d9] dark:text-[#a78bfa] font-medium truncate max-w-[150px] sm:max-w-[210px] mt-0.5">
                 {activeSedeId === 'todas' ? 'Todas as Sedes' : activeSede?.nome || school?.name || 'Sede Principal'}
@@ -62,53 +77,86 @@ export const Topbar = () => {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 p-1.5 shadow-lg border-purple-100">
-          <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1.5">
-            Alternar Unidade Escolar
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="flex items-center justify-between cursor-pointer text-xs py-2 px-2.5 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/40"
-            onClick={() => setActiveSedeId('todas')}
-          >
-            <div className="flex flex-col">
-              <span className="font-semibold text-slate-800 dark:text-slate-200">Todas as Sedes</span>
-              <span className="text-[10px] text-muted-foreground">Visão geral consolidada</span>
-            </div>
-            {activeSedeId === 'todas' && <Check className="h-4 w-4 text-[#6b26d9]" />}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          {activeSedesList.map((sede) => (
-            <DropdownMenuItem
-              key={sede.id}
-              className="flex items-center justify-between cursor-pointer text-xs py-2 px-2.5 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/40"
-              onClick={() => setActiveSedeId(sede.id)}
-            >
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium text-slate-800 dark:text-slate-200">{sede.nome}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/50 text-[#6b26d9] dark:text-[#c4b5fd] rounded font-semibold">
-                    {sede.tipo}
+          {isRestrictedToSingleSede ? (
+            <div className="p-2 space-y-2">
+              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 py-0.5">
+                Sua Unidade Autorizada
+              </DropdownMenuLabel>
+              <div className="p-2.5 bg-purple-50/80 dark:bg-purple-950/40 rounded-lg border border-purple-200/60 dark:border-purple-900/60">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-bold text-xs text-purple-950 dark:text-purple-100 flex items-center gap-1.5 truncate">
+                    <MapPin className="h-3.5 w-3.5 text-[#6b26d9] shrink-0" />
+                    {activeSede?.nome}
                   </span>
+                  <Badge className="bg-[#6b26d9] text-white text-[9px] px-1.5 py-0 h-4 shrink-0">
+                    {activeSede?.tipo || 'Unidade'}
+                  </Badge>
                 </div>
-                {sede.cidade && (
-                  <span className="text-[10px] text-muted-foreground mt-0.5">
-                    {sede.cidade} {sede.estado ? `• ${sede.estado}` : ''}
-                  </span>
+                {activeSede?.endereco && (
+                  <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                    {activeSede.endereco}
+                  </p>
                 )}
+                <div className="mt-2 pt-2 border-t border-purple-200/50 text-[10px] text-purple-700 dark:text-purple-300 font-medium">
+                  🔒 Acesso exclusivo configurado para esta unidade.
+                </div>
               </div>
-              {activeSedeId === sede.id && <Check className="h-4 w-4 text-[#6b26d9]" />}
-            </DropdownMenuItem>
-          ))}
-          {isDirector && (
+            </div>
+          ) : (
             <>
+              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1.5">
+                Alternar Unidade Escolar
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-xs text-[#6b26d9] font-medium cursor-pointer py-2 px-2.5 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/50"
-                onClick={() => navigate('/app/configuracoes?tab=sedes')}
-              >
-                <Settings className="h-3.5 w-3.5 mr-1.5 text-[#6b26d9]" />
-                Gerenciar Sedes & Unidades
-              </DropdownMenuItem>
+              {canAccessAllSedes && (
+                <>
+                  <DropdownMenuItem
+                    className="flex items-center justify-between cursor-pointer text-xs py-2 px-2.5 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                    onClick={() => setActiveSedeId('todas')}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">Todas as Sedes</span>
+                      <span className="text-[10px] text-muted-foreground">Visão geral consolidada</span>
+                    </div>
+                    {activeSedeId === 'todas' && <Check className="h-4 w-4 text-[#6b26d9]" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              {userAllowedSedes.map((sede) => (
+                <DropdownMenuItem
+                  key={sede.id}
+                  className="flex items-center justify-between cursor-pointer text-xs py-2 px-2.5 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/40"
+                  onClick={() => setActiveSedeId(sede.id)}
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{sede.nome}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/50 text-[#6b26d9] dark:text-[#c4b5fd] rounded font-semibold">
+                        {sede.tipo}
+                      </span>
+                    </div>
+                    {sede.cidade && (
+                      <span className="text-[10px] text-muted-foreground mt-0.5">
+                        {sede.cidade} {sede.estado ? `• ${sede.estado}` : ''}
+                      </span>
+                    )}
+                  </div>
+                  {activeSedeId === sede.id && <Check className="h-4 w-4 text-[#6b26d9]" />}
+                </DropdownMenuItem>
+              ))}
+              {isDirector && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-xs text-[#6b26d9] font-medium cursor-pointer py-2 px-2.5 rounded-md hover:bg-purple-50 dark:hover:bg-purple-950/50"
+                    onClick={() => navigate('/app/configuracoes?tab=sedes')}
+                  >
+                    <Settings className="h-3.5 w-3.5 mr-1.5 text-[#6b26d9]" />
+                    Gerenciar Sedes & Unidades
+                  </DropdownMenuItem>
+                </>
+              )}
             </>
           )}
         </DropdownMenuContent>

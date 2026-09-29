@@ -231,7 +231,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       turmas: ['teacher', 'secretary', 'director'],
       alunos: ['secretary', 'director'],
       secretaria: ['secretary', 'director'],
-      mensagens: ['secretary', 'admin', 'director'],
+      mensagens: ['secretary', 'admin', 'director', 'teacher', 'seller'],
       setores: ['director'],
       administrativo: ['admin', 'director'],
       financeiro: ['admin', 'director'],

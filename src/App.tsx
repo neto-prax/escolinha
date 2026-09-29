@@ -31,6 +31,7 @@ import Pedagogico from "./pages/Pedagogico";
 import Perfil from "./pages/Perfil";
 import Comercial from "./pages/Comercial";
 import Estoque from "./pages/Estoque";
+import Mensagens from "./pages/Mensagens";
 import { useSystemBranding } from "@/hooks/useSystemBranding";
 
 const queryClient = new QueryClient();
@@ -59,6 +60,7 @@ const App = () => (
             {/* Protected routes */}
             <Route path="/app" element={<AppLayout />}>
               <Route path="dashboard" element={<Dashboard />} />
+              <Route path="mensagens" element={<Mensagens />} />
               <Route path="pedagogico" element={<Pedagogico />} />
               <Route path="financeiro" element={<Financeiro />} />
               <Route path="estoque" element={<Estoque />} />

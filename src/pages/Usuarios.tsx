@@ -41,11 +41,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound, Trash2, Layers, CheckCircle2, Briefcase, Link2, Unlink, Eye, EyeOff } from 'lucide-react';
+import { UserCog, Plus, MoreHorizontal, Pencil, UserX, UserCheck, Shield, Building2, KeyRound, Trash2, Layers, CheckCircle2, Briefcase, Link2, Unlink, Eye, EyeOff, MapPin, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppRole } from '@/types/auth';
+import { useSedes } from '@/hooks/useSedes';
 import {
   useUsers,
   useUpdateProfile,
@@ -202,6 +203,7 @@ const Usuarios = () => {
     }
   };
 
+  const { sedes } = useSedes();
   const [editForm, setEditForm] = useState({ full_name: '', phone: '', email: '' });
   const [rolesForm, setRolesForm] = useState<AppRole[]>([]);
   const [createForm, setCreateForm] = useState({
@@ -210,6 +212,7 @@ const Usuarios = () => {
     full_name: '',
     phone: '',
     roles: [] as AppRole[],
+    sedeId: 'todas',
   });
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -223,11 +226,12 @@ const Usuarios = () => {
     APP_SCREENS,
   } = usePermissions();
 
-  const [permissionsTab, setPermissionsTab] = useState<'roles' | 'screens' | 'kpis'>('roles');
+  const [permissionsTab, setPermissionsTab] = useState<'roles' | 'screens' | 'kpis' | 'sedes'>('roles');
   const [customVisibility, setCustomVisibility] = useState(false);
   const [visibilityForm, setVisibilityForm] = useState<UserVisibilityConfig>({
     screens: [],
     tabs: {},
+    sedes: ['todas'],
   });
 
   const handleDetailsOpen = (userToView: UserWithRoles) => {
@@ -245,13 +249,24 @@ const Usuarios = () => {
     setIsEditOpen(true);
   };
 
-  const handleRolesOpen = (userToEdit: UserWithRoles) => {
+  const handleRolesOpen = (userToEdit: UserWithRoles, tab: 'roles' | 'screens' | 'kpis' | 'sedes' = 'roles') => {
     setSelectedUser(userToEdit);
     setRolesForm([...userToEdit.roles]);
     const isCustom = !!permissionsStore[userToEdit.id];
     setCustomVisibility(isCustom);
-    setVisibilityForm(getUserPermissions(userToEdit.id, userToEdit.roles));
-    setPermissionsTab('roles');
+    const existingPerms = getUserPermissions(userToEdit.id, userToEdit.roles);
+    const userConfig = permissionsStore[userToEdit.id];
+    const initialSedes = userConfig?.sedes && userConfig.sedes.length > 0
+      ? userConfig.sedes
+      : ['todas'];
+    const initialDefaultSede = userConfig?.defaultSedeId;
+
+    setVisibilityForm({
+      ...existingPerms,
+      sedes: initialSedes,
+      defaultSedeId: initialDefaultSede,
+    });
+    setPermissionsTab(tab);
     setIsRolesOpen(true);
   };
 
@@ -327,15 +342,16 @@ const Usuarios = () => {
   const handleRolesSave = async () => {
     if (!selectedUser) return;
 
-    // 1. Sempre salva as regras de visualização de telas e abas
+    // 1. Sempre salva as regras de visualização de telas, abas e sedes
     try {
-      if (customVisibility) {
+      const hasSedeRestriction = visibilityForm.sedes && !visibilityForm.sedes.includes('todas');
+      if (customVisibility || hasSedeRestriction) {
         saveUserPermissions(selectedUser.id, visibilityForm);
       } else {
         resetUserPermissions(selectedUser.id);
       }
     } catch (visErr) {
-      console.error('Erro ao salvar visibilidade de telas/abas:', visErr);
+      console.error('Erro ao salvar visibilidade e sedes:', visErr);
     }
 
     // 2. Atualiza os papéis no Supabase de forma protegida
@@ -354,7 +370,7 @@ const Usuarios = () => {
     }
 
     if (rolesUpdated) {
-      toast.success('Permissões e visibilidade de telas/abas salvas com sucesso!');
+      toast.success('Permissões, sedes e visibilidade salvas com sucesso!');
       setIsRolesOpen(false);
 
       if (selectedUser.id === user?.id) {
@@ -362,7 +378,7 @@ const Usuarios = () => {
       }
     } else {
       toast.warning(
-        `Visibilidade de telas/abas salva! Atenção: os cargos no banco não foram alterados (${rolesErrorMsg}).`
+        `Configurações de sedes e visibilidade salvas! Atenção: os cargos no banco não foram alterados (${rolesErrorMsg}).`
       );
       setIsRolesOpen(false);
     }
@@ -389,7 +405,23 @@ const Usuarios = () => {
     }
 
     try {
-      await createUser.mutateAsync(createForm);
+      const createdUser = await createUser.mutateAsync({
+        email: createForm.email,
+        password: createForm.password,
+        full_name: createForm.full_name,
+        phone: createForm.phone,
+        roles: createForm.roles,
+      });
+
+      if (createdUser?.id && createForm.sedeId && createForm.sedeId !== 'todas') {
+        const defaults = getDefaultPermissionsForRoles(createForm.roles);
+        saveUserPermissions(createdUser.id, {
+          ...defaults,
+          sedes: [createForm.sedeId],
+          defaultSedeId: createForm.sedeId,
+        });
+      }
+
       toast.success('Usuário criado com sucesso!');
       setIsCreateOpen(false);
       setCreateForm({
@@ -398,6 +430,7 @@ const Usuarios = () => {
         full_name: '',
         phone: '',
         roles: [],
+        sedeId: 'todas',
       });
     } catch (error) {
       toast.error('Erro ao criar usuário');
@@ -482,6 +515,7 @@ const Usuarios = () => {
                   <TableHead>Telefone</TableHead>
                   <TableHead>Cargos</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Sede / Unidade</TableHead>
                   <TableHead>Colaborador Vinculado</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
@@ -554,6 +588,52 @@ const Usuarios = () => {
                     </TableCell>
                     <TableCell>
                       {(() => {
+                        const userConfig = permissionsStore[u.id];
+                        const isGlobal = !userConfig?.sedes || userConfig.sedes.includes('todas');
+                        if (isGlobal) {
+                          return (
+                            <Badge
+                              variant="secondary"
+                              onClick={() => handleRolesOpen(u, 'sedes')}
+                              className="text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer flex items-center gap-1 w-fit"
+                              title="Clique para gerenciar sedes do usuário"
+                            >
+                              <Globe className="h-3 w-3 text-slate-500" />
+                              <span>Todas as Sedes</span>
+                            </Badge>
+                          );
+                        }
+
+                        if (userConfig.sedes.length === 1) {
+                          const sId = userConfig.sedes[0];
+                          const sObj = sedes.find((s) => s.id === sId);
+                          return (
+                            <Badge
+                              onClick={() => handleRolesOpen(u, 'sedes')}
+                              className="text-xs bg-purple-100 text-purple-800 border-purple-300 hover:bg-purple-200 cursor-pointer flex items-center gap-1 w-fit font-semibold"
+                              title="Clique para gerenciar sedes do usuário"
+                            >
+                              <MapPin className="h-3 w-3 text-[#6b26d9]" />
+                              <span>{sObj?.nome || sId}</span>
+                            </Badge>
+                          );
+                        }
+
+                        return (
+                          <Badge
+                            variant="outline"
+                            onClick={() => handleRolesOpen(u, 'sedes')}
+                            className="text-xs text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 cursor-pointer flex items-center gap-1 w-fit"
+                            title="Clique para gerenciar sedes do usuário"
+                          >
+                            <Building2 className="h-3 w-3 text-indigo-600" />
+                            <span>{userConfig.sedes.length} Sedes</span>
+                          </Badge>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
                         const linkedEmp = employees.find((e) => e.userId === u.id);
                         if (linkedEmp) {
                           return (
@@ -589,6 +669,10 @@ const Usuarios = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleRolesOpen(u, 'sedes')} className="text-purple-700 font-medium">
+                            <Building2 className="h-4 w-4 mr-2 text-purple-600" />
+                            Acesso a Sedes & Unidades
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleOpenLinkEmployee(u)} className="text-indigo-700 font-medium">
                             <Briefcase className="h-4 w-4 mr-2 text-indigo-600" />
                             Vincular a Colaborador
@@ -699,8 +783,8 @@ const Usuarios = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={permissionsTab} onValueChange={(v) => setPermissionsTab(v as 'roles' | 'screens' | 'kpis')} className="flex-1 flex flex-col overflow-hidden mt-1">
-            <TabsList className="grid grid-cols-3 w-full">
+          <Tabs value={permissionsTab} onValueChange={(v) => setPermissionsTab(v as 'roles' | 'screens' | 'kpis' | 'sedes')} className="flex-1 flex flex-col overflow-hidden mt-1">
+            <TabsList className="grid grid-cols-4 w-full">
               <TabsTrigger value="roles" className="flex items-center gap-1.5 text-xs">
                 <Shield className="h-3.5 w-3.5" /> Cargos
               </TabsTrigger>
@@ -709,6 +793,9 @@ const Usuarios = () => {
               </TabsTrigger>
               <TabsTrigger value="kpis" className="flex items-center gap-1.5 text-xs">
                 <Eye className="h-3.5 w-3.5" /> Totais (KPIs)
+              </TabsTrigger>
+              <TabsTrigger value="sedes" className="flex items-center gap-1.5 text-xs">
+                <Building2 className="h-3.5 w-3.5" /> Sedes & Acesso
               </TabsTrigger>
             </TabsList>
 
@@ -995,6 +1082,201 @@ const Usuarios = () => {
                 })}
               </div>
             </TabsContent>
+
+            {/* ABA 4: SEDES E UNIDADES ESCOLARES */}
+            <TabsContent value="sedes" className="space-y-4 py-3 flex-1 overflow-y-auto">
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-purple-700" />
+                  <span className="text-xs font-semibold text-purple-900 block">
+                    Controle de Acesso a Sedes e Unidades
+                  </span>
+                </div>
+                <p className="text-[11px] text-purple-700 mt-1 leading-relaxed">
+                  Defina a quais sedes da escola este usuário terá acesso. Se restrito a apenas uma sede (como a <strong>Sede Senador</strong>), o sistema abrirá automaticamente já nela e travará o seletor para impedir alternância ou visualização de outras unidades.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {/* Opções de Escopo */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div
+                    onClick={() => {
+                      setVisibilityForm({
+                        ...visibilityForm,
+                        sedes: ['todas'],
+                        defaultSedeId: undefined,
+                      });
+                    }}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      !visibilityForm.sedes || visibilityForm.sedes.includes('todas')
+                        ? 'border-purple-600 bg-purple-50/60 shadow-xs ring-1 ring-purple-600/30'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-purple-700" />
+                      <span className="text-xs font-bold text-slate-800">Acesso Global</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Acesso a todas as sedes atuais e futuras, além da visão consolidada de rede.
+                    </p>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      const currentSedes = visibilityForm.sedes?.filter((s) => s !== 'todas') || [];
+                      const initialPick = currentSedes.length > 0 ? currentSedes : [sedes[0]?.id || 'sede-matriz'];
+                      setVisibilityForm({
+                        ...visibilityForm,
+                        sedes: initialPick,
+                        defaultSedeId: initialPick[0],
+                      });
+                    }}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      visibilityForm.sedes && !visibilityForm.sedes.includes('todas')
+                        ? 'border-purple-600 bg-purple-50/60 shadow-xs ring-1 ring-purple-600/30'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4 text-purple-700" />
+                      <span className="text-xs font-bold text-slate-800">Sedes Específicas</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Restringe o colaborador apenas às unidades selecionadas abaixo.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Lista de sedes caso seja específico */}
+                {visibilityForm.sedes && !visibilityForm.sedes.includes('todas') && (
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-700">Selecione as unidades autorizadas:</span>
+                      <span className="text-[11px] text-purple-700 font-medium">
+                        {visibilityForm.sedes.length} de {sedes.length} selecionada(s)
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {sedes.map((sede) => {
+                        const isChecked = visibilityForm.sedes?.includes(sede.id) || false;
+                        return (
+                          <div
+                            key={sede.id}
+                            className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+                              isChecked ? 'bg-white border-purple-300 shadow-xs' : 'bg-slate-50 border-slate-200 opacity-70'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <Checkbox
+                                id={`sede_${sede.id}`}
+                                checked={isChecked}
+                                onCheckedChange={(checked) => {
+                                  const current = visibilityForm.sedes?.filter((s) => s !== 'todas') || [];
+                                  let next: string[];
+                                  if (checked) {
+                                    next = [...current, sede.id];
+                                  } else {
+                                    next = current.filter((id) => id !== sede.id);
+                                    if (next.length === 0) {
+                                      toast.warning('O colaborador deve ter acesso a pelo menos uma sede.');
+                                      return;
+                                    }
+                                  }
+                                  const nextDefault = next.includes(visibilityForm.defaultSedeId || '')
+                                    ? visibilityForm.defaultSedeId
+                                    : next[0];
+                                  setVisibilityForm({
+                                    ...visibilityForm,
+                                    sedes: next,
+                                    defaultSedeId: nextDefault,
+                                  });
+                                }}
+                              />
+                              <div>
+                                <Label
+                                  htmlFor={`sede_${sede.id}`}
+                                  className="cursor-pointer text-xs font-semibold text-slate-800 flex items-center gap-1.5"
+                                >
+                                  {sede.nome}
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                    {sede.tipo}
+                                  </Badge>
+                                </Label>
+                                {sede.endereco && (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                                    {sede.endereco} {sede.cidade ? `• ${sede.cidade}/${sede.estado}` : ''}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {isChecked && (
+                              <Badge className="bg-purple-100 text-purple-800 text-[10px] border-purple-200">
+                                Autorizado
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Aviso de Abertura Automática Direta */}
+                    {visibilityForm.sedes.length === 1 && (() => {
+                      const singleSede = sedes.find((s) => s.id === visibilityForm.sedes?.[0]);
+                      return (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2.5 text-xs text-emerald-800">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold">Abertura Automática Garantida:</span>
+                            <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
+                              Ao entrar no sistema, este usuário será direcionado e aberto automaticamente na <strong>{singleSede?.nome || 'sede selecionada'}</strong>. O seletor superior permanecerá fixado nesta unidade.
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Sede Padrão caso tenha 2 ou mais */}
+                    {visibilityForm.sedes.length > 1 && (
+                      <div className="p-3 bg-purple-50/50 border border-purple-200 rounded-lg space-y-1.5">
+                        <Label className="text-xs font-semibold text-purple-900">
+                          Sede Padrão de Inicialização (Onde o sistema abre primeiro):
+                        </Label>
+                        <Select
+                          value={visibilityForm.defaultSedeId || visibilityForm.sedes[0]}
+                          onValueChange={(val) => {
+                            setVisibilityForm({
+                              ...visibilityForm,
+                              defaultSedeId: val,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs bg-white">
+                            <SelectValue placeholder="Selecione a sede padrão" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {visibilityForm.sedes.map((sId) => {
+                              const sObj = sedes.find((s) => s.id === sId);
+                              return (
+                                <SelectItem key={sId} value={sId} className="text-xs">
+                                  {sObj?.nome || sId}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[10px] text-muted-foreground">
+                          O colaborador terá acesso às {visibilityForm.sedes.length} unidades selecionadas e o sistema abrirá por padrão na sede escolhida acima.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
           </Tabs>
 
           <DialogFooter className="pt-3 border-t mt-2">
@@ -1053,6 +1335,30 @@ const Usuarios = () => {
                 onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
                 placeholder="(00) 00000-0000"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create_sede">Sede / Unidade de Acesso</Label>
+              <Select
+                value={createForm.sedeId}
+                onValueChange={(val) => setCreateForm({ ...createForm, sedeId: val })}
+              >
+                <SelectTrigger id="create_sede">
+                  <SelectValue placeholder="Selecione a sede de acesso" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">
+                    Todas as Sedes (Acesso Global)
+                  </SelectItem>
+                  {sedes.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.nome} ({s.tipo})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Se escolher uma sede específica (ex: Sede Senador), o usuário já abrirá nela automaticamente.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Permissões</Label>

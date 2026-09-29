@@ -20,6 +20,16 @@ export const APP_SCREENS: ScreenDefinition[] = [
     label: 'Dashboard',
   },
   {
+    id: 'mensagens',
+    label: 'Mensagens',
+    tabs: [
+      { id: 'chat', label: 'Conversas WhatsApp' },
+      { id: 'triggers', label: 'Triggers & Automações' },
+      { id: 'setores', label: 'Setores & Filas' },
+      { id: 'permissoes', label: 'Permissões por Setor' },
+    ],
+  },
+  {
     id: 'comercial',
     label: 'Comercial',
     tabs: [
@@ -107,6 +117,8 @@ export interface UserVisibilityConfig {
   screens: string[];
   tabs: Record<string, string[]>;
   kpis?: Record<string, boolean>; // screenId -> show/hide total cards
+  sedes?: string[]; // IDs das sedes permitidas, ex: ['sede-senador'] ou ['todas']
+  defaultSedeId?: string; // Sede padrão inicial para abertura automática
 }
 
 export type AllUserPermissions = Record<string, UserVisibilityConfig>;
@@ -121,7 +133,7 @@ export function getDefaultPermissionsForRoles(roles: AppRole[]): UserVisibilityC
         allTabs[s.id] = s.tabs.map((t) => t.id);
       }
     });
-    return { screens: allScreens, tabs: allTabs };
+    return { screens: allScreens, tabs: allTabs, sedes: ['todas'] };
   }
 
   // Coleta as permissões base dos roles
@@ -148,7 +160,7 @@ export function getDefaultPermissionsForRoles(roles: AppRole[]): UserVisibilityC
     }
   });
 
-  return { screens, tabs };
+  return { screens, tabs, sedes: ['todas'] };
 }
 
 export function usePermissions() {
@@ -216,6 +228,38 @@ export function usePermissions() {
     return true; // Padrão: visível a menos que explicitamente desativado para o usuário
   };
 
+  const getUserAllowedSedes = (targetUserId?: string, userRoles: AppRole[] = []): string[] => {
+    const checkUserId = targetUserId || user?.id;
+    if (!checkUserId) return ['todas'];
+
+    const userConfig = permissionsStore[checkUserId];
+    if (userConfig && Array.isArray(userConfig.sedes) && userConfig.sedes.length > 0) {
+      return userConfig.sedes;
+    }
+
+    return ['todas'];
+  };
+
+  const getUserDefaultSede = (targetUserId?: string): string | undefined => {
+    const checkUserId = targetUserId || user?.id;
+    if (!checkUserId) return undefined;
+    return permissionsStore[checkUserId]?.defaultSedeId;
+  };
+
+  const setUserSedesConfig = (targetUserId: string, sedes: string[], defaultSedeId?: string) => {
+    setPermissionsStore((prev) => {
+      const current = prev[targetUserId] || getDefaultPermissionsForRoles(roles);
+      return {
+        ...prev,
+        [targetUserId]: {
+          ...current,
+          sedes,
+          defaultSedeId: defaultSedeId || (sedes.length === 1 && sedes[0] !== 'todas' ? sedes[0] : undefined),
+        },
+      };
+    });
+  };
+
   const saveUserPermissions = (userId: string, config: UserVisibilityConfig) => {
     setPermissionsStore((prev) => ({
       ...prev,
@@ -242,6 +286,9 @@ export function usePermissions() {
     canAccessScreen,
     canAccessTab,
     canViewKpis,
+    getUserAllowedSedes,
+    getUserDefaultSede,
+    setUserSedesConfig,
     saveUserPermissions,
     resetUserPermissions,
     getUserPermissions,
