@@ -242,15 +242,29 @@ serve(async (req) => {
     let schoolId: string | null = null;
 
     for (const candidate of instanceCandidates) {
-      const { data: rows } = await supabase
+      const { data: namedRows } = await supabase
         .from('evolution_instances')
         .select('school_id')
-        .or(`instance_name.eq.${candidate},connected_phone.eq.${candidate}`)
+        .eq('instance_name', candidate)
         .order('updated_at', { ascending: false })
         .limit(1);
-      if (rows?.[0]?.school_id) {
-        schoolId = rows[0].school_id;
+      if (namedRows?.[0]?.school_id) {
+        schoolId = namedRows[0].school_id;
         break;
+      }
+
+      const candidatePhone = candidate.replace(/\D/g, '');
+      if (candidatePhone) {
+        const { data: phoneRows } = await supabase
+          .from('evolution_instances')
+          .select('school_id')
+          .eq('connected_phone', candidatePhone)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (phoneRows?.[0]?.school_id) {
+          schoolId = phoneRows[0].school_id;
+          break;
+        }
       }
     }
 
@@ -300,6 +314,7 @@ serve(async (req) => {
           status: 'open',
           ticket_status: 'open',
           unread_count: isFromMe ? 0 : 1,
+          last_message: body,
           last_message_at: nowIso,
           tags: ['WhatsApp'],
         })
@@ -350,6 +365,11 @@ serve(async (req) => {
       .single();
 
     if (msgError) {
+      if (msgError.code === '23505') {
+        return new Response(JSON.stringify({ status: 'duplicate' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       console.error('Error inserting whatsapp_messages:', msgError);
       throw msgError;
     }

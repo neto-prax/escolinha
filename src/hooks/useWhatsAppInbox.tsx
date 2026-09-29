@@ -204,7 +204,7 @@ function useWhatsAppInboxState() {
           .from('whatsapp_conversations')
           .select(`
             id, school_id, sector_id, contact_id, phone, contact_name, ticket_status, priority,
-            last_message_at, unread_count, tags, assigned_to, created_at,
+            last_message, last_message_at, unread_count, tags, assigned_to, created_at,
             sector:sectors(id, name)
           `)
           .order('last_message_at', { ascending: false, nullsFirst: false });
@@ -227,12 +227,11 @@ function useWhatsAppInboxState() {
         if (onlyFromToday) {
           return convs
             .filter((c: any) => c.last_message_at && c.last_message_at >= todayStartIso)
-            .map((c: any) => ({ ...c, last_message: null, has_today_activity: true }));
+            .map((c: any) => ({ ...c, has_today_activity: true }));
         }
 
         return convs.map((c: any) => ({
           ...c,
-          last_message: null,
           last_message_at: c.last_message_at || c.created_at,
           has_today_activity: Boolean(c.last_message_at && c.last_message_at >= todayStartIso),
         }));
@@ -597,6 +596,7 @@ function useWhatsAppInboxState() {
           await supabase
             .from('whatsapp_conversations')
             .update({
+              last_message: text,
               last_message_at: nowIso,
               unread_count: 0,
             })
