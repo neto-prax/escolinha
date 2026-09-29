@@ -358,6 +358,7 @@ export function usePlatformBillingSettings() {
         matchingPlan,
         isFixedPlan,
         isBlockPlan,
+        rawBasePrice: basePlanPrice,
         blockCount,
         extraBlocks,
         blockSize,

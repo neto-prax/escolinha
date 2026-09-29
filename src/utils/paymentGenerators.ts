@@ -628,7 +628,7 @@ export function getBankSlipDetails(
         bankCode: '001-9',
         bankName: 'Banco do Brasil S.A.',
         brandColor: '#003882',
-        agency,
+        agency: agencia,
         account: conta,
         carteira,
         nossoNumero: `001${nossoNumero}`,

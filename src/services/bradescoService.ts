@@ -243,7 +243,7 @@ export const bradescoService = {
     const linhaDigitavel = febraban.linhaDigitavel;
     const codigoBarras = febraban.codigoBarras;
 
-    const pixPayload = `00020126580014br.gov.bcb.pix0136e2370000-${agencia}-4a21-bradesco0000000${seq.toString().slice(-4)}5204000053039865406${valorFormatado}5802BR5925BANCO BRADESCO ESCOLA6009SAO PAULO62070503***6304${seq.toString(16).toUpperCase().padStart(4, 'B')}`;
+    const pixPayload = `00020126580014br.gov.bcb.pix0136e2370000-${agencia}-4a21-bradesco0000000${seq.slice(-4)}5204000053039865406${valorFormatado}5802BR5925BANCO BRADESCO ESCOLA6009SAO PAULO62070503***6304${Number(seq.slice(-6)).toString(16).toUpperCase().padStart(4, 'B')}`;
 
     const newInvoice: BradescoInvoice = {
       id: `bra_inv_${Date.now()}`,

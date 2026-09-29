@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Pencil, Trash2, CreditCard, Percent, Loader2, Landmark, Key, ShieldCheck, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, CreditCard, Percent, Loader2, Landmark, Key, ShieldCheck, Eye, EyeOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { asaasService, getAsaasApiKey, setAsaasApiKey, DEFAULT_ASAAS_API_KEY } from '@/services/asaasService';
 import {
