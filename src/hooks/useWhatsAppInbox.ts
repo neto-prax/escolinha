@@ -1,17 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   WhatsAppChatConversation,
   WhatsAppChatMessage,
   WhatsAppSectorItem,
-  TriggerMatchResult,
 } from '@/types/mensagens';
 import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
 import { toast } from 'sonner';
 
-// Initial mock conversations for schools without active WhatsApp instance paired
+// Initial mock conversations as fallback/demo mode when database is empty
 const INITIAL_DEMO_CONVERSATIONS: WhatsAppChatConversation[] = [
   {
     id: 'conv-demo-1',
@@ -211,13 +210,33 @@ const INITIAL_DEMO_MESSAGES: Record<string, WhatsAppChatMessage[]> = {
   ],
 };
 
+export interface UaizapStatusData {
+  connected: boolean;
+  instanceName?: string;
+  profileName?: string;
+  ownerPhone?: string;
+  profilePicUrl?: string;
+  statusText: string;
+  lastChecked?: string;
+  isChecking?: boolean;
+}
+
 export function useWhatsAppInbox() {
   const { profile, school, roles, sectors: userAssignedSectors, hasSectorAccess } = useAuth();
   const queryClient = useQueryClient();
   const { evaluateMessage } = useWhatsAppTriggers();
 
-  // Local state cache for reactive responsiveness and fallback
-  const [conversations, setConversations] = useState<WhatsAppChatConversation[]>(() => {
+  // Mode: real database vs demo
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('purple_whatsapp_demo_mode');
+    return saved !== null ? saved === 'true' : false;
+  });
+
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // Fallback / local cache storage
+  const [localConversations, setLocalConversations] = useState<WhatsAppChatConversation[]>(() => {
     const saved = localStorage.getItem('purple_whatsapp_inbox_conversations');
     if (saved) {
       try {
@@ -229,11 +248,7 @@ export function useWhatsAppInbox() {
     return INITIAL_DEMO_CONVERSATIONS;
   });
 
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    INITIAL_DEMO_CONVERSATIONS[0].id
-  );
-
-  const [messagesMap, setMessagesMap] = useState<Record<string, WhatsAppChatMessage[]>>(() => {
+  const [localMessagesMap, setLocalMessagesMap] = useState<Record<string, WhatsAppChatMessage[]>>(() => {
     const saved = localStorage.getItem('purple_whatsapp_inbox_messages');
     if (saved) {
       try {
@@ -247,14 +262,64 @@ export function useWhatsAppInbox() {
 
   // Save changes to localStorage for continuity
   useEffect(() => {
-    localStorage.setItem('purple_whatsapp_inbox_conversations', JSON.stringify(conversations));
-  }, [conversations]);
+    localStorage.setItem('purple_whatsapp_inbox_conversations', JSON.stringify(localConversations));
+  }, [localConversations]);
 
   useEffect(() => {
-    localStorage.setItem('purple_whatsapp_inbox_messages', JSON.stringify(messagesMap));
-  }, [messagesMap]);
+    localStorage.setItem('purple_whatsapp_inbox_messages', JSON.stringify(localMessagesMap));
+  }, [localMessagesMap]);
 
-  // Fetch real sectors from Supabase
+  useEffect(() => {
+    localStorage.setItem('purple_whatsapp_demo_mode', String(isDemoMode));
+  }, [isDemoMode]);
+
+  // ----------------------------------------------------
+  // 1. QUERY UAIZAP LIVE CONNECTION STATUS
+  // ----------------------------------------------------
+  const {
+    data: uaizapRawStatus,
+    isLoading: isCheckingUaizap,
+    refetch: refetchUaizapStatus,
+  } = useQuery({
+    queryKey: ['uazapi-status'],
+    queryFn: async () => {
+      try {
+        const { data: res, error } = await supabase.functions.invoke('uazapi', {
+          body: { action: 'status' },
+        });
+
+        if (error) {
+          console.warn('Uaizap status invocation error:', error);
+          return null;
+        }
+        return res;
+      } catch (err) {
+        console.warn('Uaizap status check caught error:', err);
+        return null;
+      }
+    },
+    refetchInterval: 25000,
+  });
+
+  const uaizapStatus: UaizapStatusData = useMemo(() => {
+    const isConn = Boolean(uaizapRawStatus?.status?.connected);
+    const instance = uaizapRawStatus?.instance;
+
+    return {
+      connected: isConn,
+      instanceName: instance?.name || 'Uaizap Principal',
+      profileName: instance?.profileName || 'Neto Oliver',
+      ownerPhone: instance?.owner || '557583690441',
+      profilePicUrl: instance?.profilePicUrl,
+      statusText: isConn ? 'Conectado (Online)' : 'Desconectado',
+      lastChecked: new Date().toISOString(),
+      isChecking: isCheckingUaizap,
+    };
+  }, [uaizapRawStatus, isCheckingUaizap]);
+
+  // ----------------------------------------------------
+  // 2. FETCH REAL SECTORS FROM SUPABASE
+  // ----------------------------------------------------
   const { data: dbSectors = [] } = useQuery({
     queryKey: ['inbox-sectors', school?.id],
     queryFn: async () => {
@@ -296,6 +361,158 @@ export function useWhatsAppInbox() {
     }));
   }, [dbSectors]);
 
+  // ----------------------------------------------------
+  // 3. FETCH REAL CONVERSATIONS FROM SUPABASE
+  // ----------------------------------------------------
+  const {
+    data: dbConversations = [],
+    refetch: refetchDbConversations,
+    isLoading: isLoadingDbConversations,
+  } = useQuery({
+    queryKey: ['inbox-db-conversations', school?.id],
+    queryFn: async () => {
+      if (!school?.id) return [];
+
+      const { data, error } = await supabase
+        .from('whatsapp_conversations')
+        .select(`
+          *,
+          sector:sectors(id, name)
+        `)
+        .eq('school_id', school.id)
+        .order('last_message_at', { ascending: false, nullsFirst: false });
+
+      if (error) {
+        console.warn('Error fetching whatsapp_conversations:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: !!school?.id,
+  });
+
+  // Realtime subscription for whatsapp_conversations and whatsapp_messages
+  useEffect(() => {
+    if (!school?.id) return;
+
+    const channel = supabase
+      .channel('inbox-whatsapp-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'whatsapp_conversations',
+          filter: `school_id=eq.${school.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations', school.id] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'whatsapp_messages',
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
+          queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations', school.id] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [school?.id, queryClient]);
+
+  // ----------------------------------------------------
+  // 4. STUDENT ENRICHMENT HELPER
+  // ----------------------------------------------------
+  const findStudentInfo = useCallback((phone: string, contactName: string) => {
+    try {
+      const raw = localStorage.getItem('escolinha_alunos');
+      if (!raw) return null;
+      const alunos = JSON.parse(raw);
+      if (!Array.isArray(alunos)) return null;
+
+      const cleanPhone = phone.replace(/\D/g, '');
+      const match = alunos.find((a: any) => {
+        const telAluno = String(a.telefone || a.celular || '').replace(/\D/g, '');
+        const telResp = String(
+          a.responsavel_telefone || a.telefone_responsavel || a.contato_responsavel || ''
+        ).replace(/\D/g, '');
+
+        if (cleanPhone && cleanPhone.length >= 8) {
+          if (telAluno && (telAluno.includes(cleanPhone) || cleanPhone.includes(telAluno))) return true;
+          if (telResp && (telResp.includes(cleanPhone) || cleanPhone.includes(telResp))) return true;
+        }
+
+        const nameLower = contactName.toLowerCase().trim();
+        if (nameLower && a.responsavel && a.responsavel.toLowerCase().includes(nameLower)) return true;
+        if (nameLower && a.nome && a.nome.toLowerCase().includes(nameLower)) return true;
+        return false;
+      });
+
+      if (match) {
+        return {
+          id: match.id || `alu-${Date.now()}`,
+          name: match.nome,
+          turma: match.turma || 'Turma Regular',
+          responsavel: match.responsavel || contactName,
+          status_financeiro: (match.status_financeiro || 'em_dia') as 'em_dia' | 'pendente' | 'atrasado',
+          foto_url: match.foto_url || match.foto || null,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, []);
+
+  // Map Supabase rows to WhatsAppChatConversation format
+  const mappedDbConversations: WhatsAppChatConversation[] = useMemo(() => {
+    if (!dbConversations || dbConversations.length === 0) return [];
+
+    return dbConversations.map((row: any) => {
+      const sectorObj = allAvailableSectors.find((s) => s.id === row.sector_id);
+      const studentEnriched = findStudentInfo(row.phone, row.contact_name || row.phone);
+
+      return {
+        id: row.id,
+        phone: row.phone,
+        contact_name: row.contact_name || row.phone,
+        contact_id: row.contact_id,
+        sector_id: row.sector_id,
+        sector_name: sectorObj ? sectorObj.name : row.sector?.name || (row.sector_id ? 'Setor Atribuído' : 'Sem Setor'),
+        ticket_status: (row.ticket_status || 'open') as 'open' | 'pending' | 'resolved' | 'closed',
+        priority: (row.priority || 'normal') as 'low' | 'normal' | 'high' | 'urgent',
+        last_message: row.last_message || null,
+        last_message_at: row.last_message_at || row.created_at,
+        unread_count: row.unread_count || 0,
+        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+          row.contact_name || row.phone
+        )}`,
+        tags: row.tags || ['WhatsApp'],
+        assigned_to: row.assigned_to,
+        assigned_name: null,
+        student_info: studentEnriched,
+      };
+    });
+  }, [dbConversations, allAvailableSectors, findStudentInfo]);
+
+  // Combine real DB conversations or fallback to local/demo
+  const effectiveConversations = useMemo(() => {
+    // If not in demo mode and DB has conversations, prioritize DB
+    if (!isDemoMode && mappedDbConversations.length > 0) {
+      return mappedDbConversations;
+    }
+    // If user explicitly activated demo mode or DB has 0 rows, use local conversations
+    return localConversations;
+  }, [isDemoMode, mappedDbConversations, localConversations]);
+
   // Permissions Filter: Director or SuperAdmin sees ALL. Others only see authorized sectors.
   const isDirector = roles.includes('director') || roles.includes('admin');
 
@@ -303,7 +520,6 @@ export function useWhatsAppInbox() {
     if (isDirector) {
       return allAvailableSectors;
     }
-    // Filter sectors by user's assigned sectors
     return allAvailableSectors.filter(
       (sec) =>
         hasSectorAccess(sec.id) ||
@@ -314,56 +530,111 @@ export function useWhatsAppInbox() {
   // Filter conversations according to sector permissions
   const permittedConversations = useMemo(() => {
     if (isDirector) {
-      return conversations;
+      return effectiveConversations;
     }
-    return conversations.filter((c) => {
+    return effectiveConversations.filter((c) => {
       if (!c.sector_id) return true; // Unassigned is visible to all
       return (
         hasSectorAccess(c.sector_id) ||
         userPermittedSectors.some((s) => s.id === c.sector_id)
       );
     });
-  }, [conversations, isDirector, hasSectorAccess, userPermittedSectors]);
+  }, [effectiveConversations, isDirector, hasSectorAccess, userPermittedSectors]);
+
+  // Set default active conversation if none selected
+  useEffect(() => {
+    if (!activeConversationId && permittedConversations.length > 0) {
+      setActiveConversationId(permittedConversations[0].id);
+    }
+  }, [activeConversationId, permittedConversations]);
 
   // Active conversation object
   const activeConversation = useMemo(() => {
     return permittedConversations.find((c) => c.id === activeConversationId) || permittedConversations[0] || null;
   }, [permittedConversations, activeConversationId]);
 
-  // Active messages list
-  const activeMessages = useMemo(() => {
-    if (!activeConversation) return [];
-    return messagesMap[activeConversation.id] || [];
-  }, [messagesMap, activeConversation]);
+  // ----------------------------------------------------
+  // 5. FETCH REAL MESSAGES FOR ACTIVE CONVERSATION
+  // ----------------------------------------------------
+  const isDbActiveConversation = Boolean(
+    activeConversation?.id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeConversation.id)
+  );
 
-  // Send message action
+  const { data: dbMessages = [] } = useQuery({
+    queryKey: ['inbox-db-messages', activeConversation?.id],
+    queryFn: async () => {
+      if (!activeConversation?.id || !isDbActiveConversation) return [];
+
+      const { data, error } = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .eq('conversation_id', activeConversation.id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.warn('Error fetching whatsapp_messages:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: isDbActiveConversation,
+  });
+
+  // Active messages list (combines DB messages or local messages)
+  const activeMessages: WhatsAppChatMessage[] = useMemo(() => {
+    if (!activeConversation) return [];
+
+    if (isDbActiveConversation && dbMessages.length > 0) {
+      return dbMessages.map((m: any) => ({
+        id: m.id,
+        conversation_id: m.conversation_id,
+        body: m.body,
+        direction: (m.direction || 'incoming') as 'incoming' | 'outgoing',
+        message_type: (m.message_type || 'text') as any,
+        media_url: m.media_url,
+        media_caption: m.media_caption,
+        media_filename: m.media_filename,
+        status: (m.status || 'sent') as any,
+        created_at: m.created_at,
+        sender_name: m.direction === 'outgoing' ? profile?.full_name || 'Purple Edu' : activeConversation.contact_name,
+        is_automated: Boolean(m.is_quick_reply),
+        reply_to_id: m.reply_to_id,
+      }));
+    }
+
+    return localMessagesMap[activeConversation.id] || [];
+  }, [activeConversation, isDbActiveConversation, dbMessages, localMessagesMap, profile?.full_name]);
+
+  // ----------------------------------------------------
+  // 6. DISPATCH REAL MESSAGE VIA UAIZAP
+  // ----------------------------------------------------
   const sendMessage = useCallback(
     async (text: string, mediaFile?: { url: string; filename: string; type: 'image' | 'document' }) => {
       if (!activeConversation) return;
       if (!text.trim() && !mediaFile) return;
 
-      const newMsgId = `msg-${Date.now()}`;
+      const tempMsgId = `msg-out-${Date.now()}`;
       const newMsg: WhatsAppChatMessage = {
-        id: newMsgId,
+        id: tempMsgId,
         conversation_id: activeConversation.id,
         body: text,
         direction: 'outgoing',
         message_type: mediaFile ? mediaFile.type : 'text',
         media_url: mediaFile?.url,
         media_filename: mediaFile?.filename,
-        status: 'sent',
+        status: 'sending',
         created_at: new Date().toISOString(),
-        sender_name: profile?.full_name || 'Atendente Purple Edu',
+        sender_name: profile?.full_name || 'Purple Edu',
       };
 
-      // Add to thread
-      setMessagesMap((prev) => ({
+      // 1. Optimistic update
+      setLocalMessagesMap((prev) => ({
         ...prev,
         [activeConversation.id]: [...(prev[activeConversation.id] || []), newMsg],
       }));
 
-      // Update conversation in list
-      setConversations((prev) =>
+      setLocalConversations((prev) =>
         prev.map((c) =>
           c.id === activeConversation.id
             ? {
@@ -376,9 +647,57 @@ export function useWhatsAppInbox() {
         )
       );
 
-      // Attempt to dispatch via Supabase/Evolution if instance exists
+      // 2. Dispatch real message via Uaizap (Edge Function)
+      let dispatched = false;
+      let dispatchError: string | null = null;
+      const phoneDigits = activeConversation.phone.replace(/\D/g, '');
+      const formattedPhone = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
+
       try {
-        if (school?.id) {
+        const uazRes = await supabase.functions.invoke('uazapi', {
+          body: {
+            action: mediaFile ? 'send-media' : 'send-text',
+            data: mediaFile
+              ? {
+                  phone: formattedPhone,
+                  mediaType: mediaFile.type,
+                  mediaUrl: mediaFile.url,
+                  fileName: mediaFile.filename,
+                  caption: text,
+                }
+              : {
+                  phone: formattedPhone,
+                  message: text,
+                },
+          },
+        });
+
+        if (uazRes.error || (uazRes.data as any)?.error) {
+          console.warn('Uaizap dispatch warning:', uazRes.error || (uazRes.data as any)?.error);
+          dispatchError = uazRes.error?.message || (uazRes.data as any)?.error;
+        } else {
+          dispatched = true;
+        }
+      } catch (err: any) {
+        console.warn('Uaizap dispatch caught error:', err);
+        dispatchError = err?.message || 'Erro ao conectar à API Uaizap';
+      }
+
+      // Update message status in local map
+      setLocalMessagesMap((prev) => ({
+        ...prev,
+        [activeConversation.id]: (prev[activeConversation.id] || []).map((m) =>
+          m.id === tempMsgId ? { ...m, status: dispatched ? 'sent' : 'failed' } : m
+        ),
+      }));
+
+      // 3. Persist to Supabase if DB conversation
+      const isDbUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        activeConversation.id
+      );
+
+      if (isDbUuid && school?.id) {
+        try {
           await supabase.from('whatsapp_messages').insert({
             conversation_id: activeConversation.id,
             body: text,
@@ -386,23 +705,42 @@ export function useWhatsAppInbox() {
             message_type: mediaFile ? mediaFile.type : 'text',
             media_url: mediaFile?.url,
             media_filename: mediaFile?.filename,
-            status: 'sent',
+            status: dispatched ? 'sent' : 'failed',
           });
+
+          await supabase
+            .from('whatsapp_conversations')
+            .update({
+              last_message_at: new Date().toISOString(),
+              unread_count: 0,
+            })
+            .eq('id', activeConversation.id);
+
+          queryClient.invalidateQueries({ queryKey: ['inbox-db-messages', activeConversation.id] });
+          queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations', school.id] });
+        } catch (dbErr) {
+          console.warn('Error persisting whatsapp_messages:', dbErr);
         }
-      } catch (err) {
-        // Fallback silently if table not synced yet
+      }
+
+      if (dispatched) {
+        toast.success('Mensagem enviada via WhatsApp (Uaizap)!');
+      } else {
+        toast.error(`Falha no envio WhatsApp: ${dispatchError || 'Verifique o status do Uaizap'}`);
       }
     },
-    [activeConversation, profile?.full_name, school?.id]
+    [activeConversation, profile?.full_name, school?.id, queryClient]
   );
 
-  // Transfer conversation to another sector
+  // ----------------------------------------------------
+  // 7. TRANSFER SECTOR
+  // ----------------------------------------------------
   const transferSector = useCallback(
-    (conversationId: string, targetSectorId: string) => {
+    async (conversationId: string, targetSectorId: string) => {
       const sectorObj = allAvailableSectors.find((s) => s.id === targetSectorId);
       const sectorName = sectorObj ? sectorObj.name : targetSectorId;
 
-      setConversations((prev) =>
+      setLocalConversations((prev) =>
         prev.map((c) =>
           c.id === conversationId
             ? {
@@ -414,7 +752,7 @@ export function useWhatsAppInbox() {
         )
       );
 
-      // Add system message
+      // System notification message
       const systemMsg: WhatsAppChatMessage = {
         id: `sys-${Date.now()}`,
         conversation_id: conversationId,
@@ -427,27 +765,33 @@ export function useWhatsAppInbox() {
         sender_name: 'Sistema',
       };
 
-      setMessagesMap((prev) => ({
+      setLocalMessagesMap((prev) => ({
         ...prev,
         [conversationId]: [...(prev[conversationId] || []), systemMsg],
       }));
 
       toast.success(`Conversa transferida para o setor "${sectorName}"!`);
 
-      // Update Supabase if available
-      supabase
-        .from('whatsapp_conversations')
-        .update({ sector_id: targetSectorId })
-        .eq('id', conversationId)
-        .then(() => {});
+      // Update Supabase if DB conversation
+      const isDbUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+      if (isDbUuid) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ sector_id: targetSectorId })
+          .eq('id', conversationId);
+
+        queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
+      }
     },
-    [allAvailableSectors]
+    [allAvailableSectors, queryClient]
   );
 
-  // Change conversation status (ticket)
+  // ----------------------------------------------------
+  // 8. CHANGE TICKET STATUS
+  // ----------------------------------------------------
   const changeTicketStatus = useCallback(
-    (conversationId: string, newStatus: 'open' | 'pending' | 'resolved' | 'closed') => {
-      setConversations((prev) =>
+    async (conversationId: string, newStatus: 'open' | 'pending' | 'resolved' | 'closed') => {
+      setLocalConversations((prev) =>
         prev.map((c) => (c.id === conversationId ? { ...c, ticket_status: newStatus } : c))
       );
 
@@ -460,16 +804,166 @@ export function useWhatsAppInbox() {
 
       toast.info(`Atendimento marcado como "${statusLabels[newStatus]}".`);
 
-      supabase
-        .from('whatsapp_conversations')
-        .update({ ticket_status: newStatus })
-        .eq('id', conversationId)
-        .then(() => {});
+      const isDbUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+      if (isDbUuid) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ ticket_status: newStatus })
+          .eq('id', conversationId);
+
+        queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
+      }
     },
-    []
+    [queryClient]
   );
 
-  // Simulate an incoming WhatsApp message with automatic Trigger evaluation
+  // ----------------------------------------------------
+  // 9. CREATE NEW CONVERSATION (Start conversation with student/guardian)
+  // ----------------------------------------------------
+  const createNewConversation = useCallback(
+    async ({
+      phone,
+      contactName,
+      studentId,
+      studentName,
+      sectorId,
+      initialMessage,
+    }: {
+      phone: string;
+      contactName: string;
+      studentId?: string;
+      studentName?: string;
+      sectorId?: string;
+      initialMessage?: string;
+    }) => {
+      const cleanPhone = phone.replace(/\D/g, '');
+      const sectorObj = allAvailableSectors.find((s) => s.id === sectorId);
+      const sectorName = sectorObj ? sectorObj.name : 'Secretaria';
+
+      let newConvId: string | null = null;
+
+      // 1. Check if Supabase conversation already exists with this phone
+      if (school?.id) {
+        const { data: existing } = await supabase
+          .from('whatsapp_conversations')
+          .select('id')
+          .eq('school_id', school.id)
+          .eq('phone', cleanPhone)
+          .maybeSingle();
+
+        if (existing?.id) {
+          newConvId = existing.id;
+        } else {
+          const { data: inserted, error: insErr } = await supabase
+            .from('whatsapp_conversations')
+            .insert({
+              school_id: school.id,
+              phone: cleanPhone,
+              contact_name: contactName,
+              sector_id: sectorId || null,
+              student_id: studentId || null,
+              ticket_status: 'open',
+              unread_count: 0,
+              last_message_at: new Date().toISOString(),
+              tags: ['Novo Contato', 'WhatsApp'],
+            })
+            .select('id')
+            .single();
+
+          if (!insErr && inserted?.id) {
+            newConvId = inserted.id;
+            queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations', school.id] });
+          }
+        }
+      }
+
+      // If not stored in DB, create in local conversations
+      if (!newConvId) {
+        newConvId = `conv-new-${Date.now()}`;
+        const newConv: WhatsAppChatConversation = {
+          id: newConvId,
+          phone: cleanPhone,
+          contact_name: contactName,
+          sector_id: sectorId || 'secretaria',
+          sector_name: sectorName,
+          ticket_status: 'open',
+          priority: 'normal',
+          last_message: initialMessage || 'Conversa iniciada',
+          last_message_at: new Date().toISOString(),
+          unread_count: 0,
+          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`,
+          tags: ['Novo Contato', 'WhatsApp'],
+          student_info: studentName
+            ? {
+                id: studentId || `alu-${Date.now()}`,
+                name: studentName,
+                turma: 'Turma Regular',
+                responsavel: contactName,
+                status_financeiro: 'em_dia',
+              }
+            : null,
+        };
+
+        setLocalConversations((prev) => [newConv, ...prev]);
+      }
+
+      setActiveConversationId(newConvId);
+
+      // If initial message provided, send it!
+      if (initialMessage?.trim()) {
+        const formattedPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+        try {
+          await supabase.functions.invoke('uazapi', {
+            body: {
+              action: 'send-text',
+              data: {
+                phone: formattedPhone,
+                message: initialMessage.trim(),
+              },
+            },
+          });
+          toast.success(`Mensagem inicial enviada para ${contactName}!`);
+        } catch {
+          // ignore
+        }
+      }
+
+      return newConvId;
+    },
+    [school?.id, allAvailableSectors, queryClient]
+  );
+
+  // ----------------------------------------------------
+  // 10. MANUAL SYNC WITH UAIZAP / SUPABASE
+  // ----------------------------------------------------
+  const syncWithUaizap = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      // 1. Refetch Uaizap connection status
+      const statusResult = await refetchUaizapStatus();
+      const isOnline = Boolean(statusResult.data?.status?.connected);
+      const instanceName = statusResult.data?.instance?.profileName || statusResult.data?.instance?.name || 'Online';
+
+      // 2. Refetch DB conversations and messages
+      await refetchDbConversations();
+      await queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
+
+      // 3. Inform user
+      if (isOnline) {
+        toast.success(`Sincronização Uaizap ativa! Instância: ${instanceName} (Online)`);
+      } else {
+        toast.warning('Uaizap verificado: Instância aguardando conexão no WhatsApp.');
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao sincronizar com Uaizap: ${err?.message || 'Falha de rede'}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [refetchUaizapStatus, refetchDbConversations, queryClient]);
+
+  // ----------------------------------------------------
+  // 11. SIMULATE INCOMING MESSAGE WITH TRIGGER EVALUATION
+  // ----------------------------------------------------
   const simulateIncomingMessage = useCallback(
     ({
       phone,
@@ -482,8 +976,9 @@ export function useWhatsAppInbox() {
       message: string;
       studentName?: string;
     }) => {
-      // Find or create conversation
-      let targetConv = conversations.find((c) => c.phone.replace(/\D/g, '') === phone.replace(/\D/g, ''));
+      let targetConv = effectiveConversations.find(
+        (c) => c.phone.replace(/\D/g, '') === phone.replace(/\D/g, '')
+      );
       let convId = targetConv?.id;
 
       if (!convId) {
@@ -511,10 +1006,10 @@ export function useWhatsAppInbox() {
               }
             : null,
         };
-        setConversations((prev) => [newConv, ...prev]);
+        setLocalConversations((prev) => [newConv, ...prev]);
         setActiveConversationId(convId);
       } else {
-        setConversations((prev) =>
+        setLocalConversations((prev) =>
           prev.map((c) =>
             c.id === convId
               ? {
@@ -540,7 +1035,7 @@ export function useWhatsAppInbox() {
         created_at: new Date().toISOString(),
       };
 
-      setMessagesMap((prev) => ({
+      setLocalMessagesMap((prev) => ({
         ...prev,
         [convId]: [...(prev[convId] || []), incomingMsg],
       }));
@@ -554,7 +1049,6 @@ export function useWhatsAppInbox() {
       });
 
       if (matchResult.matched && matchResult.formattedResponse) {
-        // Trigger matched! Auto-respond with realistic delay
         setTimeout(() => {
           const autoReply: WhatsAppChatMessage = {
             id: `msg-auto-${Date.now()}`,
@@ -568,16 +1062,15 @@ export function useWhatsAppInbox() {
             sender_name: `Trigger: ${matchResult.trigger?.nome} ⚡`,
           };
 
-          setMessagesMap((prev) => ({
+          setLocalMessagesMap((prev) => ({
             ...prev,
             [convId!]: [...(prev[convId!] || []), autoReply],
           }));
 
-          // If trigger specifies target sector, transfer automatically!
           if (matchResult.targetSectorId) {
             const destSector = allAvailableSectors.find((s) => s.id === matchResult.targetSectorId);
             const destName = destSector?.name || matchResult.targetSectorId;
-            setConversations((prev) =>
+            setLocalConversations((prev) =>
               prev.map((c) =>
                 c.id === convId
                   ? {
@@ -599,12 +1092,12 @@ export function useWhatsAppInbox() {
         toast.success(`Mensagem de ${contactName} recebida no chat!`);
       }
     },
-    [conversations, evaluateMessage, school?.name, allAvailableSectors]
+    [effectiveConversations, evaluateMessage, school?.name, allAvailableSectors]
   );
 
   return {
     conversations: permittedConversations,
-    allConversations: conversations,
+    allConversations: effectiveConversations,
     activeConversation,
     activeConversationId,
     setActiveConversationId,
@@ -616,5 +1109,12 @@ export function useWhatsAppInbox() {
     transferSector,
     changeTicketStatus,
     simulateIncomingMessage,
+    syncWithUaizap,
+    isSyncing,
+    uaizapStatus,
+    createNewConversation,
+    isDemoMode,
+    setIsDemoMode,
+    isLoadingDbConversations,
   };
 }
