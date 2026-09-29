@@ -47,6 +47,11 @@ Deno.serve(async (req) => {
         };
         break;
 
+      case 'get-webhook':
+        endpoint = '/webhook';
+        method = 'GET';
+        break;
+
       case 'connect':
         endpoint = '/instance/connect';
         body = data.phone ? { phone: String(data.phone).replace(/\D/g, '') } : {};

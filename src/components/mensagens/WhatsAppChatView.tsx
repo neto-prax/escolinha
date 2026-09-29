@@ -100,8 +100,6 @@ export function WhatsAppChatView() {
     isSyncing,
     uaizapStatus,
     createNewConversation,
-    isDemoMode,
-    setIsDemoMode,
     isLoadingDbConversations,
     onlyFromToday,
     setOnlyFromToday,
@@ -768,12 +766,16 @@ export function WhatsAppChatView() {
                 className="h-10 w-10 p-0 text-muted-foreground hover:text-foreground"
                 title="Anexar arquivo ou imagem"
                 onClick={() => {
-                  const demoUrl = 'https://purpleedu.com.br/docs/comprovante.pdf';
-                  sendMessage('Segue o documento solicitado em anexo:', {
-                    url: demoUrl,
-                    filename: 'Declaracao_Matricula.pdf',
-                    type: 'document',
-                  });
+                  const mediaUrl = window.prompt('Informe a URL da imagem ou documento que deseja enviar via WhatsApp:');
+                  if (mediaUrl?.trim()) {
+                    const isImg = /\.(jpg|jpeg|png|webp|gif)($|\?)/i.test(mediaUrl);
+                    sendMessage(inputText.trim() || (isImg ? 'Segue imagem em anexo' : 'Segue documento em anexo'), {
+                      url: mediaUrl.trim(),
+                      filename: isImg ? 'imagem.jpg' : 'documento.pdf',
+                      type: isImg ? 'image' : 'document',
+                    });
+                    setInputText('');
+                  }
                 }}
               >
                 <Paperclip className="w-4 h-4" />

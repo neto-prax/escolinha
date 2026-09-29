@@ -1,6 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { WhatsAppInstancesManager } from '@/components/settings/WhatsAppInstancesManager';
 import { SectorUsersManager } from '@/components/settings/SectorUsersManager';
 import { AutomationSettings } from '@/components/settings/AutomationSettings';
 import { FinancialSettings } from '@/components/settings/FinancialSettings';
@@ -148,8 +147,7 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
 
         {/* 2. WHATSAPP */}
         <TabsContent value="whatsapp" className="space-y-6">
-          {isSuperAdmin && <UazapiSettings />}
-          <WhatsAppInstancesManager />
+          <UazapiSettings />
         </TabsContent>
 
         {/* 3. FINANCEIRO */}

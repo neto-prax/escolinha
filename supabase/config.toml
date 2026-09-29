@@ -9,5 +9,8 @@ verify_jwt = false
 [functions.evolution-webhook]
 verify_jwt = false
 
+[functions.uazapi]
+verify_jwt = false
+
 [functions.create-guardian-access]
 verify_jwt = false

@@ -7,113 +7,7 @@ import {
   WhatsAppChatMessage,
   WhatsAppSectorItem,
 } from '@/types/mensagens';
-import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
 import { toast } from 'sonner';
-
-// Mock conversations ONLY used when user explicitly enables "Modo Demonstração"
-const INITIAL_DEMO_CONVERSATIONS: WhatsAppChatConversation[] = [
-  {
-    id: 'conv-demo-1',
-    phone: '5511988887766',
-    contact_name: 'Mariana Silveira (Demo)',
-    sector_id: 'financeiro',
-    sector_name: 'Financeiro',
-    ticket_status: 'open',
-    priority: 'high',
-    last_message: 'Olá, gostaria de saber se o boleto com desconto vence hoje ou amanhã?',
-    last_message_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    unread_count: 2,
-    avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
-    tags: ['Demonstração', '5º Ano A', 'Mensalidade'],
-    assigned_name: 'Carla (Financeiro)',
-    student_info: {
-      id: 'alu-demo-1',
-      name: 'Lucas Silveira',
-      turma: '5º Ano - Ensino Fundamental I',
-      responsavel: 'Mariana Silveira (Mãe)',
-      status_financeiro: 'em_dia',
-      foto_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=120&auto=format&fit=crop&q=80',
-    },
-  },
-  {
-    id: 'conv-demo-2',
-    phone: '5511977776655',
-    contact_name: 'Carlos Eduardo Santos (Demo)',
-    sector_id: 'comercial',
-    sector_name: 'Comercial & Matrículas',
-    ticket_status: 'open',
-    priority: 'normal',
-    last_message: 'Boa tarde! Qual a documentação e valores para matrícula no 1º ano?',
-    last_message_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    unread_count: 1,
-    avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-    tags: ['Demonstração', 'Novo Interessado'],
-    assigned_name: 'Roberto (Vendas)',
-    student_info: {
-      id: 'alu-demo-2',
-      name: 'Sofia Santos',
-      turma: '1º Ano - Ensino Fundamental',
-      responsavel: 'Carlos Santos (Pai)',
-      status_financeiro: 'em_dia',
-    },
-  },
-];
-
-const INITIAL_DEMO_MESSAGES: Record<string, WhatsAppChatMessage[]> = {
-  'conv-demo-1': [
-    {
-      id: 'msg-1-1',
-      conversation_id: 'conv-demo-1',
-      body: 'Bom dia! Gostaria de uma informação sobre o pagamento da mensalidade.',
-      direction: 'incoming',
-      message_type: 'text',
-      status: 'read',
-      created_at: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-    },
-    {
-      id: 'msg-1-2',
-      conversation_id: 'conv-demo-1',
-      body: 'Olá Mariana! 💳 Localizamos seu contato. Para emissão de 2ª via de boleto ou confirmação de pagamento para o aluno(a) Lucas Silveira, estou transferindo você para o nosso setor Financeiro. Um momento!',
-      direction: 'outgoing',
-      message_type: 'text',
-      status: 'read',
-      created_at: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
-      is_automated: true,
-      sender_name: 'Purple Bot 🤖',
-    },
-    {
-      id: 'msg-1-3',
-      conversation_id: 'conv-demo-1',
-      body: 'Olá, gostaria de saber se o boleto com desconto vence hoje ou amanhã?',
-      direction: 'incoming',
-      message_type: 'text',
-      status: 'delivered',
-      created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    },
-  ],
-  'conv-demo-2': [
-    {
-      id: 'msg-2-1',
-      conversation_id: 'conv-demo-2',
-      body: 'Boa tarde! Qual a documentação e valores para matrícula no 1º ano?',
-      direction: 'incoming',
-      message_type: 'text',
-      status: 'read',
-      created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    },
-    {
-      id: 'msg-2-2',
-      conversation_id: 'conv-demo-2',
-      body: 'Olá Carlos Eduardo! 🎒 Que alegria seu interesse na nossa escola! Nossas matrículas para o período letivo estão com condições especiais. Estou transferindo seu atendimento para nossa equipe de Matrículas agora!',
-      direction: 'outgoing',
-      message_type: 'text',
-      status: 'delivered',
-      created_at: new Date(Date.now() - 1000 * 60 * 44).toISOString(),
-      is_automated: true,
-      sender_name: 'Purple Bot 🤖',
-    },
-  ],
-};
 
 export interface UaizapStatusData {
   connected: boolean;
@@ -129,30 +23,10 @@ export interface UaizapStatusData {
 export function useWhatsAppInbox() {
   const { profile, school, roles, sectors: userAssignedSectors, hasSectorAccess } = useAuth();
   const queryClient = useQueryClient();
-  const { evaluateMessage } = useWhatsAppTriggers();
 
   const schoolId = profile?.school_id || school?.id || null;
 
-  // Auto clean old mock demo conversations from localStorage if previously stored
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('purple_whatsapp_inbox_conversations');
-      if (saved && (saved.includes('conv-demo-1') || saved.includes('Mariana Silveira'))) {
-        localStorage.removeItem('purple_whatsapp_inbox_conversations');
-        localStorage.removeItem('purple_whatsapp_inbox_messages');
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Mode: real database vs demo. Default is ALWAYS false (actual real messages).
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('purple_whatsapp_demo_mode');
-    return saved === 'true';
-  });
-
-  // Mode: Filter messages starting from today (default: true)
+  // Filter messages starting from today (default: true)
   const [onlyFromToday, setOnlyFromToday] = useState<boolean>(() => {
     const saved = localStorage.getItem('purple_whatsapp_only_today');
     return saved !== 'false';
@@ -162,64 +36,26 @@ export function useWhatsAppInbox() {
     localStorage.setItem('purple_whatsapp_only_today', String(onlyFromToday));
   }, [onlyFromToday]);
 
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(() => {
+    return localStorage.getItem('purple_whatsapp_active_conv') || null;
+  });
+
+  useEffect(() => {
+    if (activeConversationId) {
+      localStorage.setItem('purple_whatsapp_active_conv', activeConversationId);
+    }
+  }, [activeConversationId]);
+
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-
-  // Local conversations and messages state for session responsiveness and optimistic UI
-  const [localConversations, setLocalConversations] = useState<WhatsAppChatConversation[]>(() => {
-    try {
-      const saved = localStorage.getItem('purple_whatsapp_inbox_conversations');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0 && !parsed[0].id?.startsWith('conv-demo-')) {
-          return parsed;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return [];
-  });
-
-  const [localMessagesMap, setLocalMessagesMap] = useState<Record<string, WhatsAppChatMessage[]>>(() => {
-    try {
-      const saved = localStorage.getItem('purple_whatsapp_inbox_messages');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && !parsed['conv-demo-1']) {
-          return parsed;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return {};
-  });
-
-  // Save changes to localStorage for continuity
-  useEffect(() => {
-    if (!isDemoMode && localConversations.length > 0) {
-      localStorage.setItem('purple_whatsapp_inbox_conversations', JSON.stringify(localConversations));
-    }
-  }, [localConversations, isDemoMode]);
-
-  useEffect(() => {
-    if (!isDemoMode && Object.keys(localMessagesMap).length > 0) {
-      localStorage.setItem('purple_whatsapp_inbox_messages', JSON.stringify(localMessagesMap));
-    }
-  }, [localMessagesMap, isDemoMode]);
-
-  useEffect(() => {
-    localStorage.setItem('purple_whatsapp_demo_mode', String(isDemoMode));
-  }, [isDemoMode]);
+  const [optimisticMessages, setOptimisticMessages] = useState<WhatsAppChatMessage[]>([]);
 
   // ----------------------------------------------------
-  // 1. QUERY UAIZAP LIVE CONNECTION STATUS
+  // 1. QUERY UAZAPI STATUS
   // ----------------------------------------------------
   const {
-    data: uaizapRawStatus,
-    isLoading: isCheckingUaizap,
-    refetch: refetchUaizapStatus,
+    data: uazapiRawStatus,
+    isLoading: isCheckingUazapi,
+    refetch: refetchUazapiStatus,
   } = useQuery({
     queryKey: ['uazapi-status'],
     queryFn: async () => {
@@ -227,27 +63,26 @@ export function useWhatsAppInbox() {
         const { data: res, error } = await supabase.functions.invoke('uazapi', {
           body: { action: 'status' },
         });
-
         if (error) {
-          console.warn('Uaizap status invocation error:', error);
+          console.warn('Uazapi status error:', error);
           return null;
         }
         return res;
       } catch (err) {
-        console.warn('Uaizap status check caught error:', err);
+        console.warn('Uazapi status exception:', err);
         return null;
       }
     },
-    refetchInterval: 20000,
+    refetchInterval: 15000,
   });
 
   const uaizapStatus: UaizapStatusData = useMemo(() => {
     const isConn = Boolean(
-      uaizapRawStatus?.status?.connected ||
-      uaizapRawStatus?.instance?.status === 'connected' ||
-      uaizapRawStatus?.connected
+      uazapiRawStatus?.status?.connected ||
+      uazapiRawStatus?.instance?.status === 'connected' ||
+      uazapiRawStatus?.connected
     );
-    const instance = uaizapRawStatus?.instance;
+    const instance = uazapiRawStatus?.instance;
 
     return {
       connected: isConn,
@@ -257,50 +92,12 @@ export function useWhatsAppInbox() {
       profilePicUrl: instance?.profilePicUrl,
       statusText: isConn ? 'Conectado (Online)' : 'Desconectado',
       lastChecked: new Date().toISOString(),
-      isChecking: isCheckingUaizap,
+      isChecking: isCheckingUazapi,
     };
-  }, [uaizapRawStatus, isCheckingUaizap]);
-
-  // Ensure Uaizap instance exists in evolution_instances so webhook accepts incoming WhatsApp messages
-  useEffect(() => {
-    if (!schoolId) return;
-
-    const registerInstances = async () => {
-      const candidates = [
-        { name: 'Neto', display: 'Neto Oliver (Uaizap)' },
-        { name: 'r0e9cab190868e0', display: 'Uaizap Instância' },
-        { name: 'default', display: 'Instância Padrão' },
-        { name: 'Escolinha', display: 'Escolinha' },
-      ];
-
-      for (const item of candidates) {
-        try {
-          const { data: existing } = await supabase
-            .from('evolution_instances')
-            .select('id')
-            .eq('instance_name', item.name)
-            .maybeSingle();
-
-          if (!existing) {
-            await supabase.from('evolution_instances').insert({
-              school_id: schoolId,
-              instance_name: item.name,
-              display_name: item.display,
-              status: 'connected',
-              connected_phone: '557583690441',
-            });
-          }
-        } catch {
-          // ignore
-        }
-      }
-    };
-
-    registerInstances();
-  }, [schoolId]);
+  }, [uazapiRawStatus, isCheckingUazapi]);
 
   // ----------------------------------------------------
-  // 2. FETCH REAL SECTORS FROM SUPABASE
+  // 2. FETCH SECTORS FROM SUPABASE
   // ----------------------------------------------------
   const { data: dbSectors = [] } = useQuery({
     queryKey: ['inbox-sectors', schoolId],
@@ -324,7 +121,6 @@ export function useWhatsAppInbox() {
     },
   });
 
-  // Standard institution sectors
   const allAvailableSectors: WhatsAppSectorItem[] = useMemo(() => {
     const defaultSectors: WhatsAppSectorItem[] = [
       { id: 'comercial', name: 'Comercial & Matrículas', description: 'Atendimento a novos alunos e rematrículas', color: '#3b82f6', is_active: true },
@@ -345,8 +141,56 @@ export function useWhatsAppInbox() {
     }));
   }, [dbSectors]);
 
+  // Helper to enrich student info from local registered students
+  const getSchoolAlunos = useCallback((): any[] => {
+    try {
+      const raw = localStorage.getItem('escolinha_alunos');
+      if (!raw) return [];
+      const list = JSON.parse(raw);
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const findStudentInfo = useCallback(
+    (phone: string, contactName: string) => {
+      const alunos = getSchoolAlunos();
+      if (alunos.length === 0) return null;
+
+      const cleanPhone = phone.replace(/\D/g, '');
+      const last8 = cleanPhone.slice(-8);
+
+      const found = alunos.find((a: any) => {
+        const aPhone = String(a.responsavel_telefone || a.telefone_responsavel || a.telefone || a.celular || '').replace(/\D/g, '');
+        if (aPhone && last8 && aPhone.endsWith(last8)) return true;
+
+        if (contactName && a.responsavel) {
+          const cLower = contactName.toLowerCase().trim();
+          const rLower = a.responsavel.toLowerCase().trim();
+          if (cLower === rLower || cLower.includes(rLower) || rLower.includes(cLower)) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (!found) return null;
+
+      return {
+        id: found.id || `alu-${found.nome}`,
+        name: found.nome,
+        turma: found.turma || 'Turma Regular',
+        responsavel: found.responsavel || contactName,
+        status_financeiro: (found.status_financeiro || 'em_dia') as 'em_dia' | 'pendente' | 'atrasado',
+        foto_url: found.foto_url || null,
+      };
+    },
+    [getSchoolAlunos]
+  );
+
   // ----------------------------------------------------
-  // 3. FETCH REAL CONVERSATIONS FROM SUPABASE WITH LATEST MESSAGE
+  // 3. FETCH CONVERSATIONS FROM SUPABASE
   // ----------------------------------------------------
   const {
     data: dbConversations = [],
@@ -379,7 +223,7 @@ export function useWhatsAppInbox() {
         todayStart.setUTCHours(0, 0, 0, 0);
         const todayStartIso = todayStart.toISOString();
 
-        // Fetch latest message for each conversation to accurately show preview text
+        // Fetch latest message for each conversation
         const convIds = convs.map((c: any) => c.id);
         let msgQuery = supabase
           .from('whatsapp_messages')
@@ -409,7 +253,7 @@ export function useWhatsAppInbox() {
               const last = latestMap.get(c.id);
               return {
                 ...c,
-                last_message: last?.body || null,
+                last_message: last?.body || c.last_message || null,
                 last_message_at: last?.created_at || c.last_message_at,
                 has_today_activity: true,
               };
@@ -433,31 +277,23 @@ export function useWhatsAppInbox() {
         return [];
       }
     },
-    refetchInterval: 6000, // Poll every 6s for live messages
+    refetchInterval: 4000,
   });
 
-  // Realtime subscription for whatsapp_conversations and whatsapp_messages
+  // Realtime subscription for conversations and messages
   useEffect(() => {
     const channel = supabase
-      .channel('inbox-whatsapp-realtime')
+      .channel('whatsapp-inbox-realtime-channel')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'whatsapp_conversations',
-        },
+        { event: '*', schema: 'public', table: 'whatsapp_conversations' },
         () => {
           queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
         }
       )
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'whatsapp_messages',
-        },
+        { event: '*', schema: 'public', table: 'whatsapp_messages' },
         () => {
           queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
           queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
@@ -470,72 +306,8 @@ export function useWhatsAppInbox() {
     };
   }, [queryClient]);
 
-  // ----------------------------------------------------
-  // 4. LOAD ACTUAL SCHOOL STUDENTS & PARENTS
-  // ----------------------------------------------------
-  const getSchoolAlunos = useCallback((): any[] => {
-    try {
-      let raw = null;
-      if (schoolId) {
-        raw = localStorage.getItem(`s_${schoolId}_escolinha_alunos`);
-      }
-      if (!raw) {
-        raw = localStorage.getItem('escolinha_alunos');
-      }
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }, [schoolId]);
-
-  const findStudentInfo = useCallback(
-    (phone: string, contactName: string) => {
-      try {
-        const alunos = getSchoolAlunos();
-        if (alunos.length === 0) return null;
-
-        const cleanPhone = phone.replace(/\D/g, '');
-        const match = alunos.find((a: any) => {
-          const telAluno = String(a.telefone || a.celular || '').replace(/\D/g, '');
-          const telResp = String(
-            a.responsavel_telefone || a.telefone_responsavel || a.contato_responsavel || ''
-          ).replace(/\D/g, '');
-
-          if (cleanPhone && cleanPhone.length >= 8) {
-            if (telAluno && (telAluno.includes(cleanPhone) || cleanPhone.includes(telAluno))) return true;
-            if (telResp && (telResp.includes(cleanPhone) || cleanPhone.includes(telResp))) return true;
-          }
-
-          const nameLower = contactName.toLowerCase().trim();
-          if (nameLower && a.responsavel && a.responsavel.toLowerCase().includes(nameLower)) return true;
-          if (nameLower && a.nome && a.nome.toLowerCase().includes(nameLower)) return true;
-          return false;
-        });
-
-        if (match) {
-          return {
-            id: match.id || `alu-${Date.now()}`,
-            name: match.nome,
-            turma: match.turma || 'Turma Regular',
-            responsavel: match.responsavel || contactName,
-            status_financeiro: (match.status_financeiro || 'em_dia') as 'em_dia' | 'pendente' | 'atrasado',
-            foto_url: match.foto_url || match.foto || null,
-          };
-        }
-      } catch {
-        // ignore
-      }
-      return null;
-    },
-    [getSchoolAlunos]
-  );
-
-  // Map Supabase rows to WhatsAppChatConversation format
+  // Map DB conversations into WhatsAppChatConversation format
   const mappedDbConversations: WhatsAppChatConversation[] = useMemo(() => {
-    if (!dbConversations || dbConversations.length === 0) return [];
-
     return dbConversations.map((row: any) => {
       const sectorObj = allAvailableSectors.find((s) => s.id === row.sector_id);
       const studentEnriched = findStudentInfo(row.phone, row.contact_name || row.phone);
@@ -563,7 +335,7 @@ export function useWhatsAppInbox() {
     });
   }, [dbConversations, allAvailableSectors, findStudentInfo]);
 
-  // Real conversations generated from actual school students who have phone numbers registered
+  // School contacts who do not have an active chat yet (allows starting chat in 1 click)
   const schoolContactsConversations: WhatsAppChatConversation[] = useMemo(() => {
     const alunos = getSchoolAlunos();
     if (alunos.length === 0) return [];
@@ -571,7 +343,6 @@ export function useWhatsAppInbox() {
     const list: WhatsAppChatConversation[] = [];
     const seenPhones = new Set<string>();
 
-    // Exclude phones already present in DB conversations
     for (const dbc of mappedDbConversations) {
       seenPhones.add(dbc.phone.replace(/\D/g, ''));
     }
@@ -599,102 +370,66 @@ export function useWhatsAppInbox() {
         last_message: null,
         last_message_at: null,
         unread_count: 0,
-        avatar_url: aluno.foto_url || aluno.foto || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`,
-        tags: ['Aluno da Escola', aluno.turma || 'Regular'],
+        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`,
+        tags: [aluno.turma || 'Aluno Cadastrado'],
         student_info: {
-          id: aluno.id || `alu-${cleanPhone}`,
-          name: aluno.nome || 'Aluno',
+          id: aluno.id || `alu-${aluno.nome}`,
+          name: aluno.nome,
           turma: aluno.turma || 'Turma Regular',
           responsavel: contactName,
-          status_financeiro: (aluno.status_financeiro || 'em_dia') as any,
-          foto_url: aluno.foto_url || aluno.foto || null,
+          status_financeiro: aluno.status_financeiro || 'em_dia',
+          foto_url: aluno.foto_url,
         },
       });
     }
 
     return list;
-  }, [getSchoolAlunos, mappedDbConversations]);
+  }, [mappedDbConversations, getSchoolAlunos]);
 
-  // Combine actual real conversations: DB conversations + local active conversations + school contacts
-  const effectiveConversations: WhatsAppChatConversation[] = useMemo(() => {
-    // If user explicitly activated demo mode, show demo conversations
-    if (isDemoMode) {
-      return INITIAL_DEMO_CONVERSATIONS;
+  // Combine database conversations with student directory
+  const effectiveConversations = useMemo(() => {
+    if (onlyFromToday) {
+      // In "Hoje em diante" mode, show conversations with activity today + school contacts
+      return [...mappedDbConversations, ...schoolContactsConversations];
     }
+    return [...mappedDbConversations, ...schoolContactsConversations];
+  }, [mappedDbConversations, schoolContactsConversations, onlyFromToday]);
 
-    // Merge DB conversations with any local conversations started in this session
-    const combined: WhatsAppChatConversation[] = [...mappedDbConversations];
-    const seenIds = new Set(combined.map((c) => c.id));
-    const seenPhones = new Set(combined.map((c) => c.phone.replace(/\D/g, '')));
-
-    for (const local of localConversations) {
-      const cleanPhone = local.phone.replace(/\D/g, '');
-      if (!seenIds.has(local.id) && !seenPhones.has(cleanPhone) && !local.id.startsWith('conv-demo-')) {
-        combined.push(local);
-        seenIds.add(local.id);
-        seenPhones.add(cleanPhone);
-      }
-    }
-
-    // Include actual school students/guardians ready to chat
-    for (const sc of schoolContactsConversations) {
-      const cleanPhone = sc.phone.replace(/\D/g, '');
-      if (!seenIds.has(sc.id) && !seenPhones.has(cleanPhone)) {
-        combined.push(sc);
-        seenIds.add(sc.id);
-        seenPhones.add(cleanPhone);
-      }
-    }
-
-    return combined;
-  }, [isDemoMode, mappedDbConversations, localConversations, schoolContactsConversations]);
-
-  // Permissions Filter: Director or SuperAdmin sees ALL. Others only see authorized sectors.
-  const isDirector = roles.includes('director') || roles.includes('admin');
+  // Sector permissions
+  const isDirector = useMemo(() => {
+    return roles.includes('director') || roles.includes('admin') || roles.length === 0;
+  }, [roles]);
 
   const userPermittedSectors = useMemo(() => {
-    if (isDirector) {
-      return allAvailableSectors;
-    }
-    return allAvailableSectors.filter(
-      (sec) =>
-        hasSectorAccess(sec.id) ||
-        userAssignedSectors.some((s) => s.id === sec.id || s.name.toLowerCase() === sec.name.toLowerCase())
-    );
-  }, [isDirector, allAvailableSectors, hasSectorAccess, userAssignedSectors]);
+    if (isDirector) return allAvailableSectors.map((s) => s.id);
+    return userAssignedSectors.map((s) => s.sector_id);
+  }, [isDirector, allAvailableSectors, userAssignedSectors]);
 
-  // Filter conversations according to sector permissions
   const permittedConversations = useMemo(() => {
-    if (isDirector) {
-      return effectiveConversations;
-    }
+    if (isDirector) return effectiveConversations;
     return effectiveConversations.filter((c) => {
-      if (!c.sector_id) return true; // Unassigned is visible to all
-      return (
-        hasSectorAccess(c.sector_id) ||
-        userPermittedSectors.some((s) => s.id === c.sector_id)
-      );
+      if (!c.sector_id) return true;
+      return hasSectorAccess(c.sector_id);
     });
-  }, [effectiveConversations, isDirector, hasSectorAccess, userPermittedSectors]);
+  }, [effectiveConversations, isDirector, hasSectorAccess]);
 
-  // Set default active conversation if none selected
+  // Ensure an active conversation is selected
   useEffect(() => {
     if (!activeConversationId && permittedConversations.length > 0) {
       setActiveConversationId(permittedConversations[0].id);
     }
   }, [activeConversationId, permittedConversations]);
 
-  // Active conversation object
   const activeConversation = useMemo(() => {
     return permittedConversations.find((c) => c.id === activeConversationId) || permittedConversations[0] || null;
   }, [permittedConversations, activeConversationId]);
 
   // ----------------------------------------------------
-  // 5. FETCH REAL MESSAGES FOR ACTIVE CONVERSATION
+  // 4. FETCH MESSAGES FOR ACTIVE CONVERSATION
   // ----------------------------------------------------
-  const isDbActiveConversation = Boolean(
+  const isDbUuid = Boolean(
     activeConversation?.id &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeConversation.id)
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeConversation.id)
   );
 
   const { data: dbMessages = [], refetch: refetchDbMessages } = useQuery({
@@ -704,8 +439,8 @@ export function useWhatsAppInbox() {
 
       let conversationDbId = activeConversation.id;
 
-      // If active conversation is not a direct UUID (e.g. from school contact list), check if DB has a conversation by phone
-      if (!isDbActiveConversation) {
+      // If active conversation is not a direct UUID, check DB by phone variations
+      if (!isDbUuid) {
         const cleanPhone = activeConversation.phone.replace(/\D/g, '');
         const with55 = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
         const without55 = cleanPhone.replace(/^55/, '');
@@ -720,7 +455,7 @@ export function useWhatsAppInbox() {
         if (existing?.id) {
           conversationDbId = existing.id;
         } else {
-          return localMessagesMap[activeConversation.id] || [];
+          return [];
         }
       }
 
@@ -737,7 +472,6 @@ export function useWhatsAppInbox() {
       }
 
       const { data, error } = await msgQuery;
-
       if (error) {
         console.warn('Error fetching whatsapp_messages:', error);
         return [];
@@ -745,68 +479,55 @@ export function useWhatsAppInbox() {
       return data || [];
     },
     enabled: !!activeConversation?.id,
-    refetchInterval: 4000, // Poll active chat every 4s for live message updates
+    refetchInterval: 3000,
   });
 
-  // Active messages list (combines DB messages and optimistic local messages)
+  // Active messages list combining DB messages and pending optimistic messages
   const activeMessages: WhatsAppChatMessage[] = useMemo(() => {
     if (!activeConversation) return [];
 
-    if (isDemoMode) {
-      return INITIAL_DEMO_MESSAGES[activeConversation.id] || [];
-    }
+    const dbList: WhatsAppChatMessage[] = dbMessages.map((m: any) => ({
+      id: m.id,
+      conversation_id: m.conversation_id,
+      body: m.body,
+      direction: m.direction as 'incoming' | 'outgoing',
+      message_type: (m.message_type || 'text') as any,
+      media_url: m.media_url,
+      media_caption: m.media_caption,
+      media_filename: m.media_filename,
+      status: (m.status || 'sent') as any,
+      created_at: m.created_at,
+      sender_name: m.direction === 'outgoing' ? profile?.full_name || 'Escola' : activeConversation.contact_name,
+    }));
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayStartIso = todayStart.toISOString();
+    // Filter optimistic messages for this conversation that haven't appeared in DB yet
+    const pending = optimisticMessages.filter((opt) => {
+      if (opt.conversation_id !== activeConversation.id) return false;
+      return !dbList.some((dbMsg) => dbMsg.body === opt.body && Math.abs(new Date(dbMsg.created_at).getTime() - new Date(opt.created_at).getTime()) < 10000);
+    });
 
-    if (dbMessages && dbMessages.length > 0) {
-      const mapped = dbMessages.map((m: any) => ({
-        id: m.id,
-        conversation_id: m.conversation_id,
-        body: m.body,
-        direction: (m.direction || 'incoming') as 'incoming' | 'outgoing',
-        message_type: (m.message_type || 'text') as any,
-        media_url: m.media_url,
-        media_caption: m.media_caption,
-        media_filename: m.media_filename,
-        status: (m.status || 'sent') as any,
-        created_at: m.created_at,
-        sender_name: m.direction === 'outgoing' ? profile?.full_name || 'Purple Edu' : activeConversation.contact_name,
-        is_automated: Boolean(m.is_quick_reply),
-        reply_to_id: m.reply_to_id,
-      }));
-
-      // Append any temporary local outgoing messages that haven't landed in DB query yet
-      const localTemp = (localMessagesMap[activeConversation.id] || []).filter(
-        (lm) =>
-          lm.id.startsWith('msg-out-') &&
-          (!onlyFromToday || !lm.created_at || lm.created_at >= todayStartIso) &&
-          !mapped.some((dbm) => dbm.body === lm.body)
-      );
-
-      return [...mapped, ...localTemp];
-    }
-
-    const locals = localMessagesMap[activeConversation.id] || [];
-    if (onlyFromToday) {
-      return locals.filter((m) => !m.created_at || m.created_at >= todayStartIso);
-    }
-    return locals;
-  }, [activeConversation, isDemoMode, dbMessages, localMessagesMap, profile?.full_name, onlyFromToday]);
+    return [...dbList, ...pending];
+  }, [activeConversation, dbMessages, optimisticMessages, profile?.full_name]);
 
   // ----------------------------------------------------
-  // 6. DISPATCH REAL MESSAGE VIA UAIZAP
+  // 5. SEND MESSAGE (UAZAPI + SUPABASE)
   // ----------------------------------------------------
   const sendMessage = useCallback(
-    async (text: string, mediaFile?: { url: string; filename: string; type: 'image' | 'document' }) => {
+    async (
+      text: string,
+      mediaFile?: { url: string; filename: string; type: 'image' | 'document' | 'audio' }
+    ) => {
       if (!activeConversation) return;
       if (!text.trim() && !mediaFile) return;
 
-      const tempMsgId = `msg-out-${Date.now()}`;
+      const phoneDigits = activeConversation.phone.replace(/\D/g, '');
+      const formattedPhone = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
       const nowIso = new Date().toISOString();
-      const newMsg: WhatsAppChatMessage = {
-        id: tempMsgId,
+      const tempId = `temp-${Date.now()}`;
+
+      // Optimistic message
+      const optMsg: WhatsAppChatMessage = {
+        id: tempId,
         conversation_id: activeConversation.id,
         body: text,
         direction: 'outgoing',
@@ -815,87 +536,56 @@ export function useWhatsAppInbox() {
         media_filename: mediaFile?.filename,
         status: 'sending',
         created_at: nowIso,
-        sender_name: profile?.full_name || 'Purple Edu',
+        sender_name: profile?.full_name || 'Escola',
       };
 
-      // 1. Optimistic update
-      setLocalMessagesMap((prev) => ({
-        ...prev,
-        [activeConversation.id]: [...(prev[activeConversation.id] || []), newMsg],
-      }));
+      setOptimisticMessages((prev) => [...prev, optMsg]);
 
-      setLocalConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeConversation.id
-            ? {
-                ...c,
-                last_message: text || (mediaFile ? `[Arquivo: ${mediaFile.filename}]` : ''),
-                last_message_at: nowIso,
-                unread_count: 0,
-              }
-            : c
-        )
-      );
-
-      // 2. Dispatch real message via Uaizap (Edge Function)
+      // 1. Dispatch via Uazapi Edge Function
       let dispatched = false;
-      let dispatchError: string | null = null;
-      const phoneDigits = activeConversation.phone.replace(/\D/g, '');
-      const formattedPhone = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
-
       try {
+        const uazAction = mediaFile ? 'send-media' : 'send-text';
+        const uazData = mediaFile
+          ? {
+              phone: formattedPhone,
+              mediaUrl: mediaFile.url,
+              mediaType: mediaFile.type,
+              caption: text,
+              fileName: mediaFile.filename,
+            }
+          : {
+              phone: formattedPhone,
+              message: text,
+            };
+
         const uazRes = await supabase.functions.invoke('uazapi', {
-          body: {
-            action: mediaFile ? 'send-media' : 'send-text',
-            data: mediaFile
-              ? {
-                  phone: formattedPhone,
-                  mediaType: mediaFile.type,
-                  mediaUrl: mediaFile.url,
-                  fileName: mediaFile.filename,
-                  caption: text,
-                }
-              : {
-                  phone: formattedPhone,
-                  message: text,
-                },
-          },
+          body: { action: uazAction, data: uazData },
         });
 
         if (uazRes.error || (uazRes.data as any)?.error) {
-          console.warn('Uaizap dispatch warning:', uazRes.error || (uazRes.data as any)?.error);
-          dispatchError = uazRes.error?.message || (uazRes.data as any)?.error;
+          console.warn('Uazapi dispatch error:', uazRes.error || (uazRes.data as any)?.error);
         } else {
           dispatched = true;
         }
       } catch (err: any) {
-        console.warn('Uaizap dispatch caught error:', err);
-        dispatchError = err?.message || 'Erro ao conectar à API Uaizap';
+        console.warn('Uazapi call caught error:', err);
       }
 
-      // Update message status in local map
-      setLocalMessagesMap((prev) => ({
-        ...prev,
-        [activeConversation.id]: (prev[activeConversation.id] || []).map((m) =>
-          m.id === tempMsgId ? { ...m, status: dispatched ? 'sent' : 'failed' } : m
-        ),
-      }));
-
-      // 3. Persist to Supabase whatsapp_conversations and whatsapp_messages
+      // 2. Persist to Supabase whatsapp_conversations and whatsapp_messages
       try {
         let dbConvId = activeConversation.id;
-        const isDbUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeConversation.id);
 
         if (!isDbUuid) {
-          const with55 = phoneDigits.startsWith('55') ? phoneDigits : `55${phoneDigits}`;
-          const without55 = phoneDigits.replace(/^55/, '');
-          const last8 = phoneDigits.slice(-8);
+          const cleanPhone = phoneDigits;
+          const with55 = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+          const without55 = cleanPhone.replace(/^55/, '');
+          const last8 = cleanPhone.slice(-8);
 
-          // Check if conversation already exists by phone
+          // Check if conversation exists by phone
           const { data: existing } = await supabase
             .from('whatsapp_conversations')
             .select('id')
-            .or(`phone.eq.${phoneDigits},phone.eq.${with55},phone.eq.${without55},phone.ilike.%${last8}`)
+            .or(`phone.eq.${cleanPhone},phone.eq.${with55},phone.eq.${without55},phone.ilike.%${last8}`)
             .maybeSingle();
 
           if (existing?.id) {
@@ -930,7 +620,6 @@ export function useWhatsAppInbox() {
           }
         }
 
-        // Insert message
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dbConvId)) {
           await supabase.from('whatsapp_messages').insert({
             conversation_id: dbConvId,
@@ -951,65 +640,29 @@ export function useWhatsAppInbox() {
             })
             .eq('id', dbConvId);
 
-          queryClient.invalidateQueries({ queryKey: ['inbox-db-messages', activeConversation.id] });
+          queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
           queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
         }
-      } catch (dbErr) {
-        console.warn('Error persisting whatsapp_messages:', dbErr);
-      }
-
-      if (dispatched) {
-        toast.success(`Mensagem enviada via WhatsApp para ${activeConversation.contact_name}!`);
-      } else {
-        toast.error(`Falha no envio WhatsApp: ${dispatchError || 'Verifique se o Uaizap está online'}`);
+      } catch (err) {
+        console.warn('Error saving outgoing message to DB:', err);
+      } finally {
+        // Clear optimistic message once persisted
+        setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
     },
-    [activeConversation, profile?.full_name, schoolId, queryClient]
+    [activeConversation, isDbUuid, profile?.full_name, schoolId, queryClient]
   );
 
   // ----------------------------------------------------
-  // 7. TRANSFER SECTOR
+  // 6. TRANSFER SECTOR
   // ----------------------------------------------------
   const transferSector = useCallback(
     async (conversationId: string, targetSectorId: string) => {
-      const sectorObj = allAvailableSectors.find((s) => s.id === targetSectorId);
-      const sectorName = sectorObj ? sectorObj.name : targetSectorId;
+      const destSector = allAvailableSectors.find((s) => s.id === targetSectorId);
+      const sectorName = destSector?.name || targetSectorId;
 
-      setLocalConversations((prev) =>
-        prev.map((c) =>
-          c.id === conversationId
-            ? {
-                ...c,
-                sector_id: targetSectorId,
-                sector_name: sectorName,
-              }
-            : c
-        )
-      );
-
-      // System notification message
-      const systemMsg: WhatsAppChatMessage = {
-        id: `sys-${Date.now()}`,
-        conversation_id: conversationId,
-        body: `🔄 Conversa transferida para o setor *${sectorName}*`,
-        direction: 'outgoing',
-        message_type: 'text',
-        status: 'sent',
-        created_at: new Date().toISOString(),
-        is_automated: true,
-        sender_name: 'Sistema',
-      };
-
-      setLocalMessagesMap((prev) => ({
-        ...prev,
-        [conversationId]: [...(prev[conversationId] || []), systemMsg],
-      }));
-
-      toast.success(`Conversa transferida para o setor "${sectorName}"!`);
-
-      // Update Supabase if DB conversation
-      const isDbUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
-      if (isDbUuid) {
+      const isDb = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+      if (isDb) {
         await supabase
           .from('whatsapp_conversations')
           .update({ sector_id: targetSectorId })
@@ -1017,19 +670,17 @@ export function useWhatsAppInbox() {
 
         queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
       }
+
+      toast.success(`Conversa transferida para o setor "${sectorName}"!`);
     },
     [allAvailableSectors, queryClient]
   );
 
   // ----------------------------------------------------
-  // 8. CHANGE TICKET STATUS
+  // 7. CHANGE TICKET STATUS
   // ----------------------------------------------------
   const changeTicketStatus = useCallback(
     async (conversationId: string, newStatus: 'open' | 'pending' | 'resolved' | 'closed') => {
-      setLocalConversations((prev) =>
-        prev.map((c) => (c.id === conversationId ? { ...c, ticket_status: newStatus } : c))
-      );
-
       const statusLabels = {
         open: 'Aberto',
         pending: 'Pendente',
@@ -1037,10 +688,8 @@ export function useWhatsAppInbox() {
         closed: 'Encerrado',
       };
 
-      toast.info(`Atendimento marcado como "${statusLabels[newStatus]}".`);
-
-      const isDbUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
-      if (isDbUuid) {
+      const isDb = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+      if (isDb) {
         await supabase
           .from('whatsapp_conversations')
           .update({ ticket_status: newStatus })
@@ -1048,12 +697,14 @@ export function useWhatsAppInbox() {
 
         queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
       }
+
+      toast.info(`Atendimento marcado como "${statusLabels[newStatus]}".`);
     },
     [queryClient]
   );
 
   // ----------------------------------------------------
-  // 9. CREATE NEW CONVERSATION (Start conversation with student/guardian)
+  // 8. CREATE NEW CONVERSATION
   // ----------------------------------------------------
   const createNewConversation = useCallback(
     async ({
@@ -1072,29 +723,33 @@ export function useWhatsAppInbox() {
       initialMessage?: string;
     }) => {
       const cleanPhone = phone.replace(/\D/g, '');
-      const sectorObj = allAvailableSectors.find((s) => s.id === sectorId);
-      const sectorName = sectorObj ? sectorObj.name : 'Secretaria';
+      const formattedPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
       const nowIso = new Date().toISOString();
 
-      let newConvId: string | null = null;
+      let targetSchoolId = schoolId;
+      if (!targetSchoolId) {
+        const { data: anySchool } = await supabase.from('schools').select('id').limit(1).maybeSingle();
+        targetSchoolId = anySchool?.id || null;
+      }
 
-      // 1. Check if Supabase conversation already exists with this phone
-      if (schoolId) {
+      let convId: string | null = null;
+
+      if (targetSchoolId) {
         const { data: existing } = await supabase
           .from('whatsapp_conversations')
           .select('id')
-          .eq('school_id', schoolId)
-          .eq('phone', cleanPhone)
+          .eq('school_id', targetSchoolId)
+          .eq('phone', formattedPhone)
           .maybeSingle();
 
         if (existing?.id) {
-          newConvId = existing.id;
+          convId = existing.id;
         } else {
-          const { data: inserted, error: insErr } = await supabase
+          const { data: inserted, error } = await supabase
             .from('whatsapp_conversations')
             .insert({
-              school_id: schoolId,
-              phone: cleanPhone,
+              school_id: targetSchoolId,
+              phone: formattedPhone,
               contact_name: contactName,
               sector_id: sectorId || null,
               student_id: studentId || null,
@@ -1106,48 +761,18 @@ export function useWhatsAppInbox() {
             .select('id')
             .single();
 
-          if (!insErr && inserted?.id) {
-            newConvId = inserted.id;
-            queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations', schoolId] });
+          if (!error && inserted?.id) {
+            convId = inserted.id;
           }
         }
       }
 
-      // If not stored in DB, create in local conversations
-      if (!newConvId) {
-        newConvId = `conv-new-${Date.now()}`;
-        const newConv: WhatsAppChatConversation = {
-          id: newConvId,
-          phone: cleanPhone,
-          contact_name: contactName,
-          sector_id: sectorId || 'secretaria',
-          sector_name: sectorName,
-          ticket_status: 'open',
-          priority: 'normal',
-          last_message: initialMessage || 'Conversa iniciada',
-          last_message_at: nowIso,
-          unread_count: 0,
-          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`,
-          tags: ['Novo Contato', 'WhatsApp'],
-          student_info: studentName
-            ? {
-                id: studentId || `alu-${Date.now()}`,
-                name: studentName,
-                turma: 'Turma Regular',
-                responsavel: contactName,
-                status_financeiro: 'em_dia',
-              }
-            : null,
-        };
-
-        setLocalConversations((prev) => [newConv, ...prev]);
+      if (convId) {
+        setActiveConversationId(convId);
+        queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
       }
 
-      setActiveConversationId(newConvId);
-
-      // If initial message provided, send it!
       if (initialMessage?.trim()) {
-        const formattedPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
         try {
           await supabase.functions.invoke('uazapi', {
             body: {
@@ -1158,181 +783,43 @@ export function useWhatsAppInbox() {
               },
             },
           });
-          toast.success(`Mensagem inicial enviada para ${contactName}!`);
+          toast.success(`Mensagem enviada para ${contactName}!`);
         } catch {
           // ignore
         }
       }
 
-      return newConvId;
+      return convId;
     },
-    [schoolId, allAvailableSectors, queryClient]
+    [schoolId, queryClient]
   );
 
   // ----------------------------------------------------
-  // 10. MANUAL SYNC WITH UAIZAP / SUPABASE
+  // 9. MANUAL SYNC WITH UAZAPI / SUPABASE
   // ----------------------------------------------------
   const syncWithUaizap = useCallback(async () => {
     setIsSyncing(true);
     try {
-      // 1. Refetch Uaizap connection status
-      const statusResult = await refetchUaizapStatus();
+      const statusResult = await refetchUazapiStatus();
       const isOnline = Boolean(statusResult.data?.status?.connected);
       const instanceName = statusResult.data?.instance?.profileName || statusResult.data?.instance?.name || 'Online';
 
-      // 2. Refetch DB conversations and messages
       await refetchDbConversations();
       await refetchDbMessages();
       await queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
       await queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
 
-      // 3. Inform user
       if (isOnline) {
-        toast.success(`Uaizap online (${instanceName})! Conversas atualizadas.`);
+        toast.success(`Uazapi online (${instanceName})! Conversas atualizadas.`);
       } else {
-        toast.warning('Uaizap: Instância aguardando conexão no WhatsApp.');
+        toast.warning('Uazapi: Instância aguardando conexão no WhatsApp.');
       }
     } catch (err: any) {
-      toast.error(`Erro ao sincronizar com Uaizap: ${err?.message || 'Falha de rede'}`);
+      toast.error(`Erro ao sincronizar com Uazapi: ${err?.message || 'Falha de rede'}`);
     } finally {
       setIsSyncing(false);
     }
-  }, [refetchUaizapStatus, refetchDbConversations, refetchDbMessages, queryClient]);
-
-  // ----------------------------------------------------
-  // 11. SIMULATE INCOMING MESSAGE WITH TRIGGER EVALUATION
-  // ----------------------------------------------------
-  const simulateIncomingMessage = useCallback(
-    ({
-      phone,
-      contactName,
-      message,
-      studentName,
-    }: {
-      phone: string;
-      contactName: string;
-      message: string;
-      studentName?: string;
-    }) => {
-      let targetConv = effectiveConversations.find(
-        (c) => c.phone.replace(/\D/g, '') === phone.replace(/\D/g, '')
-      );
-      let convId = targetConv?.id;
-      const nowIso = new Date().toISOString();
-
-      if (!convId) {
-        convId = `conv-sim-${Date.now()}`;
-        const newConv: WhatsAppChatConversation = {
-          id: convId,
-          phone,
-          contact_name: contactName,
-          sector_id: 'secretaria',
-          sector_name: 'Secretaria',
-          ticket_status: 'open',
-          priority: 'normal',
-          last_message: message,
-          last_message_at: nowIso,
-          unread_count: 1,
-          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(contactName)}`,
-          tags: ['Simulação', 'WhatsApp'],
-          student_info: studentName
-            ? {
-                id: `alu-sim-${Date.now()}`,
-                name: studentName,
-                turma: 'Turma Regular',
-                responsavel: contactName,
-                status_financeiro: 'em_dia',
-              }
-            : null,
-        };
-        setLocalConversations((prev) => [newConv, ...prev]);
-        setActiveConversationId(convId);
-      } else {
-        setLocalConversations((prev) =>
-          prev.map((c) =>
-            c.id === convId
-              ? {
-                  ...c,
-                  last_message: message,
-                  last_message_at: nowIso,
-                  unread_count: c.unread_count + 1,
-                  ticket_status: 'open',
-                }
-              : c
-          )
-        );
-      }
-
-      // Add incoming message
-      const incomingMsg: WhatsAppChatMessage = {
-        id: `msg-in-${Date.now()}`,
-        conversation_id: convId,
-        body: message,
-        direction: 'incoming',
-        message_type: 'text',
-        status: 'delivered',
-        created_at: nowIso,
-      };
-
-      setLocalMessagesMap((prev) => ({
-        ...prev,
-        [convId]: [...(prev[convId] || []), incomingMsg],
-      }));
-
-      // Evaluate triggers!
-      const matchResult = evaluateMessage(message, {
-        contactName,
-        studentName: studentName || targetConv?.student_info?.name || 'Aluno(a)',
-        schoolName: school?.name || 'Purple Edu',
-        currentSectorName: targetConv?.sector_name || 'Secretaria',
-      });
-
-      if (matchResult.matched && matchResult.formattedResponse) {
-        setTimeout(() => {
-          const autoReply: WhatsAppChatMessage = {
-            id: `msg-auto-${Date.now()}`,
-            conversation_id: convId!,
-            body: matchResult.formattedResponse!,
-            direction: 'outgoing',
-            message_type: 'text',
-            status: 'delivered',
-            created_at: new Date().toISOString(),
-            is_automated: true,
-            sender_name: `Trigger: ${matchResult.trigger?.nome} ⚡`,
-          };
-
-          setLocalMessagesMap((prev) => ({
-            ...prev,
-            [convId!]: [...(prev[convId!] || []), autoReply],
-          }));
-
-          if (matchResult.targetSectorId) {
-            const destSector = allAvailableSectors.find((s) => s.id === matchResult.targetSectorId);
-            const destName = destSector?.name || matchResult.targetSectorId;
-            setLocalConversations((prev) =>
-              prev.map((c) =>
-                c.id === convId
-                  ? {
-                      ...c,
-                      sector_id: matchResult.targetSectorId!,
-                      sector_name: destName,
-                      last_message: matchResult.formattedResponse!,
-                      last_message_at: new Date().toISOString(),
-                    }
-                  : c
-              )
-            );
-            toast.info(`⚡ Trigger "${matchResult.trigger?.nome}" acionado! Mensagem transferida para ${destName}.`);
-          } else {
-            toast.info(`⚡ Trigger "${matchResult.trigger?.nome}" respondeu automaticamente.`);
-          }
-        }, 600);
-      } else {
-        toast.success(`Mensagem de ${contactName} recebida no chat!`);
-      }
-    },
-    [effectiveConversations, evaluateMessage, school?.name, allAvailableSectors]
-  );
+  }, [refetchUazapiStatus, refetchDbConversations, refetchDbMessages, queryClient]);
 
   return {
     conversations: permittedConversations,
@@ -1347,13 +834,10 @@ export function useWhatsAppInbox() {
     sendMessage,
     transferSector,
     changeTicketStatus,
-    simulateIncomingMessage,
     syncWithUaizap,
     isSyncing,
     uaizapStatus,
     createNewConversation,
-    isDemoMode,
-    setIsDemoMode,
     isLoadingDbConversations,
     onlyFromToday,
     setOnlyFromToday,
