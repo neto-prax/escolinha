@@ -603,7 +603,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
         const boletoResult = openBoletoInNewTab({
           valor: valorNum,
           descricao,
-          vencimento: dataLancamento,
+          vencimento: data,
           beneficiarioNome: instituicaoNome,
           beneficiarioEndereco: activeSede?.endereco,
           pagadorNome: alunoObj?.nomeResponsavel || alunoObj?.nome,
@@ -893,7 +893,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
               className="p-2 border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm"
             >
               <option value="Todas">Todas as Sedes</option>
-              {sedes.filter((s) => s.ativa).map((s) => (
+              {sedes.filter((s) => s.is_ativa !== false).map((s) => (
                 <option key={s.id} value={s.nome}>
                   {s.nome} ({s.tipo})
                 </option>

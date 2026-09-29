@@ -241,7 +241,7 @@ export const sicoobService = {
     const linhaDigitavel = febraban.linhaDigitavel;
     const codigoBarras = febraban.codigoBarras;
 
-    const pixPayload = `00020126580014br.gov.bcb.pix0136e7560000-${coop}-4b12-sicoob0000000${seq.toString().slice(-4)}5204000053039865406${valorFormatado}5802BR5925COOPERATIVA SICOOB ESCOLA6009SAO PAULO62070503***6304${seq.toString(16).toUpperCase().padStart(4, 'A')}`;
+    const pixPayload = `00020126580014br.gov.bcb.pix0136e7560000-${coop}-4b12-sicoob0000000${seq.slice(-4)}5204000053039865406${valorFormatado}5802BR5925COOPERATIVA SICOOB ESCOLA6009SAO PAULO62070503***6304${Number(seq.slice(-6)).toString(16).toUpperCase().padStart(4, 'A')}`;
 
     const newInvoice: SicoobInvoice = {
       id: `sic_inv_${Date.now()}`,

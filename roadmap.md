@@ -13,3 +13,6 @@
 - [x] Validar o painel após alternar entre escolas.
 - [x] Adaptar a página inicial à referência aprovada.
 - [x] Validar a nova página em celular e computador.
+- [x] Corrigir o recebimento de mensagens da Uazapi.
+- [x] Eliminar consultas repetidas da Central de Mensagens.
+- [ ] Validar recebimento único e atualização em tempo real.

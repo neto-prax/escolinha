@@ -275,7 +275,7 @@ export const NovoProdutoModal: React.FC<NovoProdutoModalProps> = ({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Todas">Todas as Sedes</SelectItem>
-                  {sedes.filter((s) => s.ativa).map((s) => (
+                  {sedes.filter((s) => s.is_ativa !== false).map((s) => (
                     <SelectItem key={s.id} value={s.nome}>
                       {s.nome} ({s.tipo})
                     </SelectItem>

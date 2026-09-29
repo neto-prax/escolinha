@@ -665,7 +665,9 @@ const Alunos = () => {
           beneficiarioNome: 'Escola Interagir',
           pagadorNome: aluno?.nomeResponsavel || aluno?.nome,
           pagadorCpfCnpj: aluno?.cpfResponsavel || aluno?.cpf,
-          pagadorEndereco: aluno?.endereco,
+          pagadorEndereco: aluno
+            ? [aluno.rua, aluno.numero, aluno.bairro, aluno.cidade, aluno.uf].filter(Boolean).join(', ')
+            : undefined,
           gatewayId: activeBank,
         });
 

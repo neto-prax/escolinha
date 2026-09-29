@@ -2494,6 +2494,7 @@ export type Database = {
           created_at: string
           guardian_id: string | null
           id: string
+          last_message: string | null
           last_message_at: string | null
           opened_at: string | null
           phone: string
@@ -2516,6 +2517,7 @@ export type Database = {
           created_at?: string
           guardian_id?: string | null
           id?: string
+          last_message?: string | null
           last_message_at?: string | null
           opened_at?: string | null
           phone: string
@@ -2538,6 +2540,7 @@ export type Database = {
           created_at?: string
           guardian_id?: string | null
           id?: string
+          last_message?: string | null
           last_message_at?: string | null
           opened_at?: string | null
           phone?: string

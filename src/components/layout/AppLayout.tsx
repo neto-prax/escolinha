@@ -26,7 +26,7 @@ export const AppLayout = () => {
     return <Navigate to="/login" replace />;
   }
 
-  const isSuperAdmin = roles?.includes('superadmin') || user?.email === 'sport@gmail.com';
+  const isSuperAdmin = (roles as string[] | undefined)?.includes('superadmin') || user?.email === 'sport@gmail.com';
   const schoolId = school?.id || profile?.school_id;
   const currentSub = schoolId ? schoolSubscriptions[schoolId] : null;
 

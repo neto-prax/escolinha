@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database, Json } from '@/integrations/supabase/types';
 import {
   PlatformPlanConfig,
   PlanAddon,
@@ -183,13 +184,14 @@ export function usePlatformBillingSettings() {
         }
 
         if (schoolId) {
-          await supabase.from('app_state').upsert(
-            {
+          const cloudRow: Database['public']['Tables']['app_state']['Insert'] = {
               school_id: schoolId,
               key: 'platform_billing_settings',
-              value: { data: payload },
+              value: { data: payload } as unknown as Json,
               updated_at: new Date().toISOString(),
-            },
+          };
+          await supabase.from('app_state').upsert(
+            cloudRow,
             { onConflict: 'school_id,key' }
           );
         }
@@ -358,6 +360,7 @@ export function usePlatformBillingSettings() {
         matchingPlan,
         isFixedPlan,
         isBlockPlan,
+        rawBasePrice: basePlanPrice,
         blockCount,
         extraBlocks,
         blockSize,

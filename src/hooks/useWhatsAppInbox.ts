@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createContext, createElement, ReactNode, useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,7 +20,7 @@ export interface UaizapStatusData {
   isChecking?: boolean;
 }
 
-export function useWhatsAppInbox() {
+function useWhatsAppInboxState() {
   const { profile, school, roles, sectors: userAssignedSectors, hasSectorAccess } = useAuth();
   const queryClient = useQueryClient();
 
@@ -73,7 +73,7 @@ export function useWhatsAppInbox() {
         return null;
       }
     },
-    refetchInterval: 15000,
+    staleTime: Infinity,
   });
 
   const uaizapStatus: UaizapStatusData = useMemo(() => {
@@ -203,7 +203,8 @@ export function useWhatsAppInbox() {
         let query = supabase
           .from('whatsapp_conversations')
           .select(`
-            *,
+            id, school_id, sector_id, contact_id, phone, contact_name, ticket_status, priority,
+            last_message, last_message_at, unread_count, tags, assigned_to, created_at,
             sector:sectors(id, name)
           `)
           .order('last_message_at', { ascending: false, nullsFirst: false });
@@ -223,61 +224,22 @@ export function useWhatsAppInbox() {
         todayStart.setUTCHours(0, 0, 0, 0);
         const todayStartIso = todayStart.toISOString();
 
-        // Fetch latest message for each conversation
-        const convIds = convs.map((c: any) => c.id);
-        let msgQuery = supabase
-          .from('whatsapp_messages')
-          .select('conversation_id, body, created_at')
-          .in('conversation_id', convIds)
-          .order('created_at', { ascending: false });
-
-        if (onlyFromToday) {
-          msgQuery = msgQuery.gte('created_at', todayStartIso);
-        }
-
-        const { data: latestMsgs } = await msgQuery;
-
-        const latestMap = new Map<string, { body: string; created_at: string }>();
-        if (latestMsgs) {
-          for (const msg of latestMsgs) {
-            if (!latestMap.has(msg.conversation_id)) {
-              latestMap.set(msg.conversation_id, msg);
-            }
-          }
-        }
-
         if (onlyFromToday) {
           return convs
-            .filter((c: any) => latestMap.has(c.id) || (c.last_message_at && c.last_message_at >= todayStartIso))
-            .map((c: any) => {
-              const last = latestMap.get(c.id);
-              return {
-                ...c,
-                last_message: last?.body || c.last_message || null,
-                last_message_at: last?.created_at || c.last_message_at,
-                has_today_activity: true,
-              };
-            });
+            .filter((c: any) => c.last_message_at && c.last_message_at >= todayStartIso)
+            .map((c: any) => ({ ...c, has_today_activity: true }));
         }
 
-        return convs.map((c: any) => {
-          const last = latestMap.get(c.id);
-          const hasTodayMsg = Boolean(last);
-          const isTodayConv = c.last_message_at && c.last_message_at >= todayStartIso;
-
-          return {
-            ...c,
-            last_message: last?.body || c.last_message || null,
-            last_message_at: last?.created_at || c.last_message_at || c.created_at,
-            has_today_activity: hasTodayMsg || isTodayConv,
-          };
-        });
+        return convs.map((c: any) => ({
+          ...c,
+          last_message_at: c.last_message_at || c.created_at,
+          has_today_activity: Boolean(c.last_message_at && c.last_message_at >= todayStartIso),
+        }));
       } catch (err) {
         console.warn('Exception querying whatsapp_conversations:', err);
         return [];
       }
     },
-    refetchInterval: 4000,
   });
 
   // Realtime subscription for conversations and messages
@@ -286,7 +248,7 @@ export function useWhatsAppInbox() {
       .channel('whatsapp-inbox-realtime-channel')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'whatsapp_conversations' },
+        { event: '*', schema: 'public', table: 'whatsapp_conversations', filter: schoolId ? `school_id=eq.${schoolId}` : undefined },
         () => {
           queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
         }
@@ -304,7 +266,7 @@ export function useWhatsAppInbox() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, schoolId]);
 
   // Map DB conversations into WhatsAppChatConversation format
   const mappedDbConversations: WhatsAppChatConversation[] = useMemo(() => {
@@ -401,8 +363,9 @@ export function useWhatsAppInbox() {
   }, [roles]);
 
   const userPermittedSectors = useMemo(() => {
-    if (isDirector) return allAvailableSectors.map((s) => s.id);
-    return userAssignedSectors.map((s) => s.sector_id);
+    if (isDirector) return allAvailableSectors;
+    const assignedIds = new Set(userAssignedSectors.map((s) => s.id));
+    return allAvailableSectors.filter((sector) => assignedIds.has(sector.id));
   }, [isDirector, allAvailableSectors, userAssignedSectors]);
 
   const permittedConversations = useMemo(() => {
@@ -479,7 +442,6 @@ export function useWhatsAppInbox() {
       return data || [];
     },
     enabled: !!activeConversation?.id,
-    refetchInterval: 3000,
   });
 
   // Active messages list combining DB messages and pending optimistic messages
@@ -635,6 +597,7 @@ export function useWhatsAppInbox() {
           await supabase
             .from('whatsapp_conversations')
             .update({
+              last_message: text,
               last_message_at: nowIso,
               unread_count: 0,
             })
@@ -842,4 +805,18 @@ export function useWhatsAppInbox() {
     onlyFromToday,
     setOnlyFromToday,
   };
+}
+
+type WhatsAppInboxContextValue = ReturnType<typeof useWhatsAppInboxState>;
+const WhatsAppInboxContext = createContext<WhatsAppInboxContextValue | null>(null);
+
+export function WhatsAppInboxProvider({ children }: { children: ReactNode }) {
+  const value = useWhatsAppInboxState();
+  return createElement(WhatsAppInboxContext.Provider, { value }, children);
+}
+
+export function useWhatsAppInbox() {
+  const value = useContext(WhatsAppInboxContext);
+  if (!value) throw new Error('useWhatsAppInbox deve ser usado dentro de WhatsAppInboxProvider');
+  return value;
 }
