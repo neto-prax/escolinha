@@ -292,23 +292,23 @@ export function WhatsAppChatView() {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex-1 flex flex-col min-h-0 gap-2">
       {/* ---------------- BANNER SUPERIOR: WHATSAPP OFICIAL CONECTADO ---------------- */}
-      <div className="bg-gradient-to-r from-emerald-500/10 via-background to-primary/5 border border-emerald-500/25 rounded-xl p-3 sm:p-4 shadow-xs">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+      <div className="bg-gradient-to-r from-emerald-500/10 via-background to-primary/5 border border-emerald-500/25 rounded-xl px-3 py-1.5 shadow-2xs flex-shrink-0">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           {/* Dados do WhatsApp Conectado visível para todos os usuários */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative flex-shrink-0">
-              <Avatar className="h-11 w-11 border-2 border-emerald-500/40 ring-2 ring-emerald-500/15">
+              <Avatar className="h-8 w-8 border-2 border-emerald-500/40 ring-1 ring-emerald-500/15">
                 {uaizapStatus.profilePicUrl ? (
                   <AvatarImage src={uaizapStatus.profilePicUrl} alt={uaizapStatus.profileName || 'WhatsApp'} />
                 ) : null}
-                <AvatarFallback className="bg-emerald-600 text-white font-bold">
+                <AvatarFallback className="bg-emerald-600 text-white font-bold text-[11px]">
                   {uaizapStatus.profileName ? uaizapStatus.profileName.slice(0, 2).toUpperCase() : 'WA'}
                 </AvatarFallback>
               </Avatar>
               <span
-                className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-background ${
+                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-background ${
                   uaizapStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
                 }`}
                 title={uaizapStatus.connected ? 'WhatsApp Online e Conectado' : 'Aguardando verificação'}
@@ -316,80 +316,72 @@ export function WhatsAppChatView() {
             </div>
 
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-sm sm:text-base text-foreground">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-semibold text-xs sm:text-sm text-foreground">
                   {uaizapStatus.profileName || 'Neto Oliver'}
                 </span>
                 <Badge
                   variant="outline"
                   className={
                     uaizapStatus.connected
-                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[11px] font-medium'
-                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[11px] font-medium'
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] h-4.5 font-medium'
+                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 text-[10px] h-4.5 font-medium'
                   }
                 >
-                  {uaizapStatus.connected ? '🟢 Conectado (Online)' : 'Aguardando Conexão'}
+                  {uaizapStatus.connected ? '🟢 Conectado' : 'Aguardando'}
                 </Badge>
-                <span className="text-xs text-muted-foreground font-mono bg-muted/60 px-2 py-0.5 rounded-md border font-semibold">
+                <span className="text-[11px] text-muted-foreground font-mono bg-muted/60 px-1.5 py-0.5 rounded border font-semibold">
                   {formatPhoneNumber(uaizapStatus.ownerPhone || '557583690441')}
                 </span>
-                <Badge variant="secondary" className="text-[10px] h-5">
+                <Badge variant="secondary" className="text-[10px] h-4.5 hidden md:inline-flex">
                   Instância: {uaizapStatus.instanceName || 'Neto'}
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
-                <span className="font-medium text-foreground">WhatsApp Oficial da Escola</span>
-                <span>•</span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                  Pronto para envio e recebimento em tempo real
-                </span>
-              </p>
             </div>
           </div>
 
           {/* Filtro de Mensagens do Banco & Ações */}
-          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end">
-            <div className="flex items-center gap-1.5 bg-background/90 border rounded-lg px-2.5 py-1 text-xs shadow-2xs">
-              <Calendar className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-              <span className="text-muted-foreground hidden sm:inline">Banco:</span>
+          <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto justify-start sm:justify-end">
+            <div className="flex items-center gap-1 bg-background/90 border rounded-lg px-2 py-0.5 text-xs shadow-2xs">
+              <Calendar className="w-3 h-3 text-primary flex-shrink-0" />
               <Badge
                 variant={onlyFromToday ? 'default' : 'outline'}
-                className="text-[10px] h-5 cursor-pointer font-medium"
+                className="text-[10px] h-4.5 px-1.5 cursor-pointer font-medium"
                 onClick={() => setOnlyFromToday(!onlyFromToday)}
                 title="Clique para alternar entre mensagens a partir de hoje ou todo o histórico"
               >
-                {onlyFromToday ? 'A partir de Hoje' : 'Todo o Histórico'}
+                {onlyFromToday ? 'Hoje em diante' : 'Todo o Histórico'}
               </Badge>
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-1.5 text-[11px] text-primary hover:bg-primary/10"
+                className="h-5 px-1 text-[10px] text-primary hover:bg-primary/10"
                 onClick={() => setOnlyFromToday(!onlyFromToday)}
               >
-                {onlyFromToday ? 'Ver histórico antigo' : 'Filtrar apenas hoje'}
+                {onlyFromToday ? 'Histórico antigo' : 'Apenas hoje'}
               </Button>
             </div>
 
             <Button
               size="sm"
               variant="outline"
-              className="h-8 px-2.5 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+              className="h-7 px-2 text-[11px] gap-1 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
               onClick={() => setWebhookModalOpen(true)}
               title="Configurar Webhook no painel da sua Uaizap para receber mensagens"
             >
-              <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+              <MessageCircle className="w-3 h-3 text-emerald-500" />
               <span>Webhook</span>
             </Button>
 
             <Button
               size="sm"
               variant="outline"
-              className="h-8 px-2.5 text-xs gap-1.5"
+              className="h-7 px-2 text-[11px] gap-1"
               onClick={syncWithUaizap}
               disabled={isSyncing}
               title="Verificar status e sincronizar com o WhatsApp"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
             </Button>
           </div>
@@ -397,91 +389,61 @@ export function WhatsAppChatView() {
       </div>
 
       {/* ---------------- CONTAINER PRINCIPAL DO CHAT ---------------- */}
-      <div className="flex h-[calc(100vh-17rem)] min-h-[560px] border rounded-xl overflow-hidden bg-background shadow-sm">
-      {/* ---------------- 1. PAINEL ESQUERDO: LISTA DE CONVERSAS ---------------- */}
-      <div className="w-80 md:w-96 flex flex-col border-r bg-muted/20">
-        {/* Cabeçalho do Painel com Filtros e Acesso */}
-        <div className="p-3 border-b space-y-2.5 bg-card">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
-                <MessageSquare className="w-4 h-4" />
+      <div className="flex-1 flex min-h-[460px] border rounded-xl overflow-hidden bg-background shadow-xs">
+        {/* ---------------- 1. PAINEL ESQUERDO: LISTA DE CONVERSAS ---------------- */}
+        <div className="w-72 sm:w-80 lg:w-84 flex flex-col border-r bg-muted/20 flex-shrink-0">
+          {/* Cabeçalho do Painel com Filtros e Acesso */}
+          <div className="p-2.5 border-b space-y-2 bg-card">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold leading-none">Conversas</h3>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {isDirector
+                      ? 'Todos os setores'
+                      : `${userPermittedSectors.length} setores autorizados`}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-semibold leading-none">Inbox WhatsApp</h3>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  {isDirector
-                    ? 'Acesso a todos os setores'
-                    : `Seus setores autorizados (${userPermittedSectors.length})`}
-                </p>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs gap-1 text-primary border-primary/20 hover:bg-primary/5"
-                onClick={() => setSimulatorOpen(true)}
-                title="Testar gatilhos e simular mensagem de pai/aluno"
-              >
-                <Sparkles className="w-3 h-3 text-amber-500" />
-                <span className="hidden sm:inline">Simular</span>
-              </Button>
+              <div className="flex items-center gap-1">
+                {isDemoMode ? (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] h-5 px-1.5 cursor-pointer bg-amber-500/10 text-amber-600 border-amber-300"
+                    onClick={() => setIsDemoMode(false)}
+                    title="Clique para desativar o modo demo"
+                  >
+                    Demo
+                  </Badge>
+                ) : null}
 
-              <Button
-                size="sm"
-                variant="default"
-                className="h-7 px-2.5 text-xs gap-1"
-                onClick={() => setNewChatOpen(true)}
-                title="Iniciar nova conversa no WhatsApp"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Nova</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* Barra de Status Uaizap & Sincronização */}
-          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-muted/40 border text-xs">
-            <div className="flex items-center gap-2 min-w-0">
-              <span
-                className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  uaizapStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-                }`}
-              />
-              <span className="text-[11px] font-medium truncate text-foreground">
-                {uaizapStatus.connected
-                  ? `Uaizap: ${uaizapStatus.profileName || 'Online'}`
-                  : 'Uaizap: Aguardando Conexão'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {isDemoMode ? (
-                <Badge
+                <Button
+                  size="sm"
                   variant="outline"
-                  className="text-[10px] h-5 px-1.5 cursor-pointer bg-amber-500/10 text-amber-600 border-amber-300"
-                  onClick={() => setIsDemoMode(false)}
-                  title="Clique para desativar o modo de demonstração"
+                  className="h-6 px-1.5 text-[11px] gap-1 text-primary border-primary/20 hover:bg-primary/5"
+                  onClick={() => setSimulatorOpen(true)}
+                  title="Simular mensagem recebida"
                 >
-                  Modo Demo (Sair)
-                </Badge>
-              ) : null}
+                  <Sparkles className="w-3 h-3 text-amber-500" />
+                  <span>Simular</span>
+                </Button>
 
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2 text-[11px] gap-1 hover:bg-muted text-primary"
-                onClick={syncWithUaizap}
-                disabled={isSyncing}
-                title="Sincronizar com Uaizap e atualizar conversas"
-              >
-                <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
-              </Button>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-6 px-2 text-[11px] gap-1"
+                  onClick={() => setNewChatOpen(true)}
+                  title="Iniciar nova conversa no WhatsApp"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Nova</span>
+                </Button>
+              </div>
             </div>
-          </div>
 
           {/* Campo de Busca */}
           <div className="relative">
@@ -906,7 +868,7 @@ export function WhatsAppChatView() {
 
       {/* ---------------- 3. PAINEL DIREITO RETRÁTIL: DADOS DO ALUNO E RESPONSÁVEL ---------------- */}
       {showRightDrawer && activeConversation && (
-        <div className="w-72 lg:w-80 border-l bg-card flex flex-col overflow-y-auto">
+        <div className="w-72 xl:w-80 border-l bg-card flex flex-col overflow-y-auto flex-shrink-0">
           <div className="p-4 border-b flex items-center justify-between">
             <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
               Detalhes do Contato
