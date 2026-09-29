@@ -460,6 +460,18 @@ export function WhatsAppChatView() {
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
                     Sincronizar Mensagens
                   </Button>
+                  {onlyFromToday && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 text-xs gap-1.5 w-full font-medium"
+                      onClick={() => setOnlyFromToday(false)}
+                      title="Exibir todas as conversas e mensagens anteriores cadastradas"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-primary" />
+                      Ver Histórico de Mensagens Anteriores
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : (
