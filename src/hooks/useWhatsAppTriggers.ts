@@ -211,6 +211,19 @@ export function useWhatsAppTriggers() {
     toast.success('Gatilhos redefinidos para os padrões da escola!');
   }, [setTriggers, persistToRemote]);
 
+  const importTriggers = useCallback(
+    (importedTriggers: WhatsAppTrigger[]) => {
+      if (!Array.isArray(importedTriggers) || importedTriggers.length === 0) {
+        toast.error('Arquivo de gatilhos inválido ou vazio.');
+        return;
+      }
+      setTriggers(importedTriggers);
+      persistToRemote(importedTriggers);
+      toast.success(`${importedTriggers.length} gatilhos importados com sucesso!`);
+    },
+    [setTriggers, persistToRemote]
+  );
+
   // Evaluates a incoming message against triggers
   const evaluateMessage = useCallback(
     (
@@ -227,16 +240,24 @@ export function useWhatsAppTriggers() {
       }
 
       const cleanInput = normalizeText(text);
-      const activeTriggers = [...triggers]
-        .filter((t) => t.ativo)
-        .sort((a, b) => a.prioridade - b.prioridade);
+      const activeTriggers = (Array.isArray(triggers) ? triggers : [])
+        .filter((t) => t && t.ativo)
+        .sort((a, b) => (a.prioridade || 0) - (b.prioridade || 0));
 
       for (const trigger of activeTriggers) {
+        if (!trigger) continue;
         if (trigger.tipoCorrespondencia === 'qualquer_primeira') {
           return buildMatchResult(trigger, cleanInput, context);
         }
 
-        for (const keyword of trigger.palavrasChave) {
+        const keywords = Array.isArray(trigger.palavrasChave)
+          ? trigger.palavrasChave
+          : Array.isArray((trigger as any).keywords)
+          ? (trigger as any).keywords
+          : [];
+
+        for (const keyword of keywords) {
+          if (!keyword || typeof keyword !== 'string') continue;
           const cleanKw = normalizeText(keyword);
           if (!cleanKw) continue;
 
@@ -268,13 +289,14 @@ export function useWhatsAppTriggers() {
   );
 
   return {
-    triggers,
+    triggers: Array.isArray(triggers) ? triggers : [],
     isSyncing,
     addTrigger,
     updateTrigger,
     deleteTrigger,
     toggleTrigger,
     resetDefaultTriggers,
+    importTriggers,
     evaluateMessage,
   };
 }
@@ -294,7 +316,13 @@ function buildMatchResult(
   const escola = context?.schoolName || 'Purple Edu';
   const setor = context?.currentSectorName || 'Secretaria';
 
-  let formatted = trigger.respostaTexto
+  const rawText =
+    trigger.respostaTexto ||
+    (trigger as any).message_template ||
+    (trigger as any).text ||
+    '';
+
+  const formatted = rawText
     .replace(/\{\{nome\}\}/gi, nome)
     .replace(/\{\{aluno\}\}/gi, aluno)
     .replace(/\{\{escola\}\}/gi, escola)
@@ -305,7 +333,7 @@ function buildMatchResult(
     trigger,
     matchedKeyword,
     formattedResponse: formatted,
-    targetSectorId: trigger.setorDestinoId,
-    newStatus: trigger.alterarStatus,
+    targetSectorId: trigger.setorDestinoId || (trigger as any).target_sector_id || null,
+    newStatus: trigger.alterarStatus || (trigger as any).target_status || null,
   };
 }

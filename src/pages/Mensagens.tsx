@@ -16,11 +16,15 @@ import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
 function MensagensContent() {
   const [activeTab, setActiveTab] = useState<string>('chat');
   const { conversations, allAvailableSectors } = useWhatsAppInbox();
-  const { triggers } = useWhatsAppTriggers();
+  const { triggers = [] } = useWhatsAppTriggers();
 
   const handleSelectSectorForChat = (_sectorId: string) => {
     setActiveTab('chat');
   };
+
+  const activeTriggersCount = Array.isArray(triggers)
+    ? triggers.filter((t: any) => t?.ativo !== false && t?.active !== false).length
+    : 0;
 
   return (
     <div className="flex flex-col h-[calc(100vh-6.75rem)] lg:h-[calc(100vh-7.75rem)] min-h-[580px]">
@@ -48,8 +52,8 @@ function MensagensContent() {
               <span>Chat ({conversations.length})</span>
             </TabsTrigger>
             <TabsTrigger value="triggers" className="gap-1.5 text-xs font-medium px-3 h-7">
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
-              <span>Triggers ({triggers.filter((t) => t.ativo).length})</span>
+              <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>Gatilhos ({activeTriggersCount})</span>
             </TabsTrigger>
             <TabsTrigger value="setores" className="gap-1.5 text-xs font-medium px-3 h-7">
               <Building2 className="w-3.5 h-3.5 text-primary" />
