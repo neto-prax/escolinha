@@ -29,6 +29,10 @@ import {
   Clock,
   GraduationCap,
   X,
+  Phone,
+  Send,
+  Loader2,
+  MessageSquare,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,6 +57,8 @@ import {
 } from '@/components/ui/select';
 import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
 import { useWhatsAppInbox } from '@/hooks/useWhatsAppInbox';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { WhatsAppTrigger, TipoCorrespondenciaTrigger } from '@/types/mensagens';
 import { toast } from 'sonner';
 
@@ -193,9 +199,12 @@ export function WhatsAppTriggersTab() {
   } = useWhatsAppTriggers();
 
   const { allAvailableSectors = [] } = useWhatsAppInbox();
+  const { school, profile } = useAuth();
 
   // Test bench state
   const [testInput, setTestInput] = useState('olá, gostaria de saber como faço a matrícula e qual o valor');
+  const [testPhoneNumber, setTestPhoneNumber] = useState(profile?.phone || '');
+  const [isSendingWhatsAppTest, setIsSendingWhatsAppTest] = useState(false);
   const testBenchRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -217,12 +226,17 @@ export function WhatsAppTriggersTab() {
   const [formStatus, setFormStatus] = useState<string>('open');
   const [formPriority, setFormPriority] = useState<number>(1);
 
-  // Safe sector name resolution
+  // Safe sector name resolution with slug and fuzzy matching
   const getSectorName = (sectorId?: string | null) => {
     if (!sectorId || sectorId === 'none') return null;
     const target = String(sectorId).toLowerCase();
     const sector = (allAvailableSectors || []).find(
-      (s) => s && (s.id === sectorId || (s.name && s.name.toLowerCase() === target))
+      (s) =>
+        s &&
+        (s.id === sectorId ||
+          (s.name && s.name.toLowerCase() === target) ||
+          (s.name && s.name.toLowerCase().includes(target)) ||
+          (s.id && s.id.toLowerCase().includes(target)))
     );
     return sector ? sector.name : sectorId;
   };
@@ -240,11 +254,11 @@ export function WhatsAppTriggersTab() {
     return match ? match.id : null;
   };
 
-  // Evaluate test bench live
+  // Evaluate test bench live with current school branding
   const testResult = evaluateMessage(testInput, {
-    contactName: 'Carlos Silva',
-    studentName: 'Lucas Silva',
-    schoolName: 'Purple Edu',
+    contactName: profile?.full_name || 'Carlos Silva (Responsável)',
+    studentName: 'Lucas Silva (Aluno)',
+    schoolName: school?.name || 'Purple Edu',
     currentSectorName: 'Secretaria',
   });
 
@@ -420,6 +434,50 @@ export function WhatsAppTriggersTab() {
 
   const appendVariable = (variable: string) => {
     setFormResponse((prev) => `${prev} {{${variable}}}`);
+  };
+
+  // Disparo real de teste para o WhatsApp informado
+  const handleDispatchRealWhatsAppTest = async () => {
+    if (!testResult.matched || !testResult.formattedResponse) {
+      toast.error('Digite uma frase no simulador que ative um gatilho antes de enviar.');
+      return;
+    }
+
+    const cleanPhone = testPhoneNumber.replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 10) {
+      toast.error('Digite seu número de WhatsApp com DDD (ex: 11999998888).');
+      return;
+    }
+
+    const formattedPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+
+    try {
+      setIsSendingWhatsAppTest(true);
+      const res = await supabase.functions.invoke('uazapi', {
+        body: {
+          action: 'send-text',
+          data: {
+            phone: formattedPhone,
+            message: `🤖 *[TESTE DE GATILHO: ${safeTriggerName(testResult.trigger)}]*\n\n${testResult.formattedResponse}`,
+          },
+        },
+      });
+
+      if (res.error) {
+        toast.error(`Falha no envio: ${res.error.message || 'Verifique se a instância do WhatsApp está conectada'}`);
+      } else {
+        toast.success(`Mensagem de teste enviada com sucesso para +${formattedPhone}!`);
+        if (testResult.trigger?.id) {
+          updateTrigger(testResult.trigger.id, {
+            totalAcionamentos: (testResult.trigger.totalAcionamentos || 0) + 1,
+          });
+        }
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao disparar teste: ${err?.message || 'Tente novamente'}`);
+    } finally {
+      setIsSendingWhatsAppTest(false);
+    }
   };
 
   // Export triggers to JSON
@@ -704,6 +762,41 @@ export function WhatsAppTriggersTab() {
                   </div>
                 </div>
               )}
+
+              {/* Disparo de Teste Real no WhatsApp */}
+              <div className="pt-3 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="font-semibold text-foreground">Testar disparo no seu WhatsApp:</span>
+                </div>
+                <div className="flex items-center gap-2 flex-1 sm:max-w-md">
+                  <Input
+                    value={testPhoneNumber}
+                    onChange={(e) => setTestPhoneNumber(e.target.value)}
+                    placeholder="Seu número com DDD (ex: 11999998888)"
+                    className="h-8 text-xs bg-background"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleDispatchRealWhatsAppTest}
+                    disabled={isSendingWhatsAppTest || !testResult.matched}
+                    className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex-shrink-0"
+                    title={testResult.matched ? "Enviar resposta simulada para o WhatsApp informado" : "Digite uma frase que ative um gatilho"}
+                  >
+                    {isSendingWhatsAppTest ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        Enviar no meu WhatsApp
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -738,7 +831,7 @@ export function WhatsAppTriggersTab() {
             <SelectContent>
               <SelectItem value="all">🏢 Todos os Setores</SelectItem>
               <SelectItem value="none">🚫 Sem transferência</SelectItem>
-              {allAvailableSectors.map((sec) => (
+              {(allAvailableSectors || []).map((sec) => (
                 <SelectItem key={sec.id} value={sec.id}>
                   {sec.name}
                 </SelectItem>

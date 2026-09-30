@@ -280,7 +280,14 @@ export function WhatsAppAdjustableTriggerModal({
         setSelectedTriggerId(first.id);
         setMessage(interpolateMessage(getTriggerText(first)));
         const sec = getTriggerSector(first);
-        setTargetSectorId(sec && allSectors.some((s) => s.id === sec) ? sec : 'keep');
+        if (sec) {
+          const matchedSector = allSectors.find(
+            (s) => s.id === sec || (s.name && s.name.toLowerCase().includes(String(sec).toLowerCase()))
+          );
+          setTargetSectorId(matchedSector ? matchedSector.id : 'keep');
+        } else {
+          setTargetSectorId('keep');
+        }
         const st = getTriggerStatus(first);
         setTargetStatus(st || 'keep');
       } else {
@@ -306,8 +313,13 @@ export function WhatsAppAdjustableTriggerModal({
     if (trig) {
       setMessage(interpolateMessage(getTriggerText(trig)));
       const sec = getTriggerSector(trig);
-      if (sec && allSectors.some((s) => s.id === sec)) {
-        setTargetSectorId(sec);
+      if (sec) {
+        const matchedSector = allSectors.find(
+          (s) => s.id === sec || (s.name && s.name.toLowerCase().includes(String(sec).toLowerCase()))
+        );
+        if (matchedSector) {
+          setTargetSectorId(matchedSector.id);
+        }
       }
       const st = getTriggerStatus(trig);
       if (st) {
