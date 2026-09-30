@@ -39,7 +39,7 @@ export const AppLayout = () => {
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           <Topbar />
-          <main className="flex-1 p-4 lg:p-6 overflow-auto">
+          <main className="flex-1 p-2 sm:p-4 lg:p-6 overflow-auto">
             <div className="animate-fade-in">
               <Outlet />
             </div>

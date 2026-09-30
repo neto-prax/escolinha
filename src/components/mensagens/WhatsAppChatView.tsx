@@ -11,6 +11,7 @@ import {
   GraduationCap,
   Building2,
   ArrowRightLeft,
+  ArrowLeft,
   CheckCircle2,
   Clock,
   Sparkles,
@@ -125,7 +126,7 @@ export function WhatsAppChatView() {
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string>('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [inputText, setInputText] = useState('');
-  const [showRightDrawer, setShowRightDrawer] = useState(true);
+  const [showRightDrawer, setShowRightDrawer] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [targetSectorId, setTargetSectorId] = useState('');
 
@@ -438,9 +439,13 @@ export function WhatsAppChatView() {
       </div>
 
       {/* ---------------- CONTAINER PRINCIPAL DO CHAT ---------------- */}
-      <div className="flex-1 flex min-h-[460px] border rounded-xl overflow-hidden bg-background shadow-xs">
+      <div className="flex-1 flex min-h-[460px] border rounded-xl overflow-hidden bg-background shadow-xs relative">
         {/* ---------------- 1. PAINEL ESQUERDO: LISTA DE CONVERSAS ---------------- */}
-        <div className="w-72 sm:w-80 lg:w-84 flex flex-col border-r bg-muted/20 flex-shrink-0">
+        <div
+          className={`w-full md:w-80 lg:w-84 flex-col border-r bg-muted/20 flex-shrink-0 ${
+            activeConversation ? 'hidden md:flex' : 'flex'
+          }`}
+        >
           {/* Cabeçalho do Painel com Filtros e Acesso */}
           <div className="p-2.5 border-b space-y-2 bg-card">
             <div className="flex items-center justify-between">
@@ -727,26 +732,36 @@ export function WhatsAppChatView() {
 
       {/* ---------------- 2. PAINEL CENTRAL: CONVERSA ATIVA ---------------- */}
       {activeConversation ? (
-        <div className="flex-1 flex flex-col bg-background min-w-0">
+        <div className="flex-1 flex flex-col bg-background min-w-0 w-full">
           {/* Cabeçalho da Conversa Ativa */}
-          <div className="h-16 border-b px-4 flex items-center justify-between bg-card flex-shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <Avatar className="w-10 h-10 border">
+          <div className="h-14 sm:h-16 border-b px-2 sm:px-4 flex items-center justify-between bg-card flex-shrink-0 gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0 md:hidden flex-shrink-0 text-muted-foreground hover:text-foreground -ml-1"
+                onClick={() => setActiveConversationId(null)}
+                title="Voltar para a lista de conversas"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+
+              <Avatar className="w-8 h-8 sm:w-10 sm:h-10 border flex-shrink-0">
                 {activeConversation.avatar_url && <AvatarImage src={activeConversation.avatar_url} />}
-                <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs sm:text-sm">
                   {activeConversation.contact_name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
 
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-semibold text-sm truncate">{activeConversation.contact_name}</h4>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <h4 className="font-semibold text-xs sm:text-sm truncate">{activeConversation.contact_name}</h4>
                   {getStatusBadge(activeConversation.ticket_status)}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{activeConversation.phone}</span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 text-primary">
+                <div className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground truncate">
+                  <span className="truncate">{activeConversation.phone}</span>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="hidden sm:flex items-center gap-1 text-primary">
                     <Building2 className="w-3 h-3" />
                     {activeConversation.sector_name || 'Sem Setor'}
                   </span>
@@ -755,32 +770,32 @@ export function WhatsAppChatView() {
             </div>
 
             {/* Ações do Atendimento */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
               {/* Botão Gatilho Rápido Ajustável */}
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 gap-1.5 text-xs text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-medium"
+                className="h-7 sm:h-8 px-2 sm:px-2.5 gap-1 sm:gap-1.5 text-xs text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-medium"
                 onClick={() => setTriggerModalOpen(true)}
                 title="Disparar gatilho ajustável e transferir de setor"
               >
                 <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                <span className="hidden md:inline">Gatilho Rápido</span>
+                <span className="hidden sm:inline">Gatilho</span>
               </Button>
 
               {/* Botão Resolver Atendimento com Modal de Resumo */}
               {activeConversation.ticket_status !== 'resolved' ? (
                 <Button
                   size="sm"
-                  className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                  className="h-7 sm:h-8 px-2 sm:px-2.5 gap-1 sm:gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
                   onClick={() => setResolveModalOpen(true)}
                   title="Concluir e registrar resolução do atendimento"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Resolver</span>
+                  <span className="hidden sm:inline">Resolver</span>
                 </Button>
               ) : (
-                <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs px-2 py-1">
+                <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1">
                   Resolvido
                 </Badge>
               )}
@@ -802,22 +817,22 @@ export function WhatsAppChatView() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 gap-1.5 text-xs"
+                className="h-8 gap-1.5 text-xs hidden lg:inline-flex"
                 onClick={() => {
                   setTargetSectorId(activeConversation.sector_id || 'secretaria');
                   setTransferModalOpen(true);
                 }}
               >
                 <ArrowRightLeft className="w-3.5 h-3.5 text-blue-500" />
-                <span className="hidden sm:inline">Transferir</span>
+                <span>Transferir</span>
               </Button>
 
               {/* Status do Ticket */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost" className="h-8 gap-1 text-xs">
+                  <Button size="sm" variant="ghost" className="h-8 gap-1 text-xs hidden sm:inline-flex">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className="hidden sm:inline">Status</span>
+                    <span>Status</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -842,7 +857,7 @@ export function WhatsAppChatView() {
               <Button
                 size="sm"
                 variant={showRightDrawer ? 'secondary' : 'ghost'}
-                className="h-8 w-8 p-0"
+                className="h-7 w-7 sm:h-8 sm:w-8 p-0"
                 onClick={() => setShowRightDrawer(!showRightDrawer)}
                 title="Ver dados do Aluno"
               >
@@ -1008,7 +1023,7 @@ export function WhatsAppChatView() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted-foreground bg-muted/5">
+        <div className="hidden md:flex flex-1 flex-col items-center justify-center p-8 text-center text-muted-foreground bg-muted/5">
           <MessageSquare className="w-12 h-12 opacity-30 mb-3" />
           <h4 className="font-semibold text-foreground text-base">Central de Mensagens WhatsApp</h4>
           <p className="text-xs max-w-sm mt-1 mb-4 text-muted-foreground">
@@ -1029,15 +1044,25 @@ export function WhatsAppChatView() {
 
       {/* ---------------- 3. PAINEL DIREITO RETRÁTIL: DADOS DO ALUNO E RESPONSÁVEL ---------------- */}
       {showRightDrawer && activeConversation && (
-        <div className="w-72 xl:w-80 border-l bg-card flex flex-col overflow-y-auto flex-shrink-0">
-          <div className="p-4 border-b flex items-center justify-between">
-            <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
-              Detalhes do Contato
-            </h4>
+        <div className="absolute inset-0 z-30 md:static md:inset-auto w-full md:w-72 xl:w-80 border-l bg-card flex flex-col overflow-y-auto flex-shrink-0 animate-in slide-in-from-right duration-150">
+          <div className="p-3 sm:p-4 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0 md:hidden text-muted-foreground hover:text-foreground"
+                onClick={() => setShowRightDrawer(false)}
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
+                Detalhes do Contato
+              </h4>
+            </div>
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 w-6 p-0"
+              className="h-6 w-6 p-0 hidden md:flex"
               onClick={() => setShowRightDrawer(false)}
             >
               <ChevronRight className="w-4 h-4" />
