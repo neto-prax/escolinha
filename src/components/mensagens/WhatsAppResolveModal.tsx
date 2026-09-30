@@ -11,8 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { CheckCircle2, MessageSquare, Send, ShieldCheck, Sparkles } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { CheckCircle2, Loader2, MessageSquare, ShieldCheck } from 'lucide-react';
 import { WhatsAppChatConversation } from '@/types/mensagens';
+import { toast } from 'sonner';
 
 interface WhatsAppResolveModalProps {
   open: boolean;
@@ -22,7 +24,7 @@ interface WhatsAppResolveModalProps {
     title: string;
     description: string;
     closingMessage?: string;
-  }) => Promise<void> | void;
+  }) => Promise<void>;
 }
 
 export function WhatsAppResolveModal({
@@ -33,125 +35,123 @@ export function WhatsAppResolveModal({
 }: WhatsAppResolveModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [sendClosingMessage, setSendClosingMessage] = useState(true);
   const [closingMessage, setClosingMessage] = useState('');
-  const [sendWhatsAppMessage, setSendWhatsAppMessage] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Pre-fill default values when modal opens
   useEffect(() => {
     if (open && conversation) {
-      setTitle(
-        conversation.student_info
-          ? `Atendimento - ${conversation.student_info.name}`
-          : `Atendimento - ${conversation.contact_name}`
-      );
+      setTitle('Atendimento concluído');
       setDescription('');
+      setSendClosingMessage(true);
+      const contactFirst = conversation.contact_name?.split(' ')[0] || 'Responsável';
       setClosingMessage(
-        `Olá, ${conversation.contact_name}! 👋\n\nInformamos que seu atendimento com a equipe escolar foi concluído com sucesso. ✅\n\nCaso precise de algo mais ou tenha qualquer outra dúvida, estamos sempre à sua disposição. Tenha um excelente dia! 🎓`
+        `Olá, ${contactFirst}! Seu atendimento foi finalizado por nossa equipe. Caso precise de mais algum auxílio, estamos sempre à disposição! 😊`
       );
-      setSendWhatsAppMessage(true);
-      setIsSubmitting(false);
     }
   }, [open, conversation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) return;
+    if (!title.trim()) {
+      toast.error('Informe um título para o parecer da resolução.');
+      return;
+    }
 
-    setIsSubmitting(true);
     try {
+      setIsSubmitting(true);
       await onConfirmResolve({
         title: title.trim(),
         description: description.trim(),
-        closingMessage: sendWhatsAppMessage ? closingMessage.trim() : undefined,
+        closingMessage: sendClosingMessage && closingMessage.trim() ? closingMessage.trim() : undefined,
       });
+      toast.success('Atendimento marcado como resolvido!');
       onOpenChange(false);
+    } catch (err: any) {
+      toast.error(`Erro ao resolver atendimento: ${err?.message || 'Tente novamente'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!conversation) return null;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-            Marcar Atendimento como Resolvido
-          </DialogTitle>
-          <DialogDescription className="text-xs">
-            Registre o parecer da conversa com <strong>{conversation.contact_name}</strong> e envie uma mensagem de encerramento via WhatsApp.
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="w-5 h-5" />
+            <DialogTitle>Marcar como Resolvido</DialogTitle>
+          </div>
+          <DialogDescription>
+            Registre o parecer final do atendimento com{' '}
+            <strong className="text-foreground">{conversation?.contact_name || 'o contato'}</strong>.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          {/* Título do Atendimento */}
+          {/* Título do Parecer */}
           <div className="space-y-1.5">
-            <Label htmlFor="res-title" className="text-xs font-semibold flex items-center gap-1.5">
-              <span>Título / Assunto da Resolução *</span>
+            <Label htmlFor="resolve-title" className="text-xs font-semibold">
+              Título do Parecer *
             </Label>
             <Input
-              id="res-title"
-              required
-              placeholder="Ex: Acordo de débitos da mensalidade de Maio"
+              id="resolve-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="text-xs h-9"
+              placeholder="Ex: Dúvida de matrícula esclarecida / Acordo realizado"
+              required
+              disabled={isSubmitting}
             />
           </div>
 
-          {/* Breve Descrição / Parecer Interno */}
+          {/* Descrição / Notas Internas */}
           <div className="space-y-1.5">
-            <Label htmlFor="res-desc" className="text-xs font-semibold flex items-center justify-between">
-              <span>Breve Descrição / Histórico Interno *</span>
-              <span className="text-[10px] text-muted-foreground font-normal">Ficará gravado no prontuário</span>
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="resolve-desc" className="text-xs font-semibold">
+                Descrição & Notas Internas
+              </Label>
+              <span className="text-[11px] text-muted-foreground">Fica registrado no histórico</span>
+            </div>
             <Textarea
-              id="res-desc"
-              required
-              rows={3}
-              placeholder="Descreva o que foi solucionado, encaminhado ou acordado com o responsável..."
+              id="resolve-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="text-xs resize-none"
+              placeholder="Detalhes sobre a tratativa realizada com o responsável..."
+              rows={3}
+              className="resize-none"
+              disabled={isSubmitting}
             />
           </div>
 
-          {/* Checkbox / Toggle Enviar Mensagem de Encerramento no WhatsApp */}
-          <div className="p-3 rounded-lg border bg-muted/30 space-y-2">
+          {/* Enviar mensagem pelo WhatsApp */}
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={sendWhatsAppMessage}
-                  onChange={(e) => setSendWhatsAppMessage(e.target.checked)}
-                  className="rounded text-primary focus:ring-primary h-4 w-4"
-                />
-                <span className="flex items-center gap-1 text-foreground">
-                  <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <Label htmlFor="send-closing-msg" className="text-xs font-medium cursor-pointer">
                   Enviar mensagem de encerramento no WhatsApp
-                </span>
-              </label>
-              {sendWhatsAppMessage && (
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                  Ativo
-                </span>
-              )}
+                </Label>
+              </div>
+              <Switch
+                id="send-closing-msg"
+                checked={sendClosingMessage}
+                onCheckedChange={setSendClosingMessage}
+                disabled={isSubmitting}
+              />
             </div>
 
-            {sendWhatsAppMessage && (
-              <div className="space-y-1 pt-1">
+            {sendClosingMessage && (
+              <div className="space-y-1.5 pt-1">
                 <Textarea
-                  rows={4}
                   value={closingMessage}
                   onChange={(e) => setClosingMessage(e.target.value)}
-                  placeholder="Mensagem de encerramento..."
-                  className="text-xs resize-none bg-background leading-relaxed"
+                  placeholder="Mensagem a ser enviada no WhatsApp..."
+                  rows={3}
+                  className="resize-none text-xs bg-background"
+                  disabled={isSubmitting}
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  Esta mensagem será enviada agora mesmo para o WhatsApp do contato.
+                  Esta mensagem será enviada instantaneamente pelo WhatsApp ao concluir.
                 </p>
               </div>
             )}
@@ -161,7 +161,6 @@ export function WhatsAppResolveModal({
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
             >
@@ -169,12 +168,20 @@ export function WhatsAppResolveModal({
             </Button>
             <Button
               type="submit"
-              size="sm"
-              disabled={isSubmitting || !title.trim() || !description.trim()}
-              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1.5"
+              disabled={isSubmitting}
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? 'Finalizando...' : 'Confirmar e Resolver'}</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Resolvendo...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  Concluir e Resolver
+                </>
+              )}
             </Button>
           </DialogFooter>
         </form>
@@ -182,3 +189,4 @@ export function WhatsAppResolveModal({
     </Dialog>
   );
 }
+export default WhatsAppResolveModal;
