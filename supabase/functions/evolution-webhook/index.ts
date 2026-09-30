@@ -85,6 +85,227 @@ async function sendWelcomeMessage(
   }
 }
 
+async function processAutomationTriggers(
+  supabase: any,
+  phone: string,
+  incomingText: string,
+  contactName: string,
+  schoolId: string,
+  conversationId: string
+) {
+  try {
+    if (!incomingText || !incomingText.trim()) return;
+
+    const { data: school } = await supabase
+      .from('schools')
+      .select('settings, name')
+      .eq('id', schoolId)
+      .maybeSingle();
+
+    const automation = school?.settings?.automation;
+    let triggers = automation?.triggers;
+
+    // Gatilhos padrão inteligentes caso a instituição ainda não tenha personalizado
+    if (!Array.isArray(triggers) || triggers.length === 0) {
+      triggers = [
+        {
+          id: 'trig-matriculas',
+          nome: 'Matrículas & Mensalidades',
+          ativo: true,
+          tipoCorrespondencia: 'contem',
+          palavrasChave: ['matricula', 'matrícula', 'vagas', 'vaga', 'preço', 'valor', 'mensalidade'],
+          respostaTexto: 'Olá {{nome}}! 🎒 Que alegria seu interesse na {{escola}}! Nossas matrículas para o período letivo estão com condições especiais. Estou transferindo seu atendimento para nossa equipe de Matrículas e Admissões agora mesmo! 📚',
+          setorDestinoId: 'comercial',
+          alterarStatus: 'open',
+          prioridade: 1,
+        },
+        {
+          id: 'trig-financeiro',
+          nome: 'Segunda Via de Boleto / PIX',
+          ativo: true,
+          tipoCorrespondencia: 'contem',
+          palavrasChave: ['boleto', 'pix', 'segunda via', '2 via', 'pagamento', 'pagar', 'carne', 'carnê', 'comprovante'],
+          respostaTexto: 'Olá {{nome}}! 💳 Localizamos seu contato. Para emissão de 2ª via de boleto ou confirmação de pagamento para o aluno(a) {{aluno}}, estou transferindo você para o nosso setor Financeiro. Um momento!',
+          setorDestinoId: 'financeiro',
+          alterarStatus: 'open',
+          prioridade: 2,
+        },
+        {
+          id: 'trig-secretaria',
+          nome: 'Secretaria & Declarações',
+          ativo: true,
+          tipoCorrespondencia: 'contem',
+          palavrasChave: ['declaracao', 'declaração', 'historico', 'histórico', 'atestado', 'transferencia', 'transferência', 'secretaria'],
+          respostaTexto: 'Olá {{nome}}! 📑 Para solicitação de declaração de matrícula, histórico escolar ou atestados acadêmicos, seu atendimento foi direcionado para a nossa Secretaria Escolar.',
+          setorDestinoId: 'secretaria',
+          alterarStatus: 'open',
+          prioridade: 3,
+        },
+        {
+          id: 'trig-pedagogico',
+          nome: 'Coordenação Pedagógica & Notas',
+          ativo: true,
+          tipoCorrespondencia: 'contem',
+          palavrasChave: ['nota', 'boletim', 'prova', 'tarefa', 'reuniao', 'reunião', 'professor', 'professora', 'rendimento'],
+          respostaTexto: 'Olá {{nome}}! 👩‍🏫 Sobre a rotina pedagógica, desempenho e atividades de sala de aula do(a) {{aluno}}, estamos encaminhando sua conversa para a Coordenação Pedagógica.',
+          setorDestinoId: 'pedagogico',
+          alterarStatus: 'open',
+          prioridade: 4,
+        },
+        {
+          id: 'trig-horario',
+          nome: 'Horário de Atendimento',
+          ativo: true,
+          tipoCorrespondencia: 'contem',
+          palavrasChave: ['horario', 'horário', 'funcionamento', 'aberto', 'fecha', 'atendimento'],
+          respostaTexto: 'Olá {{nome}}! ⏰ O atendimento da {{escola}} funciona de Segunda a Sexta-feira, das 07h00 às 18h00. Como podemos te ajudar hoje?',
+          setorDestinoId: null,
+          alterarStatus: null,
+          prioridade: 5,
+        },
+      ];
+    }
+
+    const normalize = (t: string) =>
+      t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+    const cleanInput = normalize(incomingText);
+    const activeTriggers = triggers
+      .filter((t: any) => t.ativo !== false)
+      .sort((a: any, b: any) => (a.prioridade || 99) - (b.prioridade || 99));
+
+    for (const trigger of activeTriggers) {
+      let matched = false;
+      const tipo = trigger.tipoCorrespondencia || 'contem';
+      const keywords = Array.isArray(trigger.palavrasChave) ? trigger.palavrasChave : [];
+
+      if (tipo === 'qualquer_primeira') {
+        matched = true;
+      } else {
+        for (const kw of keywords) {
+          const cleanKw = normalize(kw);
+          if (!cleanKw) continue;
+          if (tipo === 'exata' && cleanInput === cleanKw) {
+            matched = true;
+            break;
+          }
+          if (tipo === 'inicio' && cleanInput.startsWith(cleanKw)) {
+            matched = true;
+            break;
+          }
+          if ((tipo === 'contem' || !tipo) && cleanInput.includes(cleanKw)) {
+            matched = true;
+            break;
+          }
+        }
+      }
+
+      if (matched) {
+        const rawResponse = trigger.respostaTexto || trigger.message_template || '';
+        if (!rawResponse) continue;
+
+        const firstName = contactName?.split(' ')[0] || 'Responsável';
+        const schoolName = school?.name || 'Purple Edu';
+        const finalMessage = rawResponse
+          .replace(/\{\{nome\}\}/gi, firstName)
+          .replace(/\{\{responsavel\}\}/gi, contactName || 'Responsável')
+          .replace(/\{\{aluno\}\}/gi, 'seu dependente')
+          .replace(/\{\{escola\}\}/gi, schoolName)
+          .replace(/\{\{setor\}\}/gi, 'Atendimento');
+
+        const UAZAPI_URL = Deno.env.get('UAZAPI_URL')?.replace(/\/$/, '');
+        const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN');
+
+        let resultKeyId: string | null = null;
+        if (UAZAPI_URL && UAZAPI_TOKEN) {
+          const response = await fetch(`${UAZAPI_URL}/send/text`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+            body: JSON.stringify({ number: phone, text: finalMessage }),
+          });
+          const resData = await response.json().catch(() => ({}));
+          resultKeyId = resData?.id || null;
+        }
+
+        const nowIso = new Date().toISOString();
+        await supabase.from('whatsapp_messages').insert({
+          conversation_id: conversationId,
+          direction: 'outgoing',
+          body: finalMessage,
+          message_type: 'text',
+          status: 'sent',
+          external_id: resultKeyId,
+          created_at: nowIso,
+        });
+
+        const convUpdates: Record<string, unknown> = {
+          last_message: finalMessage,
+          last_message_at: nowIso,
+        };
+
+        if (trigger.alterarStatus) {
+          convUpdates.ticket_status = trigger.alterarStatus;
+        }
+
+        // Resolução segura de setor
+        let targetSectorUuid: string | null = null;
+        const rawSector = trigger.setorDestinoId;
+        if (rawSector) {
+          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSector)) {
+            targetSectorUuid = rawSector;
+          } else {
+            const { data: dbSectors } = await supabase
+              .from('sectors')
+              .select('id, name')
+              .eq('school_id', schoolId);
+            const found = dbSectors?.find(
+              (s: any) =>
+                s.name.toLowerCase().includes(rawSector.toLowerCase()) ||
+                rawSector.toLowerCase().includes(s.name.toLowerCase())
+            );
+            if (found?.id) {
+              targetSectorUuid = found.id;
+            } else {
+              const sectorLabels: Record<string, string> = {
+                comercial: 'Comercial & Matrículas',
+                financeiro: 'Financeiro',
+                secretaria: 'Secretaria',
+                pedagogico: 'Pedagógico',
+              };
+              const { data: createdSector } = await supabase
+                .from('sectors')
+                .insert({
+                  school_id: schoolId,
+                  name: sectorLabels[rawSector] || rawSector,
+                  is_active: true,
+                })
+                .select('id')
+                .maybeSingle();
+              if (createdSector?.id) {
+                targetSectorUuid = createdSector.id;
+              }
+            }
+          }
+        }
+
+        if (targetSectorUuid) {
+          convUpdates.sector_id = targetSectorUuid;
+        }
+
+        await supabase
+          .from('whatsapp_conversations')
+          .update(convUpdates)
+          .eq('id', conversationId);
+
+        console.log(`[AutoTrigger] Disparou gatilho "${trigger.nome}" para ${phone}`);
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('Erro processando gatilho automático:', err);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -377,6 +598,18 @@ serve(async (req) => {
     // Send welcome message if it's a new incoming conversation
     if (isNewConversation && !isFromMe) {
       await sendWelcomeMessage(supabase, instanceCandidates[0] || '', formattedPhone, schoolId, conversation.id);
+    }
+
+    // Process automatic triggers for incoming messages
+    if (!isFromMe && body) {
+      await processAutomationTriggers(
+        supabase,
+        formattedPhone,
+        body,
+        pushName || conversation.contact_name,
+        schoolId,
+        conversation.id
+      );
     }
 
     return new Response(

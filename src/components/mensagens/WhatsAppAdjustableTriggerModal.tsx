@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Zap, Send, ArrowRightLeft, Loader2, Sparkles, Building2 } from 'lucide-react';
-import { WhatsAppChatConversation } from '@/types/mensagens';
+import { WhatsAppChatConversation, WhatsAppTrigger } from '@/types/mensagens';
 import { toast } from 'sonner';
 
 interface SectorItem {
@@ -27,20 +27,12 @@ interface SectorItem {
   name: string;
 }
 
-interface TriggerItem {
-  id: string;
-  name: string;
-  message_template: string;
-  description?: string;
-  target_sector_id?: string | null;
-}
-
 interface WhatsAppAdjustableTriggerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   conversation: WhatsAppChatConversation | null;
   allSectors: SectorItem[];
-  triggers: TriggerItem[];
+  triggers: (WhatsAppTrigger | any)[];
   schoolName?: string;
   onDispatchTrigger: (payload: {
     message: string;
@@ -48,6 +40,13 @@ interface WhatsAppAdjustableTriggerModalProps {
     targetStatus?: 'open' | 'pending' | 'resolved' | null;
   }) => Promise<void>;
 }
+
+// Helpers defensivos para compatibilidade entre formatos de trigger
+const getTriggerName = (t: any): string => t.nome || t.name || 'Gatilho sem nome';
+const getTriggerText = (t: any): string => t.respostaTexto || t.message_template || t.text || '';
+const getTriggerSector = (t: any): string | null => t.setorDestinoId || t.target_sector_id || null;
+const getTriggerStatus = (t: any): 'open' | 'pending' | 'resolved' | null =>
+  t.alterarStatus || t.target_status || null;
 
 export function WhatsAppAdjustableTriggerModal({
   open,
@@ -84,14 +83,13 @@ export function WhatsAppAdjustableTriggerModal({
   useEffect(() => {
     if (open) {
       if (triggers.length > 0) {
-        const first = triggers[0];
+        const first = triggers.find((t) => t.ativo !== false) || triggers[0];
         setSelectedTriggerId(first.id);
-        setMessage(interpolateMessage(first.message_template));
-        if (first.target_sector_id) {
-          setTargetSectorId(first.target_sector_id);
-        } else {
-          setTargetSectorId('keep');
-        }
+        setMessage(interpolateMessage(getTriggerText(first)));
+        const sec = getTriggerSector(first);
+        setTargetSectorId(sec && allSectors.some((s) => s.id === sec) ? sec : 'keep');
+        const st = getTriggerStatus(first);
+        setTargetStatus(st || 'keep');
       } else {
         setSelectedTriggerId('custom');
         setMessage(
@@ -100,10 +98,10 @@ export function WhatsAppAdjustableTriggerModal({
           )
         );
         setTargetSectorId('keep');
+        setTargetStatus('keep');
       }
-      setTargetStatus('keep');
     }
-  }, [open, conversation, triggers]);
+  }, [open, conversation, triggers, allSectors]);
 
   const handleTriggerSelect = (triggerId: string) => {
     setSelectedTriggerId(triggerId);
@@ -113,9 +111,14 @@ export function WhatsAppAdjustableTriggerModal({
     }
     const trig = triggers.find((t) => t.id === triggerId);
     if (trig) {
-      setMessage(interpolateMessage(trig.message_template));
-      if (trig.target_sector_id) {
-        setTargetSectorId(trig.target_sector_id);
+      setMessage(interpolateMessage(getTriggerText(trig)));
+      const sec = getTriggerSector(trig);
+      if (sec && allSectors.some((s) => s.id === sec)) {
+        setTargetSectorId(sec);
+      }
+      const st = getTriggerStatus(trig);
+      if (st) {
+        setTargetStatus(st);
       }
     }
   };
@@ -138,7 +141,7 @@ export function WhatsAppAdjustableTriggerModal({
         targetSectorId: targetSectorId !== 'keep' ? targetSectorId : undefined,
         targetStatus: targetStatus !== 'keep' ? targetStatus : undefined,
       });
-      toast.success('Gatilho executado com sucesso!');
+      toast.success('Gatilho disparado com sucesso!');
       onOpenChange(false);
     } catch (err: any) {
       toast.error(`Erro ao disparar gatilho: ${err?.message || 'Tente novamente'}`);
@@ -174,7 +177,7 @@ export function WhatsAppAdjustableTriggerModal({
                 <SelectItem value="custom">✏️ Mensagem Personalizada (Em branco)</SelectItem>
                 {triggers.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
-                    ⚡ {t.name}
+                    ⚡ {getTriggerName(t)}
                   </SelectItem>
                 ))}
               </SelectContent>

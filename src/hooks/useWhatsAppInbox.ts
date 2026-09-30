@@ -645,17 +645,58 @@ function useWhatsAppInboxState() {
 
       const isDb = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
       if (isDb) {
-        await supabase
-          .from('whatsapp_conversations')
-          .update({ sector_id: targetSectorId })
-          .eq('id', conversationId);
+        try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetSectorId);
+          let finalSectorUuid: string | null = isUuid ? targetSectorId : null;
 
-        queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
+          if (!finalSectorUuid && schoolId) {
+            const { data: existingSectors } = await supabase
+              .from('sectors')
+              .select('id, name')
+              .eq('school_id', schoolId);
+
+            const match = existingSectors?.find(
+              (s) =>
+                s.name.toLowerCase() === sectorName.toLowerCase() ||
+                s.name.toLowerCase().includes(targetSectorId.toLowerCase())
+            );
+
+            if (match?.id) {
+              finalSectorUuid = match.id;
+            } else {
+              const { data: createdSector } = await supabase
+                .from('sectors')
+                .insert({
+                  name: sectorName,
+                  school_id: schoolId,
+                  is_active: true,
+                })
+                .select('id')
+                .maybeSingle();
+
+              if (createdSector?.id) {
+                finalSectorUuid = createdSector.id;
+                queryClient.invalidateQueries({ queryKey: ['whatsapp-sectors-list'] });
+              }
+            }
+          }
+
+          if (finalSectorUuid) {
+            await supabase
+              .from('whatsapp_conversations')
+              .update({ sector_id: finalSectorUuid })
+              .eq('id', conversationId);
+
+            queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
+          }
+        } catch (err) {
+          console.warn('Could not update sector on database:', err);
+        }
       }
 
       toast.success(`Conversa transferida para o setor "${sectorName}"!`);
     },
-    [allAvailableSectors, queryClient]
+    [allAvailableSectors, schoolId, queryClient]
   );
 
   // ----------------------------------------------------

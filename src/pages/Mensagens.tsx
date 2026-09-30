@@ -23,16 +23,16 @@ function MensagensContent() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-6.75rem)] lg:h-[calc(100vh-7.75rem)] min-h-[480px]">
+    <div className="flex flex-col h-[calc(100vh-6.75rem)] lg:h-[calc(100vh-7.75rem)] min-h-[580px]">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         {/* ---------------- CABEÇALHO COMPACTO & NAVEGAÇÃO POR ABAS ---------------- */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b flex-shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b flex-shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-xs flex-shrink-0">
               <MessageSquare className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground truncate leading-tight">
+              <h1 className="text-lg font-bold tracking-tight text-foreground truncate leading-tight">
                 Central de Mensagens & WhatsApp
               </h1>
               <p className="text-[11px] text-muted-foreground truncate hidden sm:block">
@@ -42,26 +42,24 @@ function MensagensContent() {
           </div>
 
           {/* Abas Integradas no Topo */}
-          <div className="overflow-x-auto no-scrollbar -mx-1 px-1">
-            <TabsList className="inline-flex h-8 sm:h-9 p-0.5 sm:p-1 bg-muted/60 flex-shrink-0">
-              <TabsTrigger value="chat" className="gap-1 sm:gap-1.5 text-xs font-medium px-2.5 sm:px-3 h-7 whitespace-nowrap">
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Chat ({conversations.length})</span>
-              </TabsTrigger>
-              <TabsTrigger value="triggers" className="gap-1 sm:gap-1.5 text-xs font-medium px-2.5 sm:px-3 h-7 whitespace-nowrap">
-                <Zap className="w-3.5 h-3.5 text-amber-500" />
-                <span>Triggers ({triggers.filter((t) => t.ativo).length})</span>
-              </TabsTrigger>
-              <TabsTrigger value="setores" className="gap-1 sm:gap-1.5 text-xs font-medium px-2.5 sm:px-3 h-7 whitespace-nowrap">
-                <Building2 className="w-3.5 h-3.5 text-primary" />
-                <span>Setores ({allAvailableSectors.length})</span>
-              </TabsTrigger>
-              <TabsTrigger value="permissoes" className="gap-1 sm:gap-1.5 text-xs font-medium px-2.5 sm:px-3 h-7 whitespace-nowrap">
-                <Shield className="w-3.5 h-3.5 text-blue-500" />
-                <span>Permissões</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList className="grid grid-cols-2 sm:flex sm:flex-row h-9 p-1 bg-muted/60 flex-shrink-0 self-start sm:self-auto">
+            <TabsTrigger value="chat" className="gap-1.5 text-xs font-medium px-3 h-7">
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Chat ({conversations.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="triggers" className="gap-1.5 text-xs font-medium px-3 h-7">
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              <span>Triggers ({triggers.filter((t) => t.ativo).length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="setores" className="gap-1.5 text-xs font-medium px-3 h-7">
+              <Building2 className="w-3.5 h-3.5 text-primary" />
+              <span>Setores ({allAvailableSectors.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="permissoes" className="gap-1.5 text-xs font-medium px-3 h-7">
+              <Shield className="w-3.5 h-3.5 text-blue-500" />
+              <span>Permissões</span>
+            </TabsTrigger>
+          </TabsList>
         </div>
 
         {/* Conteúdo das Abas */}
