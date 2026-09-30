@@ -16,3 +16,6 @@
 - [x] Corrigir o recebimento de mensagens da Uazapi.
 - [x] Eliminar consultas repetidas da Central de Mensagens.
 - [ ] Validar recebimento único e atualização em tempo real.
+- [x] Restaurar a exibição de fotos, vídeos, áudios, documentos e figurinhas no chat.
+- [x] Normalizar e armazenar permanentemente novas mídias recebidas da Uazapi.
+- [ ] Validar uma foto, um vídeo e uma figurinha reais recebidos após a publicação.
