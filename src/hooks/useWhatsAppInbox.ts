@@ -453,7 +453,21 @@ function useWhatsAppInboxState() {
       conversation_id: m.conversation_id,
       body: m.body,
       direction: m.direction as 'incoming' | 'outgoing',
-      message_type: (m.message_type || 'text') as any,
+      message_type: (() => {
+        const rawType = String(m.message_type || 'text').toLowerCase().replace(/[._\s-]/g, '');
+        const typeMap: Record<string, WhatsAppChatMessage['message_type']> = {
+          imagemessage: 'image',
+          videomessage: 'video',
+          audiomessage: 'audio',
+          pttmessage: 'audio',
+          documentmessage: 'document',
+          documentwithcaptionmessage: 'document',
+          stickermessage: 'sticker',
+          extendedtextmessage: 'text',
+          conversation: 'text',
+        };
+        return typeMap[rawType] || (rawType as WhatsAppChatMessage['message_type']);
+      })(),
       media_url: m.media_url,
       media_caption: m.media_caption,
       media_filename: m.media_filename,
