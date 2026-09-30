@@ -344,11 +344,44 @@ serve(async (req) => {
 
     const { data: duplicate } = await supabase
       .from('whatsapp_messages')
-      .select('id, conversation_id')
+      .select('id, conversation_id, media_url, whatsapp_conversations!inner(school_id)')
       .eq('external_id', messageId)
       .maybeSingle();
 
     if (duplicate) {
+      if (!duplicate.media_url && ['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
+        const duplicateConversation = Array.isArray(duplicate.whatsapp_conversations)
+          ? duplicate.whatsapp_conversations[0]
+          : duplicate.whatsapp_conversations;
+        const duplicateSchoolId = duplicateConversation?.school_id;
+        if (duplicateSchoolId) {
+          const mediaMime = messagePayload.mimetype || messagePayload.mimeType || messagePayload.content?.mimetype || null;
+          const recoveredUrl = await persistInboundMedia(
+            supabase,
+            duplicateSchoolId,
+            duplicate.conversation_id,
+            messageId,
+            messageType as MediaKind,
+            mediaUrl,
+            mediaMime,
+          );
+          if (recoveredUrl) {
+            await supabase
+              .from('whatsapp_messages')
+              .update({
+                media_url: recoveredUrl,
+                message_type: messageType,
+                media_caption: mediaCaption,
+                media_filename: mediaFilename,
+                body: body || mediaDefaults(messageType as MediaKind).label,
+              })
+              .eq('id', duplicate.id);
+            return new Response(JSON.stringify({ status: 'duplicate_media_recovered', messageId: duplicate.id }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+      }
       return new Response(JSON.stringify({ status: 'duplicate', messageId: duplicate.id }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
