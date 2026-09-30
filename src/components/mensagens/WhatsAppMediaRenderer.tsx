@@ -42,6 +42,7 @@ export function WhatsAppMediaRenderer({ message }: WhatsAppMediaRendererProps) {
   }
 
   if (!['image', 'video', 'sticker'].includes(type)) return null;
+  const previewType = type as 'image' | 'video' | 'sticker';
 
   if (failed) {
     return (
@@ -85,7 +86,7 @@ export function WhatsAppMediaRenderer({ message }: WhatsAppMediaRendererProps) {
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         url={url}
-        type={type}
+        type={previewType}
         description={description}
       />
     </>

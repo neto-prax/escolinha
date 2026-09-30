@@ -308,6 +308,10 @@ serve(async (req) => {
         mediaFilename = message.message.documentMessage.fileName || 'documento';
         body = `[Documento: ${mediaFilename}]`;
         mediaUrl = message.message.documentMessage.url || null;
+      } else if (message.message?.stickerMessage) {
+        messageType = 'sticker';
+        body = '[Figurinha]';
+        mediaUrl = message.message.stickerMessage.url || null;
       } else {
         body = '[Mensagem]';
       }
