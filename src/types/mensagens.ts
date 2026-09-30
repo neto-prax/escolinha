@@ -21,7 +21,7 @@ export interface WhatsAppChatMessage {
   conversation_id: string;
   body: string | null;
   direction: 'incoming' | 'outgoing';
-  message_type: 'text' | 'image' | 'audio' | 'document' | 'video' | 'location';
+  message_type: 'text' | 'image' | 'audio' | 'document' | 'video' | 'sticker' | 'location';
   media_url?: string | null;
   media_caption?: string | null;
   media_filename?: string | null;
