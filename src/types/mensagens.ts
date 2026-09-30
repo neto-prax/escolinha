@@ -32,6 +32,14 @@ export interface WhatsAppChatMessage {
   reply_to_id?: string | null;
 }
 
+export interface WhatsAppResolutionData {
+  title: string;
+  description: string;
+  closingMessage?: string;
+  resolved_at: string;
+  resolved_by: string;
+}
+
 export interface WhatsAppChatConversation {
   id: string;
   phone: string;
@@ -48,6 +56,10 @@ export interface WhatsAppChatConversation {
   tags?: string[];
   assigned_to?: string | null;
   assigned_name?: string | null;
+  opened_at?: string | null;
+  closed_at?: string | null;
+  resolution_summary?: string | null;
+  resolution_data?: WhatsAppResolutionData | null;
   student_info?: {
     id: string;
     name: string;

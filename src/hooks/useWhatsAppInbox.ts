@@ -6,6 +6,7 @@ import {
   WhatsAppChatConversation,
   WhatsAppChatMessage,
   WhatsAppSectorItem,
+  WhatsAppResolutionData,
 } from '@/types/mensagens';
 import { toast } from 'sonner';
 
@@ -274,6 +275,20 @@ function useWhatsAppInboxState() {
       const sectorObj = allAvailableSectors.find((s) => s.id === row.sector_id);
       const studentEnriched = findStudentInfo(row.phone, row.contact_name || row.phone);
 
+      let parsedResolution: WhatsAppResolutionData | null = null;
+      if (row.resolution_summary) {
+        try {
+          parsedResolution = JSON.parse(row.resolution_summary);
+        } catch {
+          parsedResolution = {
+            title: 'Atendimento Concluído',
+            description: row.resolution_summary,
+            resolved_at: row.closed_at || row.updated_at || row.created_at,
+            resolved_by: 'Atendente',
+          };
+        }
+      }
+
       return {
         id: row.id,
         phone: row.phone,
@@ -292,6 +307,10 @@ function useWhatsAppInboxState() {
         tags: row.tags || ['WhatsApp'],
         assigned_to: row.assigned_to,
         assigned_name: null,
+        opened_at: row.opened_at || null,
+        closed_at: row.closed_at || null,
+        resolution_summary: row.resolution_summary || null,
+        resolution_data: parsedResolution,
         student_info: studentEnriched,
       };
     });
@@ -667,6 +686,75 @@ function useWhatsAppInboxState() {
   );
 
   // ----------------------------------------------------
+  // 8. ACCESS / START CONVERSATION (UNREAD -> IN PROGRESS)
+  // ----------------------------------------------------
+  const accessConversation = useCallback(
+    async (conversationId: string) => {
+      const nowIso = new Date().toISOString();
+      setActiveConversationId(conversationId);
+
+      const isDb = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+      if (isDb) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({
+            unread_count: 0,
+            opened_at: nowIso,
+            ticket_status: 'open',
+          })
+          .eq('id', conversationId);
+
+        queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
+      }
+
+      toast.success('Atendimento acessado e em conversa ativa!');
+    },
+    [queryClient]
+  );
+
+  // ----------------------------------------------------
+  // 9. RESOLVE CONVERSATION (RECORD SUMMARY & CLOSE)
+  // ----------------------------------------------------
+  const resolveConversation = useCallback(
+    async (
+      conversationId: string,
+      resolution: { title: string; description: string; closingMessage?: string }
+    ) => {
+      const nowIso = new Date().toISOString();
+      const resolutionPayload: WhatsAppResolutionData = {
+        title: resolution.title.trim(),
+        description: resolution.description.trim(),
+        closingMessage: resolution.closingMessage?.trim() || undefined,
+        resolved_at: nowIso,
+        resolved_by: profile?.full_name || 'Atendente Purple Edu',
+      };
+
+      // 1. Se houver mensagem de encerramento, envia via WhatsApp
+      if (resolution.closingMessage?.trim()) {
+        await sendMessage(resolution.closingMessage.trim());
+      }
+
+      // 2. Atualiza no banco Supabase
+      const isDb = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
+      if (isDb) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({
+            ticket_status: 'resolved',
+            closed_at: nowIso,
+            resolution_summary: JSON.stringify(resolutionPayload),
+          })
+          .eq('id', conversationId);
+
+        queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
+      }
+
+      toast.success('Atendimento concluído e registrado como resolvido!');
+    },
+    [profile?.full_name, queryClient, sendMessage]
+  );
+
+  // ----------------------------------------------------
   // 8. CREATE NEW CONVERSATION
   // ----------------------------------------------------
   const createNewConversation = useCallback(
@@ -804,6 +892,8 @@ function useWhatsAppInboxState() {
     isLoadingDbConversations,
     onlyFromToday,
     setOnlyFromToday,
+    accessConversation,
+    resolveConversation,
   };
 }
 

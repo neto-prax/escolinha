@@ -30,7 +30,11 @@ import {
   BookOpen,
   Building2,
   UserCheck,
+  MessageSquare,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 
 export type DashboardViewType = 'general' | 'teacher' | 'secretary';
@@ -140,6 +144,47 @@ const Dashboard = () => {
     enabled: !!user?.id,
   });
 
+  const schoolId = profile?.school_id || school?.id;
+
+  const { data: whatsappStats } = useQuery({
+    queryKey: ['dashboard-whatsapp-stats', schoolId],
+    queryFn: async () => {
+      let query = supabase
+        .from('whatsapp_conversations')
+        .select('id, ticket_status, unread_count, opened_at, created_at, closed_at');
+
+      if (schoolId) {
+        query = query.eq('school_id', schoolId);
+      }
+
+      const { data, error } = await query;
+      if (error || !data) return { unread: 0, inProgress: 0, resolved: 0, total: 0 };
+
+      let unread = 0;
+      let inProgress = 0;
+      let resolved = 0;
+
+      for (const c of data) {
+        const isResolved = c.ticket_status === 'resolved' || c.ticket_status === 'closed';
+        if (isResolved) {
+          resolved++;
+        } else if (c.unread_count > 0 || !c.opened_at) {
+          unread++;
+        } else {
+          inProgress++;
+        }
+      }
+
+      return {
+        unread,
+        inProgress,
+        resolved,
+        total: data.length,
+      };
+    },
+    staleTime: 15000,
+  });
+
   const greeting = new Date().getHours() < 12
     ? 'Bom dia'
     : new Date().getHours() < 18
@@ -158,18 +203,64 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header com Saudação, Seletor de Visão e Controles */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header Executivo com Saudação, Data, Ações Rápidas e Seletor de Visão */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-card border shadow-xs">
         <div>
-          <h1 className="text-2xl font-semibold">
-            {greeting}, {profile?.full_name?.split(' ')[0] || 'Usuário'}!
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {viewSubtitle}
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+              {greeting}, {profile?.full_name?.split(' ')[0] || 'Usuário'}!
+            </h1>
+            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20 font-medium capitalize">
+              {primaryRole ? ROLE_LABELS[primaryRole] : 'Diretoria'}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground capitalize">
+            {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })} • {viewSubtitle}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Ações Rápidas Executivas */}
+          <Link to="/mensagens">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 font-medium"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+              {(whatsappStats?.unread || 0) > 0 && (
+                <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {whatsappStats?.unread}
+                </span>
+              )}
+            </Button>
+          </Link>
+
+          <Link to="/alunos">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 text-foreground hover:bg-muted font-medium"
+            >
+              <Users className="w-3.5 h-3.5 text-primary" />
+              <span>Alunos</span>
+            </Button>
+          </Link>
+
+          {hasPermission('financeiro') && (
+            <Link to="/financeiro">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 text-foreground hover:bg-muted font-medium"
+              >
+                <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Financeiro</span>
+              </Button>
+            </Link>
+          )}
+
           {/* Seletor de Visão para Diretores, Administradores ou Usuários com múltiplos perfis */}
           {(isDirectorOrAdmin || (isTeacher && isSecretary)) && (
             <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -228,12 +319,12 @@ const Dashboard = () => {
               {showTotals ? (
                 <>
                   <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>Ocultar Totais</span>
+                  <span className="hidden sm:inline">Ocultar Totais</span>
                 </>
               ) : (
                 <>
                   <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>Exibir Totais</span>
+                  <span className="hidden sm:inline">Exibir Totais</span>
                 </>
               )}
             </Button>
@@ -250,11 +341,79 @@ const Dashboard = () => {
         <SecretaryDashboard />
       ) : (
         /* DASHBOARD EXECUTIVO / DIRETORIA / FINANCEIRO */
-        <>
+        <div className="space-y-5">
+          {/* Card / Widget de Atendimento WhatsApp em Tempo Real */}
+          <div className="rounded-xl border bg-gradient-to-r from-emerald-500/10 via-card to-primary/5 p-4 sm:p-5 shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-xs">
+                  <MessageSquare className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-base text-foreground">
+                      Atendimento WhatsApp & Fila Purple Edu
+                    </h3>
+                    <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-medium">
+                      ● WhatsApp Conectado
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Central de auto-atendimento e comunicação direta com responsáveis dos alunos.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                {/* Contador Não Lidas / Aguardando */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border shadow-2xs">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                  <div className="text-left">
+                    <p className="text-[10px] text-muted-foreground leading-none">Aguardando / Não Lidas</p>
+                    <p className="text-sm font-bold text-rose-600 dark:text-rose-400 leading-tight">
+                      {whatsappStats?.unread || 0}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Contador Em Conversa */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border shadow-2xs">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <div className="text-left">
+                    <p className="text-[10px] text-muted-foreground leading-none">Em Atendimento</p>
+                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 leading-tight">
+                      {whatsappStats?.inProgress || 0}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Contador Resolvidos */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border shadow-2xs">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <div className="text-left">
+                    <p className="text-[10px] text-muted-foreground leading-none">Resolvidos</p>
+                    <p className="text-sm font-bold text-blue-600 dark:text-blue-400 leading-tight">
+                      {whatsappStats?.resolved || 0}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Botão Acessar Mensagens */}
+                <Link to="/mensagens">
+                  <Button size="sm" className="h-9 px-3.5 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Abrir Chat</span>
+                    <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+
           {/* Cards de Resumo Executivo (Dados Reais da Escola) */}
           {canViewKpis('dashboard') && showTotals && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+              <Card className="border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Alunos Ativos
@@ -273,7 +432,7 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+              <Card className="border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Receita Realizada (Entradas)
@@ -292,7 +451,7 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+              <Card className="border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Previsão Mensal Contratual
@@ -311,7 +470,7 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+              <Card className="border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Inadimplência Real
@@ -356,7 +515,7 @@ const Dashboard = () => {
               </Tabs>
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* Super Admin Access */}

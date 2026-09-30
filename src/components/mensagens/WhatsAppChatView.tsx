@@ -28,6 +28,8 @@ import {
   RefreshCw,
   ExternalLink,
   MessageCircle,
+  Zap,
+  UserCheck,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,7 +61,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useWhatsAppInbox } from '@/hooks/useWhatsAppInbox';
+import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
+import { useAuth } from '@/contexts/AuthContext';
 import { WhatsAppChatConversation, WhatsAppChatMessage } from '@/types/mensagens';
+import { WhatsAppResolveModal } from './WhatsAppResolveModal';
+import { WhatsAppAdjustableTriggerModal } from './WhatsAppAdjustableTriggerModal';
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -103,7 +109,17 @@ export function WhatsAppChatView() {
     isLoadingDbConversations,
     onlyFromToday,
     setOnlyFromToday,
+    accessConversation,
+    resolveConversation,
   } = useWhatsAppInbox();
+
+  const { triggers } = useWhatsAppTriggers();
+  const { school } = useAuth();
+
+  // Filas de atendimento: 'unread' (Não lidas / Aguardando), 'in_progress' (Em Conversa), 'resolved' (Resolvidos), 'all' (Todas)
+  const [activeQueue, setActiveQueue] = useState<'unread' | 'in_progress' | 'resolved' | 'all'>('unread');
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [triggerModalOpen, setTriggerModalOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string>('all');
@@ -190,18 +206,52 @@ export function WhatsAppChatView() {
     }
   };
 
-  // Filter conversations
+  // Contadores das filas de atendimento
+  const queueCounts = useMemo(() => {
+    let unread = 0;
+    let inProgress = 0;
+    let resolved = 0;
+
+    for (const c of conversations) {
+      const isResolved = c.ticket_status === 'resolved' || c.ticket_status === 'closed';
+      if (isResolved) {
+        resolved++;
+      } else if (c.unread_count > 0 || !c.opened_at) {
+        unread++;
+      } else {
+        inProgress++;
+      }
+    }
+
+    return {
+      unread,
+      inProgress,
+      resolved,
+      all: conversations.length,
+    };
+  }, [conversations]);
+
+  // Filter conversations por fila, setor, status e busca
   const filteredConversations = useMemo(() => {
     return conversations.filter((c) => {
-      // Sector filter
+      // 1. Fila de atendimento
+      const isResolved = c.ticket_status === 'resolved' || c.ticket_status === 'closed';
+      const isUnread = (c.unread_count > 0 || !c.opened_at) && !isResolved;
+      const isInProgress = !isResolved && !isUnread;
+
+      if (activeQueue === 'unread' && !isUnread) return false;
+      if (activeQueue === 'in_progress' && !isInProgress) return false;
+      if (activeQueue === 'resolved' && !isResolved) return false;
+
+      // 2. Filtro de setor
       if (selectedSectorFilter !== 'all' && c.sector_id !== selectedSectorFilter) {
         return false;
       }
-      // Status filter
+      // 3. Filtro de status
       if (selectedStatusFilter !== 'all' && c.ticket_status !== selectedStatusFilter) {
         return false;
       }
-      // Search
+      // 4. Busca por texto
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const matchesName = c.contact_name.toLowerCase().includes(query);
@@ -212,7 +262,41 @@ export function WhatsAppChatView() {
       }
       return true;
     });
-  }, [conversations, selectedSectorFilter, selectedStatusFilter, searchQuery]);
+  }, [conversations, activeQueue, selectedSectorFilter, selectedStatusFilter, searchQuery]);
+
+  const handleAccessChat = (e: React.MouseEvent, conversationId: string) => {
+    e.stopPropagation();
+    accessConversation(conversationId);
+    setActiveQueue('in_progress');
+  };
+
+  const handleDispatchTrigger = async (payload: {
+    message: string;
+    targetSectorId?: string | null;
+    targetStatus?: 'open' | 'pending' | 'resolved' | null;
+  }) => {
+    if (!activeConversation) return;
+
+    await sendMessage(payload.message);
+
+    if (payload.targetSectorId && payload.targetSectorId !== activeConversation.sector_id) {
+      await transferSector(activeConversation.id, payload.targetSectorId);
+    }
+
+    if (payload.targetStatus) {
+      await changeTicketStatus(activeConversation.id, payload.targetStatus);
+    }
+  };
+
+  const handleConfirmResolve = async (data: {
+    title: string;
+    description: string;
+    closingMessage?: string;
+  }) => {
+    if (!activeConversation) return;
+    await resolveConversation(activeConversation.id, data);
+    setActiveQueue('resolved');
+  };
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -388,6 +472,83 @@ export function WhatsAppChatView() {
               </div>
             </div>
 
+            {/* Filas de Atendimento: Não Lidas | Em Conversa | Resolvidos | Todas */}
+            <div className="grid grid-cols-4 gap-1 p-1 bg-muted/60 rounded-lg text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveQueue('unread')}
+                className={`py-1.5 px-1 rounded-md text-[11px] font-medium transition-all flex flex-col items-center justify-center gap-0.5 ${
+                  activeQueue === 'unread'
+                    ? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <span>Não Lidas</span>
+                  {queueCounts.unread > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+                      {queueCounts.unread}
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveQueue('in_progress')}
+                className={`py-1.5 px-1 rounded-md text-[11px] font-medium transition-all flex flex-col items-center justify-center gap-0.5 ${
+                  activeQueue === 'in_progress'
+                    ? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <span>Em Conversa</span>
+                  {queueCounts.inProgress > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold flex items-center justify-center">
+                      {queueCounts.inProgress}
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveQueue('resolved')}
+                className={`py-1.5 px-1 rounded-md text-[11px] font-medium transition-all flex flex-col items-center justify-center gap-0.5 ${
+                  activeQueue === 'resolved'
+                    ? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <span>Resolvidos</span>
+                  {queueCounts.resolved > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 text-[9px] font-bold flex items-center justify-center">
+                      {queueCounts.resolved}
+                    </span>
+                  )}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveQueue('all')}
+                className={`py-1.5 px-1 rounded-md text-[11px] font-medium transition-all flex flex-col items-center justify-center gap-0.5 ${
+                  activeQueue === 'all'
+                    ? 'bg-card text-foreground font-bold shadow-xs ring-1 ring-border/50'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <div className="flex items-center gap-1">
+                  <span>Todas</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    ({queueCounts.all})
+                  </span>
+                </div>
+              </button>
+            </div>
+
           {/* Campo de Busca */}
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
@@ -475,10 +636,18 @@ export function WhatsAppChatView() {
             ) : (
               filteredConversations.map((conv) => {
                 const isActive = activeConversation?.id === conv.id;
+                const isResolved = conv.ticket_status === 'resolved' || conv.ticket_status === 'closed';
+                const isUnread = (conv.unread_count > 0 || !conv.opened_at) && !isResolved;
+
                 return (
                   <div
                     key={conv.id}
-                    onClick={() => setActiveConversationId(conv.id)}
+                    onClick={() => {
+                      setActiveConversationId(conv.id);
+                      if (isUnread) {
+                        accessConversation(conv.id);
+                      }
+                    }}
                     className={`p-3 cursor-pointer transition-colors relative flex items-start gap-3 hover:bg-muted/50 ${
                       isActive ? 'bg-primary/5 border-l-4 border-primary' : ''
                     }`}
@@ -497,7 +666,7 @@ export function WhatsAppChatView() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
-                        <span className="font-medium text-xs truncate max-w-[140px] text-foreground">
+                        <span className="font-medium text-xs truncate max-w-[130px] text-foreground">
                           {conv.contact_name}
                         </span>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
@@ -529,11 +698,25 @@ export function WhatsAppChatView() {
                       </div>
                     </div>
 
-                    {conv.unread_count > 0 && (
-                      <span className="flex-shrink-0 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                        {conv.unread_count}
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      {isUnread && (
+                        <Button
+                          size="sm"
+                          className="h-6 px-2 text-[10px] gap-1 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                          onClick={(e) => handleAccessChat(e, conv.id)}
+                          title="Acessar conversa e mover para Em Conversa"
+                        >
+                          <UserCheck className="w-3 h-3" />
+                          <span>Acessar</span>
+                        </Button>
+                      )}
+
+                      {conv.unread_count > 0 && (
+                        <span className="flex-shrink-0 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                          {conv.unread_count}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -573,16 +756,45 @@ export function WhatsAppChatView() {
 
             {/* Ações do Atendimento */}
             <div className="flex items-center gap-2">
+              {/* Botão Gatilho Rápido Ajustável */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-medium"
+                onClick={() => setTriggerModalOpen(true)}
+                title="Disparar gatilho ajustável e transferir de setor"
+              >
+                <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                <span className="hidden md:inline">Gatilho Rápido</span>
+              </Button>
+
+              {/* Botão Resolver Atendimento com Modal de Resumo */}
+              {activeConversation.ticket_status !== 'resolved' ? (
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                  onClick={() => setResolveModalOpen(true)}
+                  title="Concluir e registrar resolução do atendimento"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Resolver</span>
+                </Button>
+              ) : (
+                <Badge className="bg-blue-500/10 text-blue-600 border-blue-200 text-xs px-2 py-1">
+                  Resolvido
+                </Badge>
+              )}
+
               {/* WhatsApp Web Link Direto */}
               <a
                 href={`https://wa.me/${activeConversation.phone.replace(/\D/g, '')}`}
                 target="_blank"
                 rel="noreferrer"
-                className="hidden sm:inline-flex"
+                className="hidden xl:inline-flex"
               >
                 <Button size="sm" variant="ghost" className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground">
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>WhatsApp Web</span>
+                  <span>Web</span>
                 </Button>
               </a>
 
@@ -612,13 +824,13 @@ export function WhatsAppChatView() {
                   <DropdownMenuLabel>Status do Atendimento</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => changeTicketStatus(activeConversation.id, 'open')}>
-                    🟢 Em Aberto
+                    🟢 Em Aberto / Atendimento
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => changeTicketStatus(activeConversation.id, 'pending')}>
                     🟡 Aguardando Resposta (Pendente)
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => changeTicketStatus(activeConversation.id, 'resolved')}>
-                    🔵 Resolvido
+                  <DropdownMenuItem onClick={() => setResolveModalOpen(true)}>
+                    🔵 Marcar como Resolvido (com Resumo)
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => changeTicketStatus(activeConversation.id, 'closed')}>
                     ⚪ Encerrar Atendimento
@@ -947,6 +1159,31 @@ export function WhatsAppChatView() {
                 </div>
               </div>
             </div>
+
+            {/* Parecer / Resumo da Resolução se o ticket foi resolvido */}
+            {activeConversation.resolution_data && (
+              <div className="space-y-2 text-xs">
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 uppercase text-[10px] tracking-wider flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Parecer da Resolução
+                </span>
+
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-2 text-[11px]">
+                  <div>
+                    <p className="font-bold text-emerald-900 dark:text-emerald-200">
+                      {activeConversation.resolution_data.title}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Resolvido por {activeConversation.resolution_data.resolved_by}
+                    </p>
+                  </div>
+
+                  <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed border-t border-emerald-500/20 pt-2">
+                    {activeConversation.resolution_data.description}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1114,6 +1351,25 @@ export function WhatsAppChatView() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ---------------- MODAL DE RESOLUÇÃO DE ATENDIMENTO ---------------- */}
+      <WhatsAppResolveModal
+        open={resolveModalOpen}
+        onOpenChange={setResolveModalOpen}
+        conversation={activeConversation}
+        onConfirmResolve={handleConfirmResolve}
+      />
+
+      {/* ---------------- MODAL DE GATILHOS AJUSTÁVEIS ---------------- */}
+      <WhatsAppAdjustableTriggerModal
+        open={triggerModalOpen}
+        onOpenChange={setTriggerModalOpen}
+        conversation={activeConversation}
+        allSectors={allAvailableSectors}
+        triggers={triggers}
+        schoolName={school?.name || 'Escola'}
+        onDispatchTrigger={handleDispatchTrigger}
+      />
     </div>
   );
 }
