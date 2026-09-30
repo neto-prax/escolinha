@@ -84,11 +84,19 @@ function normalizeText(text: string): string {
 
 export function useWhatsAppTriggers() {
   const { school } = useAuth();
-  const [triggers, setTriggers] = useLocalStorage<WhatsAppTrigger[]>(
+  const [triggersRaw, setTriggers] = useLocalStorage<WhatsAppTrigger[]>(
     'purple_whatsapp_triggers_v1',
     DEFAULT_TRIGGERS
   );
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Garante que a lista de gatilhos nunca fique vazia por falha de cache local
+  const triggers = useMemo(() => {
+    if (Array.isArray(triggersRaw) && triggersRaw.length > 0) {
+      return triggersRaw;
+    }
+    return DEFAULT_TRIGGERS;
+  }, [triggersRaw]);
 
   // Sync with Supabase school settings if available
   useEffect(() => {

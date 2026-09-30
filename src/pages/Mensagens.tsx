@@ -66,22 +66,32 @@ function MensagensContent() {
           </TabsList>
         </div>
 
-        {/* Conteúdo das Abas */}
-        <TabsContent value="chat" className="flex-1 flex flex-col min-h-0 pt-2 focus-visible:outline-hidden mt-0">
-          <WhatsAppChatView />
-        </TabsContent>
+        {/* Conteúdo das Abas com montagem direta e sem conflito de display flex */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {activeTab === 'chat' && (
+            <div className="flex-1 flex flex-col min-h-0 pt-2">
+              <WhatsAppChatView />
+            </div>
+          )}
 
-        <TabsContent value="triggers" className="flex-1 overflow-y-auto pt-4 focus-visible:outline-hidden mt-0">
-          <WhatsAppTriggersTab />
-        </TabsContent>
+          {activeTab === 'triggers' && (
+            <div className="flex-1 overflow-y-auto pt-4">
+              <WhatsAppTriggersTab />
+            </div>
+          )}
 
-        <TabsContent value="setores" className="flex-1 overflow-y-auto pt-4 focus-visible:outline-hidden mt-0">
-          <WhatsAppSectorsTab onSelectSectorForChat={handleSelectSectorForChat} />
-        </TabsContent>
+          {activeTab === 'setores' && (
+            <div className="flex-1 overflow-y-auto pt-4">
+              <WhatsAppSectorsTab onSelectSectorForChat={handleSelectSectorForChat} />
+            </div>
+          )}
 
-        <TabsContent value="permissoes" className="flex-1 overflow-y-auto pt-4 focus-visible:outline-hidden mt-0">
-          <WhatsAppSectorPermissionsTab />
-        </TabsContent>
+          {activeTab === 'permissoes' && (
+            <div className="flex-1 overflow-y-auto pt-4">
+              <WhatsAppSectorPermissionsTab />
+            </div>
+          )}
+        </div>
       </Tabs>
     </div>
   );

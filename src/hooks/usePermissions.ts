@@ -24,7 +24,7 @@ export const APP_SCREENS: ScreenDefinition[] = [
     label: 'Mensagens',
     tabs: [
       { id: 'chat', label: 'Conversas WhatsApp' },
-      { id: 'triggers', label: 'Triggers & Automações' },
+      { id: 'triggers', label: 'Gatilhos & Automações' },
       { id: 'setores', label: 'Setores & Filas' },
       { id: 'permissoes', label: 'Permissões por Setor' },
     ],
