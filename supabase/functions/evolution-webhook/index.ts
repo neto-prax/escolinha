@@ -75,8 +75,11 @@ async function persistInboundMedia(
           const decoded = decodeBase64(result.base64);
           bytes = decoded.bytes;
           mime = decoded.mime || result.mimetype || result.mimeType || mime;
-        } else if (!sourceUrl && typeof result?.url === 'string') {
-          sourceUrl = result.url;
+        } else {
+          const downloadedUrl = result?.fileURL || result?.fileUrl || result?.url;
+          if (typeof downloadedUrl === 'string' && downloadedUrl.length > 0) {
+            sourceUrl = downloadedUrl;
+          }
         }
       } else {
         console.warn('Media download request failed', { status: response.status, messageId });
@@ -272,7 +275,7 @@ serve(async (req) => {
       messageType = normalizeMessageType(msg.messageType || msg.mediaType || msg.type || 'text');
 
       if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
-        mediaUrl = msg.mediaUrl || msg.url || msg.content?.file || msg.content?.url || null;
+        mediaUrl = msg.fileURL || msg.fileUrl || msg.mediaUrl || msg.url || msg.content?.fileURL || msg.content?.fileUrl || msg.content?.file || msg.content?.url || null;
         mediaFilename = msg.docName || msg.fileName || msg.filename || msg.content?.fileName || null;
         mediaCaption = msg.text || msg.caption || msg.content?.caption || null;
         body = mediaCaption || mediaDefaults(messageType as MediaKind).label;
