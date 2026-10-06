@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.create-guardian-access]
 verify_jwt = false
+
+[functions.google-drive]
+verify_jwt = false
