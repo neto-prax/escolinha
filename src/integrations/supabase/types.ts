@@ -2056,12 +2056,52 @@ export type Database = {
           },
         ]
       }
+      school_drive_oauth_states: {
+        Row: {
+          created_at: string
+          id: string
+          return_url: string
+          school_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          return_url: string
+          school_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          return_url?: string
+          school_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_drive_oauth_states_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_drive_oauth_states_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       school_google_drive: {
         Row: {
           class_folders: Json
           connected_by: string | null
           connected_email: string | null
           created_at: string
+          encrypted_refresh_token: string | null
           refresh_token: string | null
           root_folder_id: string | null
           school_id: string
@@ -2072,6 +2112,7 @@ export type Database = {
           connected_by?: string | null
           connected_email?: string | null
           created_at?: string
+          encrypted_refresh_token?: string | null
           refresh_token?: string | null
           root_folder_id?: string | null
           school_id: string
@@ -2082,6 +2123,7 @@ export type Database = {
           connected_by?: string | null
           connected_email?: string | null
           created_at?: string
+          encrypted_refresh_token?: string | null
           refresh_token?: string | null
           root_folder_id?: string | null
           school_id?: string
@@ -2830,6 +2872,10 @@ export type Database = {
       }
     }
     Functions: {
+      can_manage_pedagogical_records: {
+        Args: { _school_id: string; _user_id: string }
+        Returns: boolean
+      }
       get_guardian_id_for_user: { Args: { _user_id: string }; Returns: string }
       get_guardian_student_ids: {
         Args: { _guardian_id: string }
