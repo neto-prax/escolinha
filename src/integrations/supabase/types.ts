@@ -2060,6 +2060,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          redirect_uri: string | null
           return_url: string
           school_id: string
           user_id: string
@@ -2067,6 +2068,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          redirect_uri?: string | null
           return_url: string
           school_id: string
           user_id: string
@@ -2074,6 +2076,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          redirect_uri?: string | null
           return_url?: string
           school_id?: string
           user_id?: string
