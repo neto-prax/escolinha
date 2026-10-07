@@ -51,6 +51,7 @@ export const APP_SCREENS: ScreenDefinition[] = [
     label: 'Pedagógico',
     tabs: [
       { id: 'diario', label: 'Diário de Classe' },
+      { id: 'registros', label: 'Registro' },
       { id: 'planejamento', label: 'Planejamento de Aulas' },
       { id: 'avaliacoes', label: 'Avaliações' },
       { id: 'turmas', label: 'Turmas & Horários' },
