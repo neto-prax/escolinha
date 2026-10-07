@@ -1,5 +1,9 @@
 # Roadmap
 
+- [ ] Concluir Registro no Pedagógico e conexão Google Drive por escola.
+- [ ] Proteger autorização e envio de arquivos por escola e validar telas.
+- [ ] Validar autorização Google e envio real após a escola conectar a conta.
+
 - [x] Concluir exclusão individual e em lote de mensalidades.
 - [x] Concluir configuração dos planos de mensalidade.
 - [x] Excluir a mensalidade do mês de janeiro.

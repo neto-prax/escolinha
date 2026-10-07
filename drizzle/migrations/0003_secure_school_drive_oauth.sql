@@ -1,0 +1,14 @@
+CREATE TABLE public.school_drive_oauth_states (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), school_id uuid NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE, user_id uuid NOT NULL, return_url text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+GRANT ALL ON public.school_drive_oauth_states TO service_role;
+ALTER TABLE public.school_drive_oauth_states ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.school_google_drive ADD COLUMN IF NOT EXISTS encrypted_refresh_token text;
+COMMENT ON COLUMN public.school_google_drive.refresh_token IS 'DEPRECATED: encrypted_refresh_token replaces plaintext credentials';
+DROP POLICY IF EXISTS "school read registros" ON public.pedagogico_registros;
+DROP POLICY IF EXISTS "school insert registros" ON public.pedagogico_registros;
+DROP POLICY IF EXISTS "owner or director modify registros" ON public.pedagogico_registros;
+DROP POLICY IF EXISTS "owner or director delete registros" ON public.pedagogico_registros;
+CREATE OR REPLACE FUNCTION public.can_manage_pedagogical_records(_user_id uuid, _school_id uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$ SELECT public.get_user_school_id(_user_id) = _school_id AND (public.has_role(_user_id, 'teacher', _school_id) OR public.is_director(_user_id, _school_id) OR public.has_role(_user_id, 'admin', _school_id)) $$;
+CREATE POLICY "pedagogical read" ON public.pedagogico_registros FOR SELECT TO authenticated USING(public.can_manage_pedagogical_records(auth.uid(), school_id));
+CREATE POLICY "pedagogical insert" ON public.pedagogico_registros FOR INSERT TO authenticated WITH CHECK(public.can_manage_pedagogical_records(auth.uid(), school_id) AND professor_id=auth.uid());
+CREATE POLICY "pedagogical update" ON public.pedagogico_registros FOR UPDATE TO authenticated USING(public.can_manage_pedagogical_records(auth.uid(), school_id) AND (professor_id=auth.uid() OR public.is_director(auth.uid(),school_id))) WITH CHECK(public.can_manage_pedagogical_records(auth.uid(),school_id) AND (professor_id=auth.uid() OR public.is_director(auth.uid(),school_id)));
+CREATE POLICY "pedagogical delete" ON public.pedagogico_registros FOR DELETE TO authenticated USING(public.can_manage_pedagogical_records(auth.uid(), school_id) AND (professor_id=auth.uid() OR public.is_director(auth.uid(),school_id)));
