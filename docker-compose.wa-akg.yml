@@ -14,7 +14,8 @@ services:
       - AUTH_SECRET=sua-chave-secreta-jwt-32-caracteres-minimo
       - WEBHOOK_URL=https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook
     depends_on:
-      - wa-akg-mysql
+      wa-akg-mysql:
+        condition: service_healthy
     command: >
       sh -c "
         if [ ! -f package.json ]; then
@@ -42,7 +43,13 @@ services:
       MYSQL_USER: akg_user
       MYSQL_PASSWORD: akg_pass123
     ports:
-      - "3306:3306"
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_pass_wa_akg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     volumes:
       - wa-akg-mysql-data:/var/lib/mysql
 
