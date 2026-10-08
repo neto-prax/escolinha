@@ -89,13 +89,11 @@ const navigationGroups: NavGroup[] = [
 ];
 
 export const AppSidebar = () => {
-  const { hasPermission, school, roles, user } = useAuth();
   const { school, user, isSuperAdmin: authIsSuperAdmin } = useAuth();
   const { activeSede } = useSedes();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
-  const { data: isSuperAdmin } = useQuery({
   const { data: dbIsSuperAdmin } = useQuery({
     queryKey: ['is-super-admin', user?.id],
     queryFn: async () => {
@@ -107,14 +105,12 @@ export const AppSidebar = () => {
         .maybeSingle();
       return !!data;
     },
-    enabled: !!user?.id,
     enabled: !!user?.id && !authIsSuperAdmin,
   });
 
   const isSuperAdmin = authIsSuperAdmin || !!dbIsSuperAdmin;
   const { canAccessScreen } = usePermissions();
 
-  // Filter navigation items based on user permissions
   // Filter navigation items based on user permissions (Super admin has access to everything)
   const filteredGroups = navigationGroups
     .map((group) => ({

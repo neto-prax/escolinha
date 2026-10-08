@@ -51,6 +51,7 @@ export const APP_SCREENS: ScreenDefinition[] = [
     label: 'Pedagógico',
     tabs: [
       { id: 'diario', label: 'Diário de Classe' },
+      { id: 'registros', label: 'Registro' },
       { id: 'planejamento', label: 'Planejamento de Aulas' },
       { id: 'avaliacoes', label: 'Avaliações' },
       { id: 'turmas', label: 'Turmas & Horários' },
@@ -164,14 +165,12 @@ export function getDefaultPermissionsForRoles(roles: AppRole[]): UserVisibilityC
 }
 
 export function usePermissions() {
-  const { user, roles } = useAuth();
   const { user, roles, isSuperAdmin } = useAuth();
   const [permissionsStore, setPermissionsStore] = useLocalStorage<AllUserPermissions>(
     'escolinha_user_permissions_v2',
     {}
   );
 
-  const isDirector = roles.includes('director');
   const isDirector = roles.includes('director') || isSuperAdmin;
 
   const canAccessScreen = (screenId: string, targetUserId?: string): boolean => {

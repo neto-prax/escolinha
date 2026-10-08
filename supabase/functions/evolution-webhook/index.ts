@@ -6,6 +6,120 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+type MediaKind = 'image' | 'video' | 'audio' | 'document' | 'sticker';
+
+const MEDIA_TYPES: Record<string, MediaKind> = {
+  image: 'image',
+  imagemessage: 'image',
+  video: 'video',
+  videomessage: 'video',
+  audio: 'audio',
+  audiomessage: 'audio',
+  ptt: 'audio',
+  pttmessage: 'audio',
+  document: 'document',
+  documentmessage: 'document',
+  documentwithcaptionmessage: 'document',
+  sticker: 'sticker',
+  stickermessage: 'sticker',
+};
+
+function normalizeMessageType(value: unknown): string {
+  const compact = String(value || 'text').toLowerCase().replace(/[._\s-]/g, '');
+  if (compact === 'extendedtextmessage' || compact === 'conversation') return 'text';
+  return MEDIA_TYPES[compact] || compact || 'text';
+}
+
+function mediaDefaults(type: MediaKind): { mime: string; extension: string; label: string } {
+  switch (type) {
+    case 'image': return { mime: 'image/jpeg', extension: 'jpg', label: '[Imagem]' };
+    case 'video': return { mime: 'video/mp4', extension: 'mp4', label: '[Vídeo]' };
+    case 'audio': return { mime: 'audio/ogg', extension: 'ogg', label: '[Áudio]' };
+    case 'sticker': return { mime: 'image/webp', extension: 'webp', label: '[Figurinha]' };
+    case 'document': return { mime: 'application/octet-stream', extension: 'bin', label: '[Documento]' };
+  }
+}
+
+function decodeBase64(value: string): { bytes: Uint8Array; mime?: string } {
+  const match = value.match(/^data:([^;]+);base64,(.+)$/s);
+  const encoded = match?.[2] || value;
+  const binary = atob(encoded.replace(/\s/g, ''));
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return { bytes, mime: match?.[1] };
+}
+
+async function persistInboundMedia(
+  supabase: any,
+  schoolId: string,
+  conversationId: string,
+  messageId: string,
+  mediaType: MediaKind,
+  sourceUrl: string | null,
+  hintedMime: string | null,
+): Promise<string | null> {
+  const UAZAPI_URL = Deno.env.get('UAZAPI_URL')?.replace(/\/$/, '');
+  const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN');
+  let bytes: Uint8Array | null = null;
+  let mime = hintedMime || mediaDefaults(mediaType).mime;
+
+  if (UAZAPI_URL && UAZAPI_TOKEN) {
+    try {
+      const response = await fetch(`${UAZAPI_URL}/message/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+        body: JSON.stringify({ id: messageId, return_base64: true }),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (typeof result?.base64 === 'string' && result.base64.length > 0) {
+          const decoded = decodeBase64(result.base64);
+          bytes = decoded.bytes;
+          mime = decoded.mime || result.mimetype || result.mimeType || mime;
+        } else {
+          const downloadedUrl = result?.fileURL || result?.fileUrl || result?.url;
+          if (typeof downloadedUrl === 'string' && downloadedUrl.length > 0) {
+            sourceUrl = downloadedUrl;
+          }
+        }
+      } else {
+        console.warn('Media download request failed', { status: response.status, messageId });
+      }
+    } catch (error) {
+      console.warn('Media download request error', { messageId, error: error instanceof Error ? error.message : 'unknown' });
+    }
+  }
+
+  if (!bytes && sourceUrl) {
+    try {
+      const response = await fetch(sourceUrl);
+      if (response.ok) {
+        bytes = new Uint8Array(await response.arrayBuffer());
+        mime = response.headers.get('content-type')?.split(';')[0] || mime;
+      }
+    } catch (error) {
+      console.warn('Direct media download error', { messageId, error: error instanceof Error ? error.message : 'unknown' });
+    }
+  }
+
+  if (!bytes) return sourceUrl;
+
+  const mimeExtension = mime.split('/')[1]?.replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '');
+  const extension = mimeExtension || mediaDefaults(mediaType).extension;
+  const safeMessageId = messageId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const path = `${schoolId}/${conversationId}/${safeMessageId}.${extension}`;
+  const { error } = await supabase.storage.from('message-media').upload(path, bytes, {
+    contentType: mime,
+    upsert: false,
+  });
+
+  if (error && !String(error.message).toLowerCase().includes('already exists')) {
+    console.warn('Media storage upload failed', { messageId, error: error.message });
+    return sourceUrl;
+  }
+
+  return supabase.storage.from('message-media').getPublicUrl(path).data.publicUrl;
+}
+
 async function sendWelcomeMessage(
   supabase: any,
   instanceName: string,
@@ -379,12 +493,13 @@ serve(async (req) => {
       messageId = String(msg.messageid || msg.messageId || msg.id || payload.messageid || payload.id || '');
       pushName = msg.senderName || msg.pushName || payload.chat?.name || payload.contact?.name || 'Responsável';
       body = msg.text || msg.body || (typeof msg.content === 'string' ? msg.content : '') || '';
-      messageType = String(msg.messageType || msg.type || 'text').toLowerCase();
+      messageType = normalizeMessageType(msg.messageType || msg.mediaType || msg.type || 'text');
 
       if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
-        mediaUrl = msg.mediaUrl || msg.content?.file || msg.content?.url || null;
-        mediaFilename = msg.docName || msg.fileName || null;
-        mediaCaption = msg.text || msg.caption || null;
+        mediaUrl = msg.fileURL || msg.fileUrl || msg.mediaUrl || msg.url || msg.content?.fileURL || msg.content?.fileUrl || msg.content?.file || msg.content?.url || null;
+        mediaFilename = msg.docName || msg.fileName || msg.filename || msg.content?.fileName || null;
+        mediaCaption = msg.text || msg.caption || msg.content?.caption || null;
+        body = mediaCaption || mediaDefaults(messageType as MediaKind).label;
       }
     } else if (isEvolution) {
       const message = payload.data || {};
@@ -417,6 +532,10 @@ serve(async (req) => {
         mediaFilename = message.message.documentMessage.fileName || 'documento';
         body = `[Documento: ${mediaFilename}]`;
         mediaUrl = message.message.documentMessage.url || null;
+      } else if (message.message?.stickerMessage) {
+        messageType = 'sticker';
+        body = '[Figurinha]';
+        mediaUrl = message.message.stickerMessage.url || null;
       } else {
         body = '[Mensagem]';
       }
@@ -449,11 +568,44 @@ serve(async (req) => {
 
     const { data: duplicate } = await supabase
       .from('whatsapp_messages')
-      .select('id, conversation_id')
+      .select('id, conversation_id, media_url, whatsapp_conversations!inner(school_id)')
       .eq('external_id', messageId)
       .maybeSingle();
 
     if (duplicate) {
+      if (!duplicate.media_url && ['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
+        const duplicateConversation = Array.isArray(duplicate.whatsapp_conversations)
+          ? duplicate.whatsapp_conversations[0]
+          : duplicate.whatsapp_conversations;
+        const duplicateSchoolId = duplicateConversation?.school_id;
+        if (duplicateSchoolId) {
+          const mediaMime = messagePayload.mimetype || messagePayload.mimeType || messagePayload.content?.mimetype || null;
+          const recoveredUrl = await persistInboundMedia(
+            supabase,
+            duplicateSchoolId,
+            duplicate.conversation_id,
+            messageId,
+            messageType as MediaKind,
+            mediaUrl,
+            mediaMime,
+          );
+          if (recoveredUrl) {
+            await supabase
+              .from('whatsapp_messages')
+              .update({
+                media_url: recoveredUrl,
+                message_type: messageType,
+                media_caption: mediaCaption,
+                media_filename: mediaFilename,
+                body: body || mediaDefaults(messageType as MediaKind).label,
+              })
+              .eq('id', duplicate.id);
+            return new Response(JSON.stringify({ status: 'duplicate_media_recovered', messageId: duplicate.id }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+      }
       return new Response(JSON.stringify({ status: 'duplicate', messageId: duplicate.id }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -565,6 +717,19 @@ serve(async (req) => {
         .update(updates)
         .eq('id', conversation.id);
       if (updateError) throw updateError;
+    }
+
+    if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
+      const mediaMime = messagePayload.mimetype || messagePayload.mimeType || messagePayload.content?.mimetype || null;
+      mediaUrl = await persistInboundMedia(
+        supabase,
+        schoolId,
+        conversation.id,
+        messageId,
+        messageType as MediaKind,
+        mediaUrl,
+        mediaMime,
+      );
     }
 
     // Insert message into whatsapp_messages

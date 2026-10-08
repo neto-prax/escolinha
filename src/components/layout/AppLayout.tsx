@@ -8,7 +8,6 @@ import { PlanSelectorModal } from '@/components/onboarding/PlanSelectorModal';
 import { usePlatformBillingSettings } from '@/hooks/usePlatformBillingSettings';
 
 export const AppLayout = () => {
-  const { isAuthenticated, isLoading, school, roles, user, profile } = useAuth();
   const { isAuthenticated, isLoading, school, user, profile, isSuperAdmin } = useAuth();
   const { schoolSubscriptions, markSchoolAsPaid } = usePlatformBillingSettings();
 
@@ -27,11 +26,9 @@ export const AppLayout = () => {
     return <Navigate to="/login" replace />;
   }
 
-  const isSuperAdmin = (roles as string[] | undefined)?.includes('superadmin') || user?.email === 'sport@gmail.com';
   const schoolId = school?.id || profile?.school_id;
   const currentSub = schoolId ? schoolSubscriptions[schoolId] : null;
 
-  // Só bloqueia se houver assinatura pendente registrada e não for superadmin
   // Super admin nunca é bloqueado por cobrança/assinatura pendente
   const isPendingPayment = !isSuperAdmin && currentSub?.status === 'pending';
 

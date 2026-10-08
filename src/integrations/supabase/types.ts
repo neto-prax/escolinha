@@ -1688,6 +1688,66 @@ export type Database = {
           },
         ]
       }
+      pedagogico_registros: {
+        Row: {
+          arquivos: Json
+          created_at: string
+          data_registro: string
+          descricao: string | null
+          id: string
+          professor_id: string
+          professor_nome: string | null
+          school_id: string
+          tags: string[]
+          titulo: string
+          turma_id: string
+          turma_nome: string
+        }
+        Insert: {
+          arquivos?: Json
+          created_at?: string
+          data_registro?: string
+          descricao?: string | null
+          id?: string
+          professor_id?: string
+          professor_nome?: string | null
+          school_id: string
+          tags?: string[]
+          titulo: string
+          turma_id: string
+          turma_nome: string
+        }
+        Update: {
+          arquivos?: Json
+          created_at?: string
+          data_registro?: string
+          descricao?: string | null
+          id?: string
+          professor_id?: string
+          professor_nome?: string | null
+          school_id?: string
+          tags?: string[]
+          titulo?: string
+          turma_id?: string
+          turma_nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedagogico_registros_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedagogico_registros_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_plans: {
         Row: {
           created_at: string
@@ -1991,6 +2051,99 @@ export type Database = {
             foreignKeyName: "school_calendar_school_id_fkey"
             columns: ["school_id"]
             isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      school_drive_oauth_states: {
+        Row: {
+          created_at: string
+          id: string
+          redirect_uri: string | null
+          return_url: string
+          school_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          redirect_uri?: string | null
+          return_url: string
+          school_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          redirect_uri?: string | null
+          return_url?: string
+          school_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_drive_oauth_states_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_drive_oauth_states_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools_with_counts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      school_google_drive: {
+        Row: {
+          class_folders: Json
+          connected_by: string | null
+          connected_email: string | null
+          created_at: string
+          encrypted_refresh_token: string | null
+          refresh_token: string | null
+          root_folder_id: string | null
+          school_id: string
+          updated_at: string
+        }
+        Insert: {
+          class_folders?: Json
+          connected_by?: string | null
+          connected_email?: string | null
+          created_at?: string
+          encrypted_refresh_token?: string | null
+          refresh_token?: string | null
+          root_folder_id?: string | null
+          school_id: string
+          updated_at?: string
+        }
+        Update: {
+          class_folders?: Json
+          connected_by?: string | null
+          connected_email?: string | null
+          created_at?: string
+          encrypted_refresh_token?: string | null
+          refresh_token?: string | null
+          root_folder_id?: string | null
+          school_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "school_google_drive_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: true
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_google_drive_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: true
             referencedRelation: "schools_with_counts"
             referencedColumns: ["id"]
           },
@@ -2722,6 +2875,10 @@ export type Database = {
       }
     }
     Functions: {
+      can_manage_pedagogical_records: {
+        Args: { _school_id: string; _user_id: string }
+        Returns: boolean
+      }
       get_guardian_id_for_user: { Args: { _user_id: string }; Returns: string }
       get_guardian_student_ids: {
         Args: { _guardian_id: string }

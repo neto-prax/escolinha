@@ -44,7 +44,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUserData = useCallback(async (userId: string) => {
     try {
-      // Fetch profile
       // 1. Fetch profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -53,9 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (profileError) throw profileError;
-      setProfile(profileData as UserProfile);
 
-      // Fetch roles
       // 2. Fetch roles
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
@@ -64,11 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (rolesError) throw rolesError;
       const userRoles = rolesData?.map((r) => r.role as AppRole) || [];
-      setRoles(userRoles);
 
-      // Fetch school if user has one
-      if (profileData?.school_id) {
-        const { data: schoolData, error: schoolError } = await supabase
       // 3. Check super admin status
       const { data: superAdminData } = await supabase
         .from('super_admins')
@@ -89,14 +82,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { data: allSchoolsData } = await supabase
           .from('schools')
           .select('*')
-          .eq('id', profileData.school_id)
-          .single();
           .order('name');
         const schoolList = (allSchoolsData as School[]) || [];
         setAvailableSchools(schoolList);
 
-        if (!schoolError && schoolData) {
-          setSchool(schoolData as School);
         // Determine active school
         let activeSchool: School | null = null;
         const savedSchoolId = typeof window !== 'undefined' ? localStorage.getItem('super_admin_active_school_id') : null;
@@ -107,23 +96,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else if (schoolList.length > 0) {
           activeSchool = schoolList[0];
         }
-      }
 
-      // Fetch user sectors
-      const { data: userSectorsData, error: sectorsError } = await supabase
-        .from('user_sectors')
-        .select('sector_id, sectors(*)')
-        .eq('user_id', userId);
         setSchool(activeSchool);
         if (activeSchool && typeof window !== 'undefined') {
           localStorage.setItem('super_admin_active_school_id', activeSchool.id);
         }
 
-      if (!sectorsError && userSectorsData) {
-        const userSectors = userSectorsData
-          .filter((us) => us.sectors)
-          .map((us) => us.sectors as unknown as Sector);
-        setSectors(userSectors);
         // Virtual profile ensuring school_id is available for all queries
         setProfile({
           ...(profileData as UserProfile),

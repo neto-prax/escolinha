@@ -69,6 +69,7 @@ import { WhatsAppResolveModal, WhatsAppAdjustableTriggerModal } from './WhatsApp
 import { format, isToday, isYesterday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { WhatsAppMediaRenderer } from '@/components/mensagens/WhatsAppMediaRenderer';
 
 function formatPhoneNumber(phone?: string | null): string {
   if (!phone) return '';
@@ -912,10 +913,19 @@ export function WhatsAppChatView() {
                           )}
                         </div>
 
+                        <WhatsAppMediaRenderer message={msg} />
+
                         {/* Conteúdo de Texto */}
-                        <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
-                          {msg.body}
-                        </p>
+                        {msg.body && msg.body !== msg.media_caption && (
+                          <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
+                            {msg.body}
+                          </p>
+                        )}
+                        {msg.media_caption && (
+                          <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
+                            {msg.media_caption}
+                          </p>
+                        )}
 
                         {/* Horário e Status de Entrega */}
                         <div

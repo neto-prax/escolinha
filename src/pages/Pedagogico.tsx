@@ -20,7 +20,9 @@ import {
   CalendarDays,
   ClipboardCheck,
   Users,
+  Camera,
 } from 'lucide-react';
+import { RegistrosTab } from '@/components/pedagogico/RegistrosTab';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSearchParams } from 'react-router-dom';
 
@@ -82,6 +84,15 @@ const Pedagogico = () => {
         </span>
       ),
       content: <CalendarioEscolarTab />,
+    },
+    {
+      id: 'registros',
+      label: (
+        <span className="flex items-center gap-2">
+          <Camera size={16} /> Registro
+        </span>
+      ),
+      content: <RegistrosTab />,
     },
   ];
 

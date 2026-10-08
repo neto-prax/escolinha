@@ -7,6 +7,7 @@ import { CiclosMediasTab } from '@/components/pedagogico/CiclosMediasTab';
 import { NotasTab } from '@/components/pedagogico/NotasTab';
 import { DailyReportSettings } from '@/components/settings/DailyReportSettings';
 import { CalendarioEscolarTab } from '@/components/pedagogico/CalendarioEscolarTab';
+import { GoogleDriveSettings } from '@/components/settings/GoogleDriveSettings';
 import { Layers, Calculator, GraduationCap, MessageCircle, Settings2, Users, FileText, CalendarDays } from 'lucide-react';
 
 interface PedagogicoSettingsProps {
@@ -16,7 +17,7 @@ interface PedagogicoSettingsProps {
 export const PedagogicoSettings: React.FC<PedagogicoSettingsProps> = ({
   defaultTab = 'turmas',
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<string>(defaultTab);
+  const [activeSubTab, setActiveSubTab] = useState<string>(new URLSearchParams(window.location.search).get('sub') === 'drive' ? 'drive' : defaultTab);
 
   return (
     <div className="space-y-6">
@@ -34,6 +35,7 @@ export const PedagogicoSettings: React.FC<PedagogicoSettingsProps> = ({
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="space-y-4">
         <TabsList className="bg-slate-100 p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200">
+          <TabsTrigger value="drive">Google Drive</TabsTrigger>
           <TabsTrigger
             value="turmas"
             className="gap-2 px-3.5 py-1.5 text-xs font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-purple-700 data-[state=active]:shadow-sm"
@@ -92,6 +94,7 @@ export const PedagogicoSettings: React.FC<PedagogicoSettingsProps> = ({
         </TabsList>
 
         {/* 1. Turmas & Horários */}
+        <TabsContent value="drive" className="pt-2"><GoogleDriveSettings /></TabsContent>
         <TabsContent value="turmas" className="pt-2">
           <TurmasPedagogicoTab />
         </TabsContent>

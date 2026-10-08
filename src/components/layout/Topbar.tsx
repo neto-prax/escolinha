@@ -20,7 +20,6 @@ import { cn } from '@/lib/utils';
 import { useSedes } from '@/hooks/useSedes';
 
 export const Topbar = () => {
-  const { user, profile, roles, school, signOut } = useAuth();
   const { user, profile, roles, school, signOut, isSuperAdmin, availableSchools, selectSchool } = useAuth();
   const {
     sedes,
@@ -33,7 +32,6 @@ export const Topbar = () => {
     canSwitchSedes,
   } = useSedes();
   const navigate = useNavigate();
-  const isDirector = roles.includes('director') || roles.length === 0;
   const isDirector = roles.includes('director') || roles.length === 0 || isSuperAdmin;
 
   const initials = profile?.full_name
@@ -257,7 +255,6 @@ export const Topbar = () => {
               </Avatar>
               <div className="hidden lg:flex flex-col items-start">
                 <span className="text-sm font-medium">{profile?.full_name || 'Usuário'}</span>
-                {primaryRole && (
                 {isSuperAdmin ? (
                   <span className="text-xs text-amber-600 font-semibold flex items-center gap-1">
                     <Shield className="h-3 w-3 fill-amber-500 text-amber-500" /> Super Admin
@@ -266,7 +263,6 @@ export const Topbar = () => {
                   <span className="text-xs text-muted-foreground">
                     {ROLE_LABELS[primaryRole]}
                   </span>
-                )}
                 ) : null}
               </div>
             </Button>
@@ -288,10 +284,6 @@ export const Topbar = () => {
               <Settings className="mr-2 h-4 w-4" />
               Configurações
             </DropdownMenuItem>
-            {user?.email === 'sport@gmail.com' && (
-              <DropdownMenuItem onClick={() => navigate('/super-admin')}>
-                <Shield className="mr-2 h-4 w-4" />
-                Superadmin
             {isSuperAdmin && (
               <DropdownMenuItem onClick={() => navigate('/super-admin')} className="font-semibold text-amber-600 dark:text-amber-400">
                 <Shield className="mr-2 h-4 w-4 text-amber-500 fill-amber-500/20" />

@@ -15,12 +15,6 @@ export function getSchoolId(): Promise<string | null> {
     if (!userId) return null;
     if (!schoolIdPromise) {
       schoolIdPromise = (async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('school_id')
-        .eq('id', userId)
-        .maybeSingle();
-      return data?.school_id ?? null;
         if (typeof window !== 'undefined') {
           const saSchoolId = window.localStorage.getItem('super_admin_active_school_id');
           if (saSchoolId) return saSchoolId;

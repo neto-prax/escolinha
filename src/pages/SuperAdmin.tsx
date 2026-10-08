@@ -79,7 +79,6 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function SuperAdmin() {
   const navigate = useNavigate();
-  const { user, isLoading: authLoading } = useAuth();
   const { user, isLoading: authLoading, selectSchool } = useAuth();
   const { schoolSubscriptions, markSchoolAsManualFree } = usePlatformBillingSettings();
   
