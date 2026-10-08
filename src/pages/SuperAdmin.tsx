@@ -123,7 +123,12 @@ export default function SuperAdmin() {
         return;
       }
 
-      if (user.email === 'super@purpple.com' || user.email === 'sport@gmail.com') {
+      if (
+        user.email === 'super@purpple.com' ||
+        user.email === 'sport@gmail.com' ||
+        (user.user_metadata as any)?.is_super_admin === true ||
+        (user.user_metadata as any)?.role === 'superadmin'
+      ) {
         setIsSuperAdmin(true);
         loadData();
         return;

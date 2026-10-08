@@ -108,7 +108,12 @@ export const AppSidebar = () => {
     enabled: !!user?.id && !authIsSuperAdmin,
   });
 
-  const isSuperAdmin = authIsSuperAdmin || !!dbIsSuperAdmin || user?.email === 'super@purpple.com' || user?.email === 'sport@gmail.com';
+  const isSuperAdmin = authIsSuperAdmin ||
+    !!dbIsSuperAdmin ||
+    user?.email === 'super@purpple.com' ||
+    user?.email === 'sport@gmail.com' ||
+    (user?.user_metadata as any)?.is_super_admin === true ||
+    (user?.user_metadata as any)?.role === 'superadmin';
   const { canAccessScreen } = usePermissions();
 
   // Filter navigation items based on user permissions (Super admin has access to everything)

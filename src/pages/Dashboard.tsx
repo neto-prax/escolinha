@@ -130,7 +130,12 @@ const Dashboard = () => {
     queryKey: ['is-super-admin', user?.id],
     queryFn: async () => {
       if (!user?.id) return false;
-      if (user?.email === 'super@purpple.com' || user?.email === 'sport@gmail.com') return true;
+      if (
+        user?.email === 'super@purpple.com' ||
+        user?.email === 'sport@gmail.com' ||
+        (user?.user_metadata as any)?.is_super_admin === true ||
+        (user?.user_metadata as any)?.role === 'superadmin'
+      ) return true;
       const { data } = await supabase
         .from('super_admins')
         .select('id')
