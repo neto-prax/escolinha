@@ -193,7 +193,20 @@ export default function SuperAdmin() {
       });
 
       if (error || data?.error) {
-        // Fallback: direct delete from schools table (permitted for super admin by RLS)
+        // Fallback: desvincula super admins desta escola antes para que o CASCADE nunca apague seus perfis
+        const { data: superAdmins } = await supabase.from('super_admins').select('user_id');
+        const saIds = (superAdmins || []).map((sa: any) => sa.user_id);
+        if (user?.id && !saIds.includes(user.id)) saIds.push(user.id);
+
+        if (saIds.length > 0) {
+          await supabase
+            .from('profiles')
+            .update({ school_id: null })
+            .eq('school_id', deleteSchoolDialog.id)
+            .in('id', saIds);
+        }
+
+        // Direct delete from schools table (permitted for super admin by RLS)
         const { error: directError } = await supabase
           .from('schools')
           .delete()
@@ -285,13 +298,27 @@ export default function SuperAdmin() {
       });
 
       if (error || data?.error) {
-        // Direct fallback: delete all schools and insert Interagir
+        // Direct fallback:
+        // 1. Unlink all super admins first so Postgres ON DELETE CASCADE will never remove their profiles!
+        const { data: superAdmins } = await supabase.from('super_admins').select('user_id');
+        const saIds = (superAdmins || []).map((sa: any) => sa.user_id);
+        if (user?.id && !saIds.includes(user.id)) saIds.push(user.id);
+
+        if (saIds.length > 0) {
+          await supabase
+            .from('profiles')
+            .update({ school_id: null })
+            .in('id', saIds);
+        }
+
+        // 2. Delete all existing schools
         const { error: delErr } = await supabase
           .from('schools')
           .delete()
           .neq('id', '00000000-0000-0000-0000-000000000000');
         if (delErr) throw delErr;
 
+        // 3. Create Interagir
         const { data: newSc, error: insErr } = await supabase
           .from('schools')
           .insert({
@@ -312,6 +339,15 @@ export default function SuperAdmin() {
             { name: 'Pedagógico', school_id: newSc.id, is_active: true },
             { name: 'Suporte & Recepção', school_id: newSc.id, is_active: true },
           ]);
+
+          // 4. Re-link all super admins to the new school "Interagir"
+          if (saIds.length > 0) {
+            await supabase
+              .from('profiles')
+              .update({ school_id: newSc.id })
+              .in('id', saIds);
+          }
+
           await selectSchool(newSc.id);
         }
       } else if (data?.school?.id) {

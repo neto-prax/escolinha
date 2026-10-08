@@ -286,16 +286,28 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Get all super admins to ensure they are NEVER deleted from auth
+        // Get all super admins to ensure they are NEVER deleted from auth or profiles
         const { data: superAdmins } = await supabaseAdmin.from("super_admins").select("user_id");
         const saIds = new Set((superAdmins || []).map((sa: any) => sa.user_id));
         if (user?.id) saIds.add(user.id);
 
-        // Unlink any super admin from this school
+        try {
+          const { data: allAuthUsers } = await supabaseAdmin.auth.admin.listUsers();
+          if (allAuthUsers?.users) {
+            for (const u of allAuthUsers.users) {
+              if (u.email === 'sport@gmail.com' || (u.user_metadata as any)?.is_super_admin) {
+                saIds.add(u.id);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Could not list auth users for super admin check:", e);
+        }
+
+        // IMPORTANT: Unlink any super admin from this school before deletion so ON DELETE CASCADE never removes their profile!
         await supabaseAdmin
           .from("profiles")
           .update({ school_id: null })
-          .eq("school_id", schoolId)
           .in("id", Array.from(saIds));
 
         // Get all regular users from this school
@@ -304,7 +316,7 @@ Deno.serve(async (req) => {
           .select("id")
           .eq("school_id", schoolId);
 
-        // Delete regular users from auth (non-super-admins)
+        // Delete regular users from auth (strictly non-super-admins)
         if (schoolUsers && schoolUsers.length > 0) {
           for (const schoolUser of schoolUsers) {
             if (!saIds.has(schoolUser.id)) {
@@ -379,18 +391,31 @@ Deno.serve(async (req) => {
       }
 
       case "reset_and_recreate_interagir": {
-        // 1. Get all super admin user IDs
+        // 1. Get all super admin user IDs to ensure they are 100% PRESERVED
         const { data: superAdmins } = await supabaseAdmin.from("super_admins").select("user_id");
         const saIds = new Set((superAdmins || []).map((sa: any) => sa.user_id));
         if (user?.id) saIds.add(user.id);
 
-        // 2. Unlink all super admins from all schools
+        try {
+          const { data: allAuthUsers } = await supabaseAdmin.auth.admin.listUsers();
+          if (allAuthUsers?.users) {
+            for (const u of allAuthUsers.users) {
+              if (u.email === 'sport@gmail.com' || (u.user_metadata as any)?.is_super_admin) {
+                saIds.add(u.id);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Could not list auth users for super admin check:", e);
+        }
+
+        // 2. Unlink all super admins from all schools so Postgres CASCADE never deletes their profiles!
         await supabaseAdmin
           .from("profiles")
           .update({ school_id: null })
           .in("id", Array.from(saIds));
 
-        // 3. Delete non-super admin users from auth
+        // 3. Delete ONLY non-super admin users from auth
         const { data: allProfiles } = await supabaseAdmin.from("profiles").select("id");
         if (allProfiles && allProfiles.length > 0) {
           for (const p of allProfiles) {
@@ -398,7 +423,7 @@ Deno.serve(async (req) => {
               try {
                 await supabaseAdmin.auth.admin.deleteUser(p.id);
               } catch (e) {
-                console.warn("Could not delete user:", p.id, e);
+                console.warn("Could not delete regular user:", p.id, e);
               }
             }
           }
@@ -436,13 +461,11 @@ Deno.serve(async (req) => {
         ];
         await supabaseAdmin.from("sectors").insert(defaultSectors);
 
-        // 7. Link requesting super admin to "Interagir"
-        if (user?.id) {
-          await supabaseAdmin
-            .from("profiles")
-            .update({ school_id: newSchool.id })
-            .eq("id", user.id);
-        }
+        // 7. Link all preserved super admins to the new school "Interagir"
+        await supabaseAdmin
+          .from("profiles")
+          .update({ school_id: newSchool.id })
+          .in("id", Array.from(saIds));
 
         return new Response(
           JSON.stringify({ success: true, school: newSchool }),
