@@ -286,20 +286,38 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Get all users from this school
+        // Get all super admins to ensure they are NEVER deleted from auth
+        const { data: superAdmins } = await supabaseAdmin.from("super_admins").select("user_id");
+        const saIds = new Set((superAdmins || []).map((sa: any) => sa.user_id));
+        if (user?.id) saIds.add(user.id);
+
+        // Unlink any super admin from this school
+        await supabaseAdmin
+          .from("profiles")
+          .update({ school_id: null })
+          .eq("school_id", schoolId)
+          .in("id", Array.from(saIds));
+
+        // Get all regular users from this school
         const { data: schoolUsers } = await supabaseAdmin
           .from("profiles")
           .select("id")
           .eq("school_id", schoolId);
 
-        // Delete users from auth (this will cascade to profiles due to trigger)
+        // Delete regular users from auth (non-super-admins)
         if (schoolUsers && schoolUsers.length > 0) {
           for (const schoolUser of schoolUsers) {
-            await supabaseAdmin.auth.admin.deleteUser(schoolUser.id);
+            if (!saIds.has(schoolUser.id)) {
+              try {
+                await supabaseAdmin.auth.admin.deleteUser(schoolUser.id);
+              } catch (delUserErr) {
+                console.warn("Could not delete auth user:", schoolUser.id, delUserErr);
+              }
+            }
           }
         }
 
-        // Delete the school (cascades will handle related data)
+        // Delete the school (cascades will handle related tables)
         const { error: deleteError } = await supabaseAdmin
           .from("schools")
           .delete()
@@ -309,6 +327,125 @@ Deno.serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "create_school": {
+        const { name, slug, phone, email, address } = params;
+
+        if (!name) {
+          return new Response(
+            JSON.stringify({ error: "O nome da escola é obrigatório" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const schoolSlug = slug || name
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+
+        const { data: newSchool, error: createError } = await supabaseAdmin
+          .from("schools")
+          .insert({
+            name,
+            slug: schoolSlug,
+            phone: phone || null,
+            email: email || null,
+            address: address || null,
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+
+        // Create default sectors
+        const defaultSectors = [
+          { name: 'Comercial & Matrículas', school_id: newSchool.id, is_active: true },
+          { name: 'Financeiro', school_id: newSchool.id, is_active: true },
+          { name: 'Secretaria', school_id: newSchool.id, is_active: true },
+          { name: 'Pedagógico', school_id: newSchool.id, is_active: true },
+          { name: 'Suporte & Recepção', school_id: newSchool.id, is_active: true },
+        ];
+        await supabaseAdmin.from("sectors").insert(defaultSectors);
+
+        return new Response(
+          JSON.stringify({ success: true, school: newSchool }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "reset_and_recreate_interagir": {
+        // 1. Get all super admin user IDs
+        const { data: superAdmins } = await supabaseAdmin.from("super_admins").select("user_id");
+        const saIds = new Set((superAdmins || []).map((sa: any) => sa.user_id));
+        if (user?.id) saIds.add(user.id);
+
+        // 2. Unlink all super admins from all schools
+        await supabaseAdmin
+          .from("profiles")
+          .update({ school_id: null })
+          .in("id", Array.from(saIds));
+
+        // 3. Delete non-super admin users from auth
+        const { data: allProfiles } = await supabaseAdmin.from("profiles").select("id");
+        if (allProfiles && allProfiles.length > 0) {
+          for (const p of allProfiles) {
+            if (!saIds.has(p.id)) {
+              try {
+                await supabaseAdmin.auth.admin.deleteUser(p.id);
+              } catch (e) {
+                console.warn("Could not delete user:", p.id, e);
+              }
+            }
+          }
+        }
+
+        // 4. Delete all existing schools
+        const { error: delError } = await supabaseAdmin
+          .from("schools")
+          .delete()
+          .neq("id", "00000000-0000-0000-0000-000000000000");
+
+        if (delError) throw delError;
+
+        // 5. Create new school "Interagir"
+        const { data: newSchool, error: createError } = await supabaseAdmin
+          .from("schools")
+          .insert({
+            name: "Interagir",
+            slug: "interagir",
+            email: "contato@interagir.com",
+            phone: "557583690441",
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+
+        // 6. Create default sectors
+        const defaultSectors = [
+          { name: 'Comercial & Matrículas', school_id: newSchool.id, is_active: true },
+          { name: 'Financeiro', school_id: newSchool.id, is_active: true },
+          { name: 'Secretaria', school_id: newSchool.id, is_active: true },
+          { name: 'Pedagógico', school_id: newSchool.id, is_active: true },
+          { name: 'Suporte & Recepção', school_id: newSchool.id, is_active: true },
+        ];
+        await supabaseAdmin.from("sectors").insert(defaultSectors);
+
+        // 7. Link requesting super admin to "Interagir"
+        if (user?.id) {
+          await supabaseAdmin
+            .from("profiles")
+            .update({ school_id: newSchool.id })
+            .eq("id", user.id);
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, school: newSchool }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

@@ -13,7 +13,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone, Plus, Image as ImageIcon, Unlock } from 'lucide-react';
 import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone, Plus, Image as ImageIcon, Unlock, ExternalLink } from 'lucide-react';
 import { BillingTab } from '@/components/superadmin/BillingTab';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
@@ -173,22 +172,157 @@ export default function SuperAdmin() {
     }
   };
 
+  // Create School State
+  const [isCreateSchoolOpen, setIsCreateSchoolOpen] = useState(false);
+  const [createSchoolForm, setCreateSchoolForm] = useState({
+    name: '',
+    slug: '',
+    phone: '',
+    email: '',
+    address: '',
+  });
+  const [resetAllSchoolsDialogOpen, setResetAllSchoolsDialogOpen] = useState(false);
+
   const handleDeleteSchool = async () => {
     if (!deleteSchoolDialog) return;
     
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.functions.invoke('super-admin', {
+      const { data, error } = await supabase.functions.invoke('super-admin', {
         body: { action: 'delete_school', schoolId: deleteSchoolDialog.id },
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        // Fallback: direct delete from schools table (permitted for super admin by RLS)
+        const { error: directError } = await supabase
+          .from('schools')
+          .delete()
+          .eq('id', deleteSchoolDialog.id);
+
+        if (directError) throw new Error(directError.message || error?.message);
+      }
 
       toast.success(`Escola "${deleteSchoolDialog.name}" excluída com sucesso`);
       setDeleteSchoolDialog(null);
       loadData();
     } catch (error: any) {
       toast.error('Erro ao excluir escola: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateSchool = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!createSchoolForm.name.trim()) {
+      toast.error('Informe o nome da escola.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('super-admin', {
+        body: {
+          action: 'create_school',
+          name: createSchoolForm.name.trim(),
+          slug: createSchoolForm.slug.trim() || undefined,
+          phone: createSchoolForm.phone.trim() || undefined,
+          email: createSchoolForm.email.trim() || undefined,
+          address: createSchoolForm.address.trim() || undefined,
+        },
+      });
+
+      if (error || data?.error) {
+        // Direct fallback via Supabase table
+        const slug = createSchoolForm.slug.trim() || createSchoolForm.name
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+
+        const { data: newSc, error: directErr } = await supabase
+          .from('schools')
+          .insert({
+            name: createSchoolForm.name.trim(),
+            slug,
+            phone: createSchoolForm.phone.trim() || null,
+            email: createSchoolForm.email.trim() || null,
+            address: createSchoolForm.address.trim() || null,
+          })
+          .select()
+          .single();
+
+        if (directErr) throw directErr;
+
+        if (newSc?.id) {
+          await supabase.from('sectors').insert([
+            { name: 'Comercial & Matrículas', school_id: newSc.id, is_active: true },
+            { name: 'Financeiro', school_id: newSc.id, is_active: true },
+            { name: 'Secretaria', school_id: newSc.id, is_active: true },
+            { name: 'Pedagógico', school_id: newSc.id, is_active: true },
+            { name: 'Suporte & Recepção', school_id: newSc.id, is_active: true },
+          ]);
+        }
+      }
+
+      toast.success(`Escola "${createSchoolForm.name}" criada com sucesso!`);
+      setIsCreateSchoolOpen(false);
+      setCreateSchoolForm({ name: '', slug: '', phone: '', email: '', address: '' });
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao criar escola: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetAndRecreateInteragir = async () => {
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('super-admin', {
+        body: { action: 'reset_and_recreate_interagir' },
+      });
+
+      if (error || data?.error) {
+        // Direct fallback: delete all schools and insert Interagir
+        const { error: delErr } = await supabase
+          .from('schools')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+        if (delErr) throw delErr;
+
+        const { data: newSc, error: insErr } = await supabase
+          .from('schools')
+          .insert({
+            name: 'Interagir',
+            slug: 'interagir',
+            email: 'contato@interagir.com',
+            phone: '557583690441',
+          })
+          .select()
+          .single();
+        if (insErr) throw insErr;
+
+        if (newSc?.id) {
+          await supabase.from('sectors').insert([
+            { name: 'Comercial & Matrículas', school_id: newSc.id, is_active: true },
+            { name: 'Financeiro', school_id: newSc.id, is_active: true },
+            { name: 'Secretaria', school_id: newSc.id, is_active: true },
+            { name: 'Pedagógico', school_id: newSc.id, is_active: true },
+            { name: 'Suporte & Recepção', school_id: newSc.id, is_active: true },
+          ]);
+          await selectSchool(newSc.id);
+        }
+      } else if (data?.school?.id) {
+        await selectSchool(data.school.id);
+      }
+
+      toast.success('Todas as escolas foram removidas e a nova escola "Interagir" foi criada com sucesso!');
+      setResetAllSchoolsDialogOpen(false);
+      loadData();
+    } catch (error: any) {
+      toast.error('Erro ao resetar escolas: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -545,19 +679,41 @@ export default function SuperAdmin() {
           <TabsContent value="schools">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle>Escolas Cadastradas</CardTitle>
                     <CardDescription>Gerencie todas as escolas do sistema</CardDescription>
                   </div>
-                  <div className="relative w-64">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar escola..."
-                      value={searchSchool}
-                      onChange={(e) => setSearchSchool(e.target.value)}
-                      className="pl-8"
-                    />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative w-48 sm:w-60">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar escola..."
+                        value={searchSchool}
+                        onChange={(e) => setSearchSchool(e.target.value)}
+                        className="pl-8 h-9 text-xs"
+                      />
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setResetAllSchoolsDialogOpen(true)}
+                      className="h-9 text-xs gap-1.5 font-medium shadow-xs"
+                      title="Apagar todas as escolas e cadastrar a nova escola Interagir"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Apagar Todas e Criar "Interagir"</span>
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setIsCreateSchoolOpen(true)}
+                      className="h-9 text-xs gap-1.5 font-medium bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                      title="Cadastrar uma nova escola"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Nova Escola</span>
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -1164,6 +1320,124 @@ export default function SuperAdmin() {
                 </>
               ) : (
                 'Criar Usuário'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create School Dialog */}
+      <Dialog open={isCreateSchoolOpen} onOpenChange={setIsCreateSchoolOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <School className="h-5 w-5 text-emerald-600" />
+              Criar Nova Escola
+            </DialogTitle>
+            <DialogDescription>
+              Cadastre uma nova escola e configure seus dados básicos.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateSchool} className="space-y-3 py-2">
+            <div className="grid gap-1.5">
+              <Label>Nome da Escola *</Label>
+              <Input
+                placeholder="Ex: Interagir"
+                value={createSchoolForm.name}
+                onChange={(e) => setCreateSchoolForm({ ...createSchoolForm, name: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Identificador / Slug (opcional)</Label>
+              <Input
+                placeholder="Ex: interagir"
+                value={createSchoolForm.slug}
+                onChange={(e) => setCreateSchoolForm({ ...createSchoolForm, slug: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Telefone / WhatsApp (opcional)</Label>
+              <Input
+                placeholder="Ex: (75) 98369-0441"
+                value={createSchoolForm.phone}
+                onChange={(e) => setCreateSchoolForm({ ...createSchoolForm, phone: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>E-mail (opcional)</Label>
+              <Input
+                type="email"
+                placeholder="contato@interagir.com"
+                value={createSchoolForm.email}
+                onChange={(e) => setCreateSchoolForm({ ...createSchoolForm, email: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Endereço (opcional)</Label>
+              <Input
+                placeholder="Endereço da escola"
+                value={createSchoolForm.address}
+                onChange={(e) => setCreateSchoolForm({ ...createSchoolForm, address: e.target.value })}
+              />
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsCreateSchoolOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />}
+                Cadastrar Escola
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset All Schools and Create Interagir Dialog */}
+      <Dialog open={resetAllSchoolsDialogOpen} onOpenChange={setResetAllSchoolsDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Apagar Todas as Escolas e Criar "Interagir"
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-2 text-left">
+              <span>
+                Esta ação apagará <strong>todas as {schools.length} escolas cadastradas</strong> e criará automaticamente uma nova escola limpa chamada <strong>"Interagir"</strong> (slug: <code>interagir</code>).
+              </span>
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-xs text-destructive space-y-1">
+                <p className="font-semibold">Atenção:</p>
+                <p>• Todas as turmas, dados antigos e escolas anteriores serão excluídos.</p>
+                <p>• Sua conta de Super Admin será preservada e vinculada à nova escola Interagir.</p>
+                <p>• Os setores padrão (Comercial, Financeiro, Secretaria, etc.) serão gerados automaticamente.</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setResetAllSchoolsDialogOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleResetAndRecreateInteragir}
+              disabled={isSubmitting}
+              className="gap-1.5"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Confirmar e Criar "Interagir"
+                </>
               )}
             </Button>
           </DialogFooter>

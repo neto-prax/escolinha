@@ -68,3 +68,10 @@ USING (
   OR public.is_super_admin(auth.uid())
 );
 
+-- 5. schools INSERT policy for Super Admin
+DROP POLICY IF EXISTS "Super admins can insert schools" ON public.schools;
+CREATE POLICY "Super admins can insert schools"
+ON public.schools FOR INSERT
+WITH CHECK (public.is_super_admin(auth.uid()));
+
+
