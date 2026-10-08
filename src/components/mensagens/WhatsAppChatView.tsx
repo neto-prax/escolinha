@@ -107,6 +107,7 @@ export function WhatsAppChatView() {
     syncWithUaizap,
     isSyncing,
     uaizapStatus,
+    activeGatewayProvider,
     createNewConversation,
     isLoadingDbConversations,
     onlyFromToday,
@@ -403,7 +404,7 @@ export function WhatsAppChatView() {
                   {formatPhoneNumber(uaizapStatus.ownerPhone || '557583690441')}
                 </span>
                 <Badge variant="secondary" className="text-[10px] h-4.5 hidden md:inline-flex">
-                  Instância: {uaizapStatus.instanceName || 'Neto'}
+                  Motor: {activeGatewayProvider === 'wa-akg' ? 'WA-AKG' : 'Uazapi'} | Instância: {uaizapStatus.instanceName || (activeGatewayProvider === 'wa-akg' ? 'WA-AKG' : 'Neto')}
                 </Badge>
               </div>
             </div>
@@ -437,7 +438,7 @@ export function WhatsAppChatView() {
               className="h-7 px-2.5 text-[11px] gap-1.5"
               onClick={syncWithUaizap}
               disabled={isSyncing}
-              title="Verificar status e sincronizar com o WhatsApp"
+              title={`Verificar status e sincronizar com o ${activeGatewayProvider === 'wa-akg' ? 'WA-AKG' : 'WhatsApp'}`}
             >
               <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar'}</span>
@@ -462,7 +463,7 @@ export function WhatsAppChatView() {
                   <MessageSquare className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-semibold leading-none">Conversas</h3>
+                  <h3 className="text-xs font-semibold leading-none">Conversas WAKG</h3>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     {isDirector
                       ? 'Todos os setores'

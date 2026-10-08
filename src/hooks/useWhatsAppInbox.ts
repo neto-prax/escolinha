@@ -984,17 +984,19 @@ function useWhatsAppInboxState() {
       await queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
       await queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
 
+      const providerLabel = activeGatewayProvider === 'wa-akg' ? 'WA-AKG' : 'Uazapi';
       if (isOnline) {
-        toast.success(`Uazapi online (${instanceName})! Conversas atualizadas.`);
+        toast.success(`${providerLabel} online (${instanceName})! Conversas atualizadas.`);
       } else {
-        toast.warning('Uazapi: Instância aguardando conexão no WhatsApp.');
+        toast.warning(`${providerLabel}: Instância aguardando conexão no WhatsApp.`);
       }
     } catch (err: any) {
-      toast.error(`Erro ao sincronizar com Uazapi: ${err?.message || 'Falha de rede'}`);
+      const providerLabel = activeGatewayProvider === 'wa-akg' ? 'WA-AKG' : 'Uazapi';
+      toast.error(`Erro ao sincronizar com ${providerLabel}: ${err?.message || 'Falha de rede'}`);
     } finally {
       setIsSyncing(false);
     }
-  }, [refetchUazapiStatus, refetchDbConversations, refetchDbMessages, queryClient]);
+  }, [refetchUazapiStatus, refetchDbConversations, refetchDbMessages, queryClient, activeGatewayProvider]);
 
   return {
     conversations: permittedConversations,
@@ -1012,6 +1014,7 @@ function useWhatsAppInboxState() {
     syncWithUaizap,
     isSyncing,
     uaizapStatus,
+    activeGatewayProvider,
     createNewConversation,
     isLoadingDbConversations,
     onlyFromToday,

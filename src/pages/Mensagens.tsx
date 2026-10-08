@@ -37,10 +37,10 @@ function MensagensContent() {
             </div>
             <div className="min-w-0">
               <h1 className="text-lg font-bold tracking-tight text-foreground truncate leading-tight">
-                Central de Mensagens & WhatsApp
+                Conversas WAKG
               </h1>
               <p className="text-[11px] text-muted-foreground truncate hidden sm:block">
-                Gestão unificada de conversas, gatilhos de auto-atendimento e setores
+                Gestão unificada de conversas via WA-AKG, gatilhos de auto-atendimento e setores
               </p>
             </div>
           </div>
@@ -49,7 +49,7 @@ function MensagensContent() {
           <TabsList className="grid grid-cols-2 sm:flex sm:flex-row h-9 p-1 bg-muted/60 flex-shrink-0 self-start sm:self-auto">
             <TabsTrigger value="chat" className="gap-1.5 text-xs font-medium px-3 h-7">
               <MessageSquare className="w-3.5 h-3.5" />
-              <span>Chat ({conversations.length})</span>
+              <span>Conversas WAKG ({conversations.length})</span>
             </TabsTrigger>
             <TabsTrigger value="triggers" className="gap-1.5 text-xs font-medium px-3 h-7">
               <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />

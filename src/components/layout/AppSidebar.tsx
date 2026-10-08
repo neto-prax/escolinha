@@ -64,7 +64,7 @@ const navigationGroups: NavGroup[] = [
     label: 'Principal',
     items: [
       { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, module: 'dashboard' },
-      { title: 'Mensagens', url: '/app/mensagens', icon: MessageSquare, module: 'mensagens' },
+      { title: 'Conversas WAKG', url: '/app/mensagens', icon: MessageSquare, module: 'mensagens' },
       { title: 'Comercial', url: '/app/comercial', icon: Target, module: 'comercial' },
       { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
       { title: 'Pedagógico', url: '/app/pedagogico', icon: BookOpen, module: 'pedagogico' },
