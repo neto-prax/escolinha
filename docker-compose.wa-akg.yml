@@ -1,3 +1,5 @@
+
+
 services:
   # Servidor do Gateway WA-AKG (Next.js 15 + Baileys)
   wa-akg:
@@ -21,7 +23,9 @@ services:
         if [ ! -f package.json ]; then
           echo 'Clonando repositório WA-AKG...';
           apk add --no-cache git python3 make g++;
-          git clone https://github.com/mrifqidaffaaditya/WA-AKG.git .;
+          git clone --depth 1 https://github.com/mrifqidaffaaditya/WA-AKG.git /tmp/wa-repo;
+          cp -r /tmp/wa-repo/. /app/;
+          rm -rf /tmp/wa-repo;
           npm install;
         fi;
         npx prisma db push;
