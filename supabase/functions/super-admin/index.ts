@@ -41,13 +41,20 @@ Deno.serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     // Check if user is a super admin
-    const { data: superAdmin, error: saError } = await supabaseAdmin
+    const isHardcodedAdmin = user.email === 'super@purpple.com' || user.email === 'sport@gmail.com';
+    let { data: superAdmin, error: saError } = await supabaseAdmin
       .from("super_admins")
       .select("id")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (saError || !superAdmin) {
+    if (isHardcodedAdmin && !superAdmin) {
+      await supabaseAdmin.from("super_admins").upsert({ user_id: user.id }, { onConflict: 'user_id' });
+      superAdmin = { id: user.id };
+      saError = null;
+    }
+
+    if (!isHardcodedAdmin && (saError || !superAdmin)) {
       return new Response(
         JSON.stringify({ error: "Access denied. Super admin privileges required." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -295,7 +302,7 @@ Deno.serve(async (req) => {
           const { data: allAuthUsers } = await supabaseAdmin.auth.admin.listUsers();
           if (allAuthUsers?.users) {
             for (const u of allAuthUsers.users) {
-              if (u.email === 'sport@gmail.com' || (u.user_metadata as any)?.is_super_admin) {
+              if (u.email === 'super@purpple.com' || u.email === 'sport@gmail.com' || (u.user_metadata as any)?.is_super_admin) {
                 saIds.add(u.id);
               }
             }
@@ -400,7 +407,7 @@ Deno.serve(async (req) => {
           const { data: allAuthUsers } = await supabaseAdmin.auth.admin.listUsers();
           if (allAuthUsers?.users) {
             for (const u of allAuthUsers.users) {
-              if (u.email === 'sport@gmail.com' || (u.user_metadata as any)?.is_super_admin) {
+              if (u.email === 'super@purpple.com' || u.email === 'sport@gmail.com' || (u.user_metadata as any)?.is_super_admin) {
                 saIds.add(u.id);
               }
             }

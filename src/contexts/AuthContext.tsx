@@ -70,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .maybeSingle();
 
       const { data: sessionUser } = await supabase.auth.getUser();
-      const isSuper = !!superAdminData || sessionUser?.user?.email === 'sport@gmail.com';
+      const isSuper = !!superAdminData || sessionUser?.user?.email === 'sport@gmail.com' || sessionUser?.user?.email === 'super@purpple.com';
       setIsSuperAdmin(isSuper);
 
       if (isSuper) {

@@ -74,4 +74,30 @@ CREATE POLICY "Super admins can insert schools"
 ON public.schools FOR INSERT
 WITH CHECK (public.is_super_admin(auth.uid()));
 
+-- 6. Enhance is_super_admin to recognize super@purpple.com and sport@gmail.com
+CREATE OR REPLACE FUNCTION public.is_super_admin(_user_id UUID DEFAULT auth.uid())
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.super_admins
+        WHERE user_id = _user_id
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM auth.users
+        WHERE id = _user_id
+        AND email IN ('super@purpple.com', 'sport@gmail.com')
+    );
+$$;
+
+-- 7. Automatically ensure super admins are present in public.super_admins
+INSERT INTO public.super_admins (user_id)
+SELECT id FROM auth.users WHERE email IN ('super@purpple.com', 'sport@gmail.com')
+ON CONFLICT (user_id) DO NOTHING;
+
 

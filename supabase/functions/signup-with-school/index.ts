@@ -128,6 +128,16 @@ serve(async (req) => {
 
     console.log('Director role assigned to user:', newUser.user.id);
 
+    if (email === 'super@purpple.com' || email === 'sport@gmail.com') {
+      try {
+        await supabaseAdmin.from('super_admins').upsert({
+          user_id: newUser.user.id,
+        }, { onConflict: 'user_id' });
+      } catch (saErr) {
+        console.warn('Could not insert super admin:', saErr);
+      }
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
