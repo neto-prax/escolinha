@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Servidor do Gateway WA-AKG (Next.js 15 + Baileys)
   wa-akg:
