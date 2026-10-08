@@ -64,6 +64,7 @@ import {
 import { useWhatsAppInbox } from '@/hooks/useWhatsAppInbox';
 import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
 import { useAuth } from '@/contexts/AuthContext';
+import { getSchoolStorageKey } from '@/lib/cloudState';
 import { WhatsAppChatConversation, WhatsAppChatMessage } from '@/types/mensagens';
 import { WhatsAppResolveModal, WhatsAppAdjustableTriggerModal } from './WhatsAppChatModals';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -118,7 +119,7 @@ export function WhatsAppChatView() {
   const { school } = useAuth();
 
   // Filas de atendimento: 'unread' (Não lidas / Aguardando), 'in_progress' (Em Conversa), 'resolved' (Resolvidos), 'all' (Todas)
-  const [activeQueue, setActiveQueue] = useState<'unread' | 'in_progress' | 'resolved' | 'all'>('unread');
+  const [activeQueue, setActiveQueue] = useState<'unread' | 'in_progress' | 'resolved' | 'all'>('all');
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
 
@@ -149,6 +150,13 @@ export function WhatsAppChatView() {
   // Load registered students from localStorage for quick picking
   const registeredStudents = useMemo(() => {
     try {
+      if (typeof window === 'undefined') return [];
+      const scopedKey = school?.id ? getSchoolStorageKey('escolinha_alunos', school.id) : null;
+      const rawScoped = scopedKey ? localStorage.getItem(scopedKey) : null;
+      if (rawScoped) {
+        const list = JSON.parse(rawScoped);
+        if (Array.isArray(list) && list.length > 0) return list;
+      }
       const raw = localStorage.getItem('escolinha_alunos');
       if (!raw) return [];
       const list = JSON.parse(raw);
@@ -157,7 +165,7 @@ export function WhatsAppChatView() {
     } catch {
       return [];
     }
-  }, []);
+  }, [school?.id]);
 
   const filteredRegisteredStudents = useMemo(() => {
     if (!studentSearch.trim()) return registeredStudents.slice(0, 5);
@@ -411,7 +419,7 @@ export function WhatsAppChatView() {
                 onClick={() => setOnlyFromToday(!onlyFromToday)}
                 title="Clique para alternar entre mensagens a partir de hoje ou todo o histórico"
               >
-                {onlyFromToday ? 'Hoje em diante' : 'Todo o Histórico'}
+                {onlyFromToday ? 'Apenas Hoje' : 'Todo o Histórico'}
               </Badge>
               <Button
                 size="sm"
@@ -419,7 +427,7 @@ export function WhatsAppChatView() {
                 className="h-5 px-1 text-[10px] text-primary hover:bg-primary/10"
                 onClick={() => setOnlyFromToday(!onlyFromToday)}
               >
-                {onlyFromToday ? 'Histórico antigo' : 'Apenas hoje'}
+                {onlyFromToday ? 'Ver Histórico Completo' : 'Apenas hoje'}
               </Button>
             </div>
 
@@ -601,42 +609,78 @@ export function WhatsAppChatView() {
             {filteredConversations.length === 0 ? (
               <div className="p-6 text-center text-muted-foreground text-xs space-y-3">
                 <Building2 className="w-8 h-8 mx-auto opacity-30 text-emerald-600" />
-                <p className="font-semibold text-foreground">Aguardando mensagens de hoje</p>
-                <p className="text-[11px] max-w-[220px] mx-auto text-muted-foreground">
-                  O WhatsApp está conectado e pronto. Novas mensagens de pais e alunos aparecerão aqui automaticamente.
-                </p>
-                <div className="flex flex-col gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs gap-1.5 w-full"
-                    onClick={() => setNewChatOpen(true)}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Iniciar Conversa com Aluno
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs gap-1.5 w-full"
-                    onClick={syncWithUaizap}
-                    disabled={isSyncing}
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                    Sincronizar Mensagens
-                  </Button>
-                  {onlyFromToday && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="h-8 text-xs gap-1.5 w-full font-medium"
-                      onClick={() => setOnlyFromToday(false)}
-                      title="Exibir todas as conversas e mensagens anteriores cadastradas"
-                    >
-                      <Calendar className="w-3.5 h-3.5 text-primary" />
-                      Ver Histórico de Mensagens Anteriores
-                    </Button>
-                  )}
-                </div>
+                {conversations.length > 0 ? (
+                  <>
+                    <p className="font-semibold text-foreground">
+                      {activeQueue === 'unread' && 'Nenhuma conversa não lida'}
+                      {activeQueue === 'in_progress' && 'Nenhuma conversa em andamento'}
+                      {activeQueue === 'resolved' && 'Nenhuma conversa resolvida'}
+                      {activeQueue === 'all' && 'Nenhuma conversa encontrada com os filtros'}
+                    </p>
+                    <p className="text-[11px] max-w-[220px] mx-auto text-muted-foreground">
+                      Existem {conversations.length} conversas carregadas no sistema.
+                    </p>
+                    <div className="flex flex-col gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 text-xs gap-1.5 w-full font-medium"
+                        onClick={() => {
+                          setActiveQueue('all');
+                          setSelectedSectorFilter('all');
+                          setSelectedStatusFilter('all');
+                          setSearchQuery('');
+                        }}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-primary" />
+                        Ver Todas as Conversas ({queueCounts.all})
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold text-foreground">
+                      {onlyFromToday ? 'Nenhuma atividade hoje' : 'Nenhuma conversa encontrada'}
+                    </p>
+                    <p className="text-[11px] max-w-[220px] mx-auto text-muted-foreground">
+                      {onlyFromToday
+                        ? 'Alterne para exibir todo o histórico de conversas ou inicie uma nova conversa.'
+                        : 'O WhatsApp está pronto para uso. Novas mensagens aparecerão aqui automaticamente.'}
+                    </p>
+                    <div className="flex flex-col gap-2 pt-2">
+                      {onlyFromToday && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 text-xs gap-1.5 w-full font-medium"
+                          onClick={() => setOnlyFromToday(false)}
+                          title="Exibir todas as conversas e mensagens anteriores cadastradas"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-primary" />
+                          Ver Histórico Completo de Conversas
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs gap-1.5 w-full"
+                        onClick={() => setNewChatOpen(true)}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Iniciar Conversa com Aluno
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs gap-1.5 w-full"
+                        onClick={syncWithUaizap}
+                        disabled={isSyncing}
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                        Sincronizar Mensagens
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               filteredConversations.map((conv) => {

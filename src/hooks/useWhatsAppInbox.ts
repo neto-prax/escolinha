@@ -2,6 +2,7 @@ import { createContext, createElement, ReactNode, useState, useEffect, useMemo, 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { getSchoolStorageKey } from '@/lib/cloudState';
 import {
   WhatsAppChatConversation,
   WhatsAppChatMessage,
@@ -22,18 +23,20 @@ export interface UaizapStatusData {
 }
 
 function useWhatsAppInboxState() {
-  const { profile, school, roles, sectors: userAssignedSectors, hasSectorAccess } = useAuth();
+  const { profile, school, roles, sectors: userAssignedSectors, hasSectorAccess, isSuperAdmin } = useAuth();
   const queryClient = useQueryClient();
 
   const schoolId = profile?.school_id || school?.id || null;
 
-  // Filter messages starting from today (default: true)
+  // Filter messages starting from today (default: false, so historical conversations are always visible)
   const [onlyFromToday, setOnlyFromToday] = useState<boolean>(() => {
-    const saved = localStorage.getItem('purple_whatsapp_only_today');
-    return saved !== 'false';
+    const saved = localStorage.getItem('purple_whatsapp_only_today_v2');
+    if (saved !== null) return saved === 'true';
+    return false;
   });
 
   useEffect(() => {
+    localStorage.setItem('purple_whatsapp_only_today_v2', String(onlyFromToday));
     localStorage.setItem('purple_whatsapp_only_today', String(onlyFromToday));
   }, [onlyFromToday]);
 
@@ -145,6 +148,13 @@ function useWhatsAppInboxState() {
   // Helper to enrich student info from local registered students
   const getSchoolAlunos = useCallback((): any[] => {
     try {
+      if (typeof window === 'undefined') return [];
+      const scopedKey = schoolId ? getSchoolStorageKey('escolinha_alunos', schoolId) : null;
+      const rawScoped = scopedKey ? localStorage.getItem(scopedKey) : null;
+      if (rawScoped) {
+        const list = JSON.parse(rawScoped);
+        if (Array.isArray(list) && list.length > 0) return list;
+      }
       const raw = localStorage.getItem('escolinha_alunos');
       if (!raw) return [];
       const list = JSON.parse(raw);
@@ -152,7 +162,7 @@ function useWhatsAppInboxState() {
     } catch {
       return [];
     }
-  }, []);
+  }, [schoolId]);
 
   const findStudentInfo = useCallback(
     (phone: string, contactName: string) => {
@@ -211,7 +221,7 @@ function useWhatsAppInboxState() {
           .order('last_message_at', { ascending: false, nullsFirst: false });
 
         if (schoolId) {
-          query = query.eq('school_id', schoolId);
+          query = query.or(`school_id.eq.${schoolId},school_id.is.null`);
         }
 
         const { data: convs, error } = await query;
@@ -226,9 +236,16 @@ function useWhatsAppInboxState() {
         const todayStartIso = todayStart.toISOString();
 
         if (onlyFromToday) {
-          return convs
-            .filter((c: any) => c.last_message_at && c.last_message_at >= todayStartIso)
-            .map((c: any) => ({ ...c, has_today_activity: true }));
+          const todayFiltered = convs.filter((c: any) => c.last_message_at && c.last_message_at >= todayStartIso);
+          if (todayFiltered.length > 0) {
+            return todayFiltered.map((c: any) => ({ ...c, has_today_activity: true }));
+          }
+          // Fallback se não houver novas mensagens hoje: exibe todas com tag para não deixar o painel em branco
+          return convs.map((c: any) => ({
+            ...c,
+            last_message_at: c.last_message_at || c.created_at,
+            has_today_activity: false,
+          }));
         }
 
         return convs.map((c: any) => ({
@@ -378,22 +395,22 @@ function useWhatsAppInboxState() {
 
   // Sector permissions
   const isDirector = useMemo(() => {
-    return roles.includes('director') || roles.includes('admin') || roles.length === 0;
-  }, [roles]);
+    return isSuperAdmin || roles.includes('director') || roles.includes('admin') || roles.length === 0;
+  }, [isSuperAdmin, roles]);
 
   const userPermittedSectors = useMemo(() => {
-    if (isDirector) return allAvailableSectors;
+    if (isDirector || isSuperAdmin) return allAvailableSectors;
     const assignedIds = new Set(userAssignedSectors.map((s) => s.id));
     return allAvailableSectors.filter((sector) => assignedIds.has(sector.id));
-  }, [isDirector, allAvailableSectors, userAssignedSectors]);
+  }, [isDirector, isSuperAdmin, allAvailableSectors, userAssignedSectors]);
 
   const permittedConversations = useMemo(() => {
-    if (isDirector) return effectiveConversations;
+    if (isDirector || isSuperAdmin) return effectiveConversations;
     return effectiveConversations.filter((c) => {
       if (!c.sector_id) return true;
       return hasSectorAccess(c.sector_id);
     });
-  }, [effectiveConversations, isDirector, hasSectorAccess]);
+  }, [effectiveConversations, isDirector, isSuperAdmin, hasSectorAccess]);
 
   // Ensure an active conversation is selected
   useEffect(() => {
@@ -457,6 +474,15 @@ function useWhatsAppInboxState() {
       if (error) {
         console.warn('Error fetching whatsapp_messages:', error);
         return [];
+      }
+      if (onlyFromToday && (!data || data.length === 0)) {
+        // Fallback para exibir histórico de mensagens da conversa se não houver mensagens hoje
+        const { data: allMessages } = await supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .eq('conversation_id', conversationDbId)
+          .order('created_at', { ascending: true });
+        return allMessages || [];
       }
       return data || [];
     },

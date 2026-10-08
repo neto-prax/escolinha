@@ -108,6 +108,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           school_id: activeSchool?.id || profileData?.school_id || null,
         });
 
+        // Persist active school_id to profile for Postgres RLS get_user_school_id()
+        if (activeSchool?.id && profileData?.school_id !== activeSchool.id) {
+          supabase
+            .from('profiles')
+            .update({ school_id: activeSchool.id })
+            .eq('id', userId)
+            .then(({ error }) => {
+              if (error) console.warn('Could not sync initial super_admin school_id to profile:', error);
+            });
+        }
+
         // Fetch sectors for active school
         if (activeSchool?.id) {
           const { data: schoolSectors } = await supabase
@@ -298,6 +309,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...profile,
         school_id: targetSchool.id,
       });
+    }
+
+    if (user?.id) {
+      supabase
+        .from('profiles')
+        .update({ school_id: targetSchool.id })
+        .eq('id', user.id)
+        .then(({ error }) => {
+          if (error) console.warn('Could not sync super_admin school_id to profile:', error);
+        });
     }
 
     const { data: schoolSectors } = await supabase
