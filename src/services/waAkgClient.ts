@@ -1,5 +1,3 @@
-import { supabase } from '@/integrations/supabase/client';
-
 export interface WaAkgStandardResponse {
   status?: {
     connected?: boolean;
@@ -56,8 +54,8 @@ function resolveEndpointUrl(baseUrl: string, endpoint: string): string {
 }
 
 /**
- * Calls WA-AKG directly from the client (or via Vite proxy) with automatic fallback
- * to Supabase Edge Function if applicable.
+ * Calls WA-AKG using the official API specification (Next.js 15 + Baileys):
+ * Reference: WA-AKG/docs/API-QUICK-REFERENCE.md
  */
 export async function callWaAkg(
   action: 'status' | 'connect' | 'disconnect' | 'send-text' | 'send-media' | 'configure-webhook',
@@ -73,160 +71,254 @@ export async function callWaAkg(
     'Content-Type': 'application/json',
   };
   if (apiKey) {
+    headers['X-API-Key'] = apiKey;
     headers['Authorization'] = `Bearer ${apiKey}`;
-    headers['x-api-key'] = apiKey;
   }
-
-  let endpoint = '';
-  let method = 'GET';
-  let body: Record<string, unknown> | null = null;
-
-  switch (action) {
-    case 'status':
-      endpoint = `/api/sessions/status?sessionId=${encodeURIComponent(sessionId)}`;
-      method = 'GET';
-      break;
-
-    case 'connect':
-      endpoint = '/api/sessions/start';
-      method = 'POST';
-      body = { sessionId };
-      break;
-
-    case 'disconnect':
-      endpoint = '/api/sessions/stop';
-      method = 'POST';
-      body = { sessionId };
-      break;
-
-    case 'send-text': {
-      endpoint = '/api/message/send-text';
-      method = 'POST';
-      const rawPhone = String(data.phone ?? '').replace(/\D/g, '');
-      const formattedPhone = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
-      body = {
-        sessionId,
-        to: formattedPhone,
-        text: data.message ?? '',
-      };
-      break;
-    }
-
-    case 'send-media': {
-      endpoint = '/api/message/send-media';
-      method = 'POST';
-      const rawPhone = String(data.phone ?? '').replace(/\D/g, '');
-      const formattedPhone = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
-      body = {
-        sessionId,
-        to: formattedPhone,
-        type: String(data.mediaType || 'image').toUpperCase(),
-        fileUrl: data.mediaUrl,
-        caption: data.caption ?? '',
-        fileName: data.fileName ?? 'arquivo',
-      };
-      break;
-    }
-
-    case 'configure-webhook': {
-      endpoint = '/api/webhook';
-      method = 'POST';
-      const webhookUrl =
-        (data.url as string) ||
-        `${import.meta.env.VITE_SUPABASE_URL || 'https://eafntyicpalnyzonnrgn.supabase.co'}/functions/v1/evolution-webhook`;
-      body = {
-        sessionId,
-        url: webhookUrl,
-        events: ['message.received', 'messages', 'connection.update', 'status'],
-      };
-      break;
-    }
-  }
-
-  const targetUrl = resolveEndpointUrl(rawUrl, endpoint);
 
   try {
-    let res = await fetch(targetUrl, {
-      method,
-      headers,
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    // ----------------------------------------------------
+    // ACTION: STATUS
+    // ----------------------------------------------------
+    if (action === 'status') {
+      try {
+        const targetUrl = resolveEndpointUrl(rawUrl, '/api/sessions');
+        const res = await fetch(targetUrl, { method: 'GET', headers });
 
-    // Fallback QR code retrieval for WA-AKG connect
-    if (!res.ok && action === 'connect') {
-      const qrUrl = resolveEndpointUrl(rawUrl, `/api/sessions/qr?sessionId=${encodeURIComponent(sessionId)}`);
-      const qrRes = await fetch(qrUrl, { method: 'GET', headers }).catch(() => null);
-      if (qrRes && qrRes.ok) {
-        res = qrRes;
+        if (!res.ok) {
+          return {
+            status: { connected: false, jid: null },
+            instance: { name: sessionId, status: 'disconnected', qrcode: null, paircode: null },
+          };
+        }
+
+        const json = await res.json().catch(() => null);
+        const sessionsList = Array.isArray(json) ? json : json?.data || json?.sessions || [];
+        const currentSession = sessionsList.find(
+          (s: any) => s.id === sessionId || s.name === sessionId || s.sessionId === sessionId
+        );
+
+        const isConnected = Boolean(
+          currentSession?.status === 'CONNECTED' ||
+          currentSession?.status === 'connected' ||
+          currentSession?.isConnected === true
+        );
+
+        return {
+          success: true,
+          status: {
+            connected: isConnected,
+            jid: currentSession?.jid || currentSession?.phone || null,
+          },
+          instance: {
+            name: sessionId,
+            status: isConnected ? 'connected' : 'disconnected',
+            qrcode: currentSession?.qr || currentSession?.qrcode || null,
+            paircode: currentSession?.paircode || null,
+            profileName: currentSession?.name || 'WA-AKG',
+          },
+          details: currentSession,
+        };
+      } catch {
+        return {
+          status: { connected: false, jid: null },
+          instance: { name: sessionId, status: 'disconnected', qrcode: null, paircode: null },
+        };
       }
     }
 
-    const text = await res.text();
-    let parsed: any;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = { rawResponse: text };
-    }
+    // ----------------------------------------------------
+    // ACTION: CONNECT (Create Session & Get QR Code)
+    // ----------------------------------------------------
+    if (action === 'connect') {
+      // 1. Ensure session is created
+      const createUrl = resolveEndpointUrl(rawUrl, '/api/sessions');
+      await fetch(createUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: sessionId }),
+      }).catch(() => null);
 
-    if (!res.ok) {
-      const errMsg = parsed?.error || parsed?.message || `Erro ${res.status} no servidor WA-AKG`;
-      throw new Error(errMsg);
-    }
+      // 2. Fetch QR Code from /api/sessions/{sessionId}/qr
+      const qrUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(sessionId)}/qr`);
+      const qrRes = await fetch(qrUrl, { method: 'GET', headers });
 
-    const isConnected = Boolean(
-      parsed?.isConnected === true ||
-      parsed?.status === 'connected' ||
-      parsed?.status === 'CONNECTED' ||
-      parsed?.data?.status === 'CONNECTED'
-    );
+      const text = await qrRes.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = { raw: text };
+      }
 
-    const qrCode =
-      parsed?.qrcode ||
-      parsed?.qr ||
-      parsed?.data?.qr ||
-      parsed?.data?.qrcode ||
-      parsed?.qrCodeUrl ||
-      null;
+      if (!qrRes.ok) {
+        if (qrRes.status === 500 && (text.includes('ECONNREFUSED') || text.includes('proxy'))) {
+          throw new Error(
+            `O servidor WA-AKG não está acessível em ${rawUrl}. Verifique se o container está rodando via "sudo docker compose -f docker-compose.wa-akg.yml up -d".`
+          );
+        }
+        if (qrRes.status === 401) {
+          throw new Error('Chave de API do WA-AKG não informada ou inválida. Obtenha a API Key no painel do WA-AKG (Settings → API Keys).');
+        }
+        throw new Error(parsed?.message || parsed?.error || `Erro ${qrRes.status} ao obter QR Code do WA-AKG`);
+      }
 
-    const pairCode = parsed?.paircode || parsed?.pairingCode || null;
+      const qrCode = parsed?.qr || parsed?.qrcode || parsed?.data?.qr || parsed?.data?.qrcode || (typeof parsed === 'string' ? parsed : null);
 
-    return {
-      success: true,
-      status: {
-        connected: isConnected,
-        jid: parsed?.phone || parsed?.jid || parsed?.data?.jid || null,
-      },
-      instance: {
-        name: sessionId,
-        status: isConnected ? 'connected' : 'disconnected',
-        qrcode: qrCode,
-        paircode: pairCode,
-        profileName: parsed?.profileName || parsed?.data?.profileName || 'WhatsApp WA-AKG',
-        owner: parsed?.phone || parsed?.owner || '',
-      },
-      details: parsed,
-    };
-  } catch (err: any) {
-    // If status check fails because server is offline, return disconnected rather than crashing the page
-    if (action === 'status') {
       return {
+        success: true,
         status: { connected: false, jid: null },
         instance: {
           name: sessionId,
-          status: 'disconnected',
-          qrcode: null,
-          paircode: null,
-          profileName: 'WA-AKG (Offline)',
+          status: 'connecting',
+          qrcode: qrCode,
+          paircode: parsed?.paircode || parsed?.pairingCode || null,
         },
+        details: parsed,
       };
     }
 
-    // For explicit user actions (connect, send, configure), provide clear, actionable feedback
-    const baseMsg = err?.message || 'Falha de comunicação';
-    throw new Error(
-      `Não foi possível comunicar com o WA-AKG em ${rawUrl}. Verifique se o container está em execução ("sudo docker compose -f docker-compose.wa-akg.yml up -d"). Detalhes: ${baseMsg}`
-    );
+    // ----------------------------------------------------
+    // ACTION: DISCONNECT
+    // ----------------------------------------------------
+    if (action === 'disconnect') {
+      const deleteUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(sessionId)}`);
+      await fetch(deleteUrl, { method: 'DELETE', headers });
+      return {
+        success: true,
+        status: { connected: false, jid: null },
+        instance: { name: sessionId, status: 'disconnected', qrcode: null, paircode: null },
+      };
+    }
+
+    // ----------------------------------------------------
+    // ACTION: SEND TEXT
+    // ----------------------------------------------------
+    if (action === 'send-text') {
+      const rawPhone = String(data.phone ?? '').replace(/\D/g, '');
+      const formattedPhone = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
+      const sendUrl = resolveEndpointUrl(
+        rawUrl,
+        `/api/messages/${encodeURIComponent(sessionId)}/${encodeURIComponent(formattedPhone)}/send`
+      );
+
+      const res = await fetch(sendUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message: {
+            text: String(data.message ?? ''),
+          },
+        }),
+      });
+
+      const text = await res.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = { raw: text };
+      }
+
+      if (!res.ok) {
+        throw new Error(parsed?.message || parsed?.error || `Erro ${res.status} ao enviar mensagem pelo WA-AKG`);
+      }
+
+      return { success: true, details: parsed };
+    }
+
+    // ----------------------------------------------------
+    // ACTION: SEND MEDIA
+    // ----------------------------------------------------
+    if (action === 'send-media') {
+      const rawPhone = String(data.phone ?? '').replace(/\D/g, '');
+      const formattedPhone = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
+      const sendUrl = resolveEndpointUrl(
+        rawUrl,
+        `/api/messages/${encodeURIComponent(sessionId)}/${encodeURIComponent(formattedPhone)}/send`
+      );
+
+      const mediaType = String(data.mediaType || 'image').toLowerCase();
+      const mediaPayload: Record<string, unknown> = {};
+
+      if (mediaType.includes('image')) {
+        mediaPayload.image = { url: data.mediaUrl };
+      } else if (mediaType.includes('video')) {
+        mediaPayload.video = { url: data.mediaUrl };
+      } else if (mediaType.includes('audio')) {
+        mediaPayload.audio = { url: data.mediaUrl };
+      } else {
+        mediaPayload.document = { url: data.mediaUrl, fileName: data.fileName || 'arquivo' };
+      }
+
+      if (data.caption) {
+        mediaPayload.caption = String(data.caption);
+      }
+
+      const res = await fetch(sendUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message: mediaPayload }),
+      });
+
+      const text = await res.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = { raw: text };
+      }
+
+      if (!res.ok) {
+        throw new Error(parsed?.message || parsed?.error || `Erro ${res.status} ao enviar mídia pelo WA-AKG`);
+      }
+
+      return { success: true, details: parsed };
+    }
+
+    // ----------------------------------------------------
+    // ACTION: CONFIGURE WEBHOOK
+    // ----------------------------------------------------
+    if (action === 'configure-webhook') {
+      const webhookUrl =
+        (data.url as string) ||
+        `${import.meta.env.VITE_SUPABASE_URL || 'https://eafntyicpalnyzonnrgn.supabase.co'}/functions/v1/evolution-webhook`;
+
+      const targetUrl = resolveEndpointUrl(rawUrl, '/api/webhooks');
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: 'Escolinha Webhook',
+          url: webhookUrl,
+          secret: 'escola-webhook-secret',
+          sessionId,
+          events: ['message.received', 'message.sent'],
+        }),
+      });
+
+      const text = await res.text();
+      let parsed: any;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = { raw: text };
+      }
+
+      if (!res.ok) {
+        throw new Error(parsed?.message || parsed?.error || `Erro ${res.status} ao configurar webhook no WA-AKG`);
+      }
+
+      return { success: true, details: parsed };
+    }
+
+    throw new Error(`Ação "${action}" não suportada`);
+  } catch (err: any) {
+    if (action === 'status') {
+      return {
+        status: { connected: false, jid: null },
+        instance: { name: sessionId, status: 'disconnected', qrcode: null, paircode: null },
+      };
+    }
+    throw err;
   }
 }
-
