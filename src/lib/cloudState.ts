@@ -21,6 +21,16 @@ export function getSchoolId(): Promise<string | null> {
         .eq('id', userId)
         .maybeSingle();
       return data?.school_id ?? null;
+        if (typeof window !== 'undefined') {
+          const saSchoolId = window.localStorage.getItem('super_admin_active_school_id');
+          if (saSchoolId) return saSchoolId;
+        }
+        const { data } = await supabase
+          .from('profiles')
+          .select('school_id')
+          .eq('id', userId)
+          .maybeSingle();
+        return data?.school_id ?? null;
       })();
     }
     return schoolIdPromise;

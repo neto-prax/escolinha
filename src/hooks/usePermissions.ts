@@ -165,16 +165,23 @@ export function getDefaultPermissionsForRoles(roles: AppRole[]): UserVisibilityC
 
 export function usePermissions() {
   const { user, roles } = useAuth();
+  const { user, roles, isSuperAdmin } = useAuth();
   const [permissionsStore, setPermissionsStore] = useLocalStorage<AllUserPermissions>(
     'escolinha_user_permissions_v2',
     {}
   );
 
   const isDirector = roles.includes('director');
+  const isDirector = roles.includes('director') || isSuperAdmin;
 
   const canAccessScreen = (screenId: string, targetUserId?: string): boolean => {
     const checkUserId = targetUserId || user?.id;
     if (!checkUserId) return true; // Se não autenticado ou em carregamento, não bloqueia inicialmente
+
+    // Super admin autenticado tem acesso irrestrito a todas as telas
+    if (isSuperAdmin && (!targetUserId || targetUserId === user?.id)) {
+      return true;
+    }
 
     const userConfig = permissionsStore[checkUserId];
 
@@ -192,6 +199,11 @@ export function usePermissions() {
   const canAccessTab = (screenId: string, tabId: string, targetUserId?: string): boolean => {
     const checkUserId = targetUserId || user?.id;
     if (!checkUserId) return true;
+
+    // Super admin tem acesso irrestrito a todas as abas de todas as telas
+    if (isSuperAdmin && (!targetUserId || targetUserId === user?.id)) {
+      return true;
+    }
 
     // Primeiro verifica se a tela está liberada
     if (!canAccessScreen(screenId, checkUserId)) return false;
@@ -216,6 +228,10 @@ export function usePermissions() {
     const checkUserId = targetUserId || user?.id;
     if (!checkUserId) return true;
 
+    if (isSuperAdmin && (!targetUserId || targetUserId === user?.id)) {
+      return true;
+    }
+
     const userConfig = permissionsStore[checkUserId];
     if (userConfig && userConfig.kpis && typeof userConfig.kpis[screenId] === 'boolean') {
       return userConfig.kpis[screenId];
@@ -231,6 +247,10 @@ export function usePermissions() {
   const getUserAllowedSedes = (targetUserId?: string, userRoles: AppRole[] = []): string[] => {
     const checkUserId = targetUserId || user?.id;
     if (!checkUserId) return ['todas'];
+
+    if (isSuperAdmin && (!targetUserId || targetUserId === user?.id)) {
+      return ['todas'];
+    }
 
     const userConfig = permissionsStore[checkUserId];
     if (userConfig && Array.isArray(userConfig.sedes) && userConfig.sedes.length > 0) {

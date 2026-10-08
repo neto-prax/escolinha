@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone, Plus, Image as ImageIcon, Unlock } from 'lucide-react';
+import { Loader2, School, Users, GraduationCap, Trash2, Key, Settings, Shield, Search, AlertTriangle, RefreshCw, Ban, Check, DollarSign, Building2, ArrowLeft, Phone, Plus, Image as ImageIcon, Unlock, ExternalLink } from 'lucide-react';
 import { BillingTab } from '@/components/superadmin/BillingTab';
 import { UazapiSettings } from '@/components/settings/UazapiSettings';
 import { ConfiguracoesTab } from '@/components/superadmin/ConfiguracoesTab';
@@ -79,6 +80,7 @@ const ROLE_COLORS: Record<string, string> = {
 export default function SuperAdmin() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, selectSchool } = useAuth();
   const { schoolSubscriptions, markSchoolAsManualFree } = usePlatformBillingSettings();
   
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
@@ -645,6 +647,18 @@ export default function SuperAdmin() {
                                   <Unlock className="h-3.5 w-3.5" /> Liberar
                                 </Button>
                               )}
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={async () => {
+                                  await selectSchool(school.id);
+                                  navigate('/app/dashboard');
+                                }}
+                                title={`Acessar painel e módulos de ${school.name}`}
+                                className="bg-amber-600 hover:bg-amber-700 text-white text-xs gap-1.5 h-8 font-medium shadow-xs"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" /> Acessar
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"

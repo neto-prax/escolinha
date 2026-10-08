@@ -11,6 +11,8 @@ interface AuthContextType {
   profile: UserProfile | null;
   roles: AppRole[];
   school: School | null;
+  availableSchools: School[];
+  isSuperAdmin: boolean;
   sectors: Sector[];
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -22,6 +24,7 @@ interface AuthContextType {
   hasPermission: (module: string) => boolean;
   hasSectorAccess: (sectorId: string) => boolean;
   refreshProfile: () => Promise<void>;
+  selectSchool: (schoolId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +35,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [school, setSchool] = useState<School | null>(null);
+  const [availableSchools, setAvailableSchools] = useState<School[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const activeUserId = useRef<string | null>(null);
@@ -40,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchUserData = useCallback(async (userId: string) => {
     try {
       // Fetch profile
+      // 1. Fetch profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -50,6 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile(profileData as UserProfile);
 
       // Fetch roles
+      // 2. Fetch roles
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('role')
@@ -62,13 +69,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Fetch school if user has one
       if (profileData?.school_id) {
         const { data: schoolData, error: schoolError } = await supabase
+      // 3. Check super admin status
+      const { data: superAdminData } = await supabase
+        .from('super_admins')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const { data: sessionUser } = await supabase.auth.getUser();
+      const isSuper = !!superAdminData || sessionUser?.user?.email === 'sport@gmail.com';
+      setIsSuperAdmin(isSuper);
+
+      if (isSuper) {
+        // Super admin has all permissions
+        const superRoles: AppRole[] = Array.from(new Set([...userRoles, 'director' as AppRole]));
+        setRoles(superRoles);
+
+        // Fetch all schools for the super admin
+        const { data: allSchoolsData } = await supabase
           .from('schools')
           .select('*')
           .eq('id', profileData.school_id)
           .single();
+          .order('name');
+        const schoolList = (allSchoolsData as School[]) || [];
+        setAvailableSchools(schoolList);
 
         if (!schoolError && schoolData) {
           setSchool(schoolData as School);
+        // Determine active school
+        let activeSchool: School | null = null;
+        const savedSchoolId = typeof window !== 'undefined' ? localStorage.getItem('super_admin_active_school_id') : null;
+        if (savedSchoolId && schoolList.some((s) => s.id === savedSchoolId)) {
+          activeSchool = schoolList.find((s) => s.id === savedSchoolId) || null;
+        } else if (profileData?.school_id && schoolList.some((s) => s.id === profileData.school_id)) {
+          activeSchool = schoolList.find((s) => s.id === profileData.school_id) || null;
+        } else if (schoolList.length > 0) {
+          activeSchool = schoolList[0];
         }
       }
 
@@ -77,12 +114,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('user_sectors')
         .select('sector_id, sectors(*)')
         .eq('user_id', userId);
+        setSchool(activeSchool);
+        if (activeSchool && typeof window !== 'undefined') {
+          localStorage.setItem('super_admin_active_school_id', activeSchool.id);
+        }
 
       if (!sectorsError && userSectorsData) {
         const userSectors = userSectorsData
           .filter((us) => us.sectors)
           .map((us) => us.sectors as unknown as Sector);
         setSectors(userSectors);
+        // Virtual profile ensuring school_id is available for all queries
+        setProfile({
+          ...(profileData as UserProfile),
+          school_id: activeSchool?.id || profileData?.school_id || null,
+        });
+
+        // Fetch sectors for active school
+        if (activeSchool?.id) {
+          const { data: schoolSectors } = await supabase
+            .from('sectors')
+            .select('*')
+            .eq('school_id', activeSchool.id);
+          if (schoolSectors) {
+            setSectors(schoolSectors as Sector[]);
+          }
+        }
+      } else {
+        // Standard user flow
+        setProfile(profileData as UserProfile);
+        setRoles(userRoles);
+        setAvailableSchools([]);
+
+        // Fetch school if user has one
+        if (profileData?.school_id) {
+          const { data: schoolData, error: schoolError } = await supabase
+            .from('schools')
+            .select('*')
+            .eq('id', profileData.school_id)
+            .single();
+
+          if (!schoolError && schoolData) {
+            setSchool(schoolData as School);
+          }
+        }
+
+        // Fetch user sectors
+        const { data: userSectorsData, error: sectorsError } = await supabase
+          .from('user_sectors')
+          .select('sector_id, sectors(*)')
+          .eq('user_id', userId);
+
+        if (!sectorsError && userSectorsData) {
+          const userSectors = userSectorsData
+            .filter((us) => us.sectors)
+            .map((us) => us.sectors as unknown as Sector);
+          setSectors(userSectors);
+        }
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -207,6 +295,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     resetSchoolIdCache();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('super_admin_active_school_id');
+    }
     await supabase.auth.signOut();
     toast({
       title: 'Logout realizado',
@@ -214,15 +305,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const selectSchool = async (schoolId: string) => {
+    if (!isSuperAdmin) return;
+    const targetSchool = availableSchools.find((s) => s.id === schoolId);
+    if (!targetSchool) return;
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('super_admin_active_school_id', schoolId);
+    }
+    resetSchoolIdCache();
+    setSchool(targetSchool);
+    if (profile) {
+      setProfile({
+        ...profile,
+        school_id: targetSchool.id,
+      });
+    }
+
+    const { data: schoolSectors } = await supabase
+      .from('sectors')
+      .select('*')
+      .eq('school_id', targetSchool.id);
+    if (schoolSectors) {
+      setSectors(schoolSectors as Sector[]);
+    }
+
+    toast({
+      title: 'Escola selecionada',
+      description: `Visualizando escola: ${targetSchool.name}`,
+    });
+
+    window.dispatchEvent(new CustomEvent('school-changed', { detail: { schoolId } }));
+  };
+
   const hasRole = (role: AppRole): boolean => {
+    if (isSuperAdmin) return true;
     return roles.includes('director') || roles.includes(role);
   };
 
   const hasAnyRole = (checkRoles: AppRole[]): boolean => {
+    if (isSuperAdmin) return true;
     return roles.includes('director') || checkRoles.some((role) => roles.includes(role));
   };
 
   const hasPermission = (module: string): boolean => {
+    if (isSuperAdmin) return true;
     if (roles.includes('director')) return true;
 
     const modulePermissions: Record<string, AppRole[]> = {
@@ -246,6 +373,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const hasSectorAccess = (sectorId: string): boolean => {
+    if (isSuperAdmin) return true;
     if (roles.includes('director')) return true;
     return sectors.some((sector) => sector.id === sectorId);
   };
@@ -258,6 +386,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         roles,
         school,
+        availableSchools,
+        isSuperAdmin,
         sectors,
         isLoading,
         isAuthenticated: !!user,
@@ -269,6 +399,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasPermission,
         hasSectorAccess,
         refreshProfile,
+        selectSchool,
       }}
     >
       {children}

@@ -16,10 +16,12 @@ import { ROLE_LABELS } from '@/types/auth';
 import { Logo } from '@/components/common/Logo';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useNavigate } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 import { useSedes } from '@/hooks/useSedes';
 
 export const Topbar = () => {
   const { user, profile, roles, school, signOut } = useAuth();
+  const { user, profile, roles, school, signOut, isSuperAdmin, availableSchools, selectSchool } = useAuth();
   const {
     sedes,
     userAllowedSedes,
@@ -32,6 +34,7 @@ export const Topbar = () => {
   } = useSedes();
   const navigate = useNavigate();
   const isDirector = roles.includes('director') || roles.length === 0;
+  const isDirector = roles.includes('director') || roles.length === 0 || isSuperAdmin;
 
   const initials = profile?.full_name
     ?.split(' ')
@@ -162,6 +165,65 @@ export const Topbar = () => {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Seletor Global de Escolas para o Super Admin */}
+      {isSuperAdmin && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 font-medium text-xs transition-all shadow-xs cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              title="Alternar escola em visualização (Modo Super Admin)"
+            >
+              <Shield className="h-4 w-4 fill-amber-500 text-amber-600 shrink-0" />
+              <div className="flex flex-col text-left min-w-0">
+                <span className="text-[9px] uppercase font-extrabold tracking-wider text-amber-600 dark:text-amber-400 leading-none">
+                  Super Admin
+                </span>
+                <span className="font-semibold text-xs text-foreground truncate max-w-[130px] sm:max-w-[170px] leading-tight mt-0.5">
+                  {school?.name || 'Selecione a Escola'}
+                </span>
+              </div>
+              <ChevronDown className="h-3 w-3 text-amber-600 dark:text-amber-400 opacity-70 group-data-[state=open]:rotate-180 transition-transform shrink-0 ml-0.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-72 max-h-80 overflow-y-auto p-1.5 shadow-lg border-amber-200">
+            <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1.5 flex items-center justify-between">
+              <span>Escolas da Rede</span>
+              <Badge className="bg-amber-500 text-white text-[9px] px-1.5 py-0 h-4">
+                Total: {availableSchools.length}
+              </Badge>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {availableSchools.map((s) => (
+              <DropdownMenuItem
+                key={s.id}
+                className={cn(
+                  'flex items-center justify-between cursor-pointer text-xs py-2 px-2.5 rounded-md',
+                  school?.id === s.id
+                    ? 'bg-amber-100/80 dark:bg-amber-950/60 font-semibold text-amber-900 dark:text-amber-200'
+                    : 'hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                )}
+                onClick={() => selectSchool(s.id)}
+              >
+                <div className="flex flex-col min-w-0 pr-2">
+                  <span className="truncate">{s.name}</span>
+                  <span className="text-[10px] text-muted-foreground truncate">{s.slug}</span>
+                </div>
+                {school?.id === s.id && <Check className="h-4 w-4 text-amber-600 shrink-0" />}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => navigate('/super-admin')}
+              className="text-xs font-semibold text-amber-600 dark:text-amber-400 cursor-pointer py-2"
+            >
+              <Settings className="mr-2 h-3.5 w-3.5" />
+              Painel Global Super Admin
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
       {/* Busca global */}
       <div className="flex-1 max-w-md mx-auto">
         <div className="relative">
@@ -196,10 +258,16 @@ export const Topbar = () => {
               <div className="hidden lg:flex flex-col items-start">
                 <span className="text-sm font-medium">{profile?.full_name || 'Usuário'}</span>
                 {primaryRole && (
+                {isSuperAdmin ? (
+                  <span className="text-xs text-amber-600 font-semibold flex items-center gap-1">
+                    <Shield className="h-3 w-3 fill-amber-500 text-amber-500" /> Super Admin
+                  </span>
+                ) : primaryRole ? (
                   <span className="text-xs text-muted-foreground">
                     {ROLE_LABELS[primaryRole]}
                   </span>
                 )}
+                ) : null}
               </div>
             </Button>
           </DropdownMenuTrigger>
@@ -224,6 +292,10 @@ export const Topbar = () => {
               <DropdownMenuItem onClick={() => navigate('/super-admin')}>
                 <Shield className="mr-2 h-4 w-4" />
                 Superadmin
+            {isSuperAdmin && (
+              <DropdownMenuItem onClick={() => navigate('/super-admin')} className="font-semibold text-amber-600 dark:text-amber-400">
+                <Shield className="mr-2 h-4 w-4 text-amber-500 fill-amber-500/20" />
+                Painel Super Admin
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
