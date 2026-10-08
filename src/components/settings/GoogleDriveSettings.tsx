@@ -1,26 +1,28 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { driveAction } from '@/lib/googleDrive';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { HardDrive, ExternalLink, Loader2, Unplug } from 'lucide-react';
 import { toast } from 'sonner';
 
-export const useGoogleDriveStatus = () =>
-  useQuery({
-    queryKey: ['google-drive-status'],
+export const useGoogleDriveStatus = () => {
+  const { user, profile } = useAuth();
+  return useQuery({
+    queryKey: ['google-drive-status', profile?.school_id, user?.id],
+    enabled: !!profile?.school_id && !!user,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('google-drive', { body: { action: 'status' } });
-      if (error) throw error;
-      return data as { connected: boolean; email: string | null; folder_url: string | null };
+      return driveAction<{ connected: boolean; email: string | null; folder_url: string | null; can_manage: boolean }>({ action: 'status' });
     },
   });
+};
 
 export const GoogleDriveSettings = () => {
   const qc = useQueryClient();
-  const { data, isLoading } = useGoogleDriveStatus();
+  const { data, isLoading, error: statusError, refetch } = useGoogleDriveStatus();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -37,17 +39,15 @@ export const GoogleDriveSettings = () => {
   const connect = useMutation({
     mutationFn: async () => {
       const return_url = `${window.location.origin}/app/configuracoes?tab=pedagogico&sub=drive`;
-      const { data, error } = await supabase.functions.invoke('google-drive', { body: { action: 'auth-url', return_url } });
-      if (error) throw new Error((await (error as any).context?.json?.().catch(() => null))?.error || error.message);
-      window.top ? (window.top.location.href = data.url) : (window.location.href = data.url);
+      const data = await driveAction<{ url: string }>({ action: 'auth-url', return_url });
+      window.location.assign(data.url);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const disconnect = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.functions.invoke('google-drive', { body: { action: 'disconnect' } });
-      if (error) throw error;
+      await driveAction({ action: 'disconnect' });
     },
     onSuccess: () => {
       toast.success('Google Drive desconectado.');
@@ -62,12 +62,9 @@ export const GoogleDriveSettings = () => {
         <CardTitle className="flex items-center gap-2 text-base">
           <HardDrive className="text-primary" size={20} /> Google Drive da escola
         </CardTitle>
-        <CardDescription>
-          Fotos e vídeos lançados na aba Registros são enviados para o Google Drive da escola, em uma pasta por turma.
-        </CardDescription>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
+        {statusError ? <div className="space-y-2"><p className="text-sm text-destructive">{statusError.message}</p><Button variant="outline" onClick={() => refetch()}>Tentar novamente</Button></div> : isLoading ? (
           <Loader2 className="animate-spin text-muted-foreground" />
         ) : data?.connected ? (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -83,13 +80,13 @@ export const GoogleDriveSettings = () => {
                   </a>
                 </Button>
               )}
-              <Button variant="destructive" size="sm" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
+              {data.can_manage && <Button variant="destructive" size="sm" onClick={() => { if (window.confirm('Desconectar o Drive? Os arquivos existentes serão preservados.')) disconnect.mutate(); }} disabled={disconnect.isPending}>
                 <Unplug size={14} className="mr-1" /> Desconectar
-              </Button>
+              </Button>}
             </div>
           </div>
         ) : (
-          <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
+          <Button onClick={() => connect.mutate()} disabled={connect.isPending || !data?.can_manage}>
             {connect.isPending && <Loader2 className="mr-2 animate-spin" size={16} />}
             Conectar com Google
           </Button>

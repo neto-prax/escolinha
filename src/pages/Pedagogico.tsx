@@ -89,7 +89,7 @@ const Pedagogico = () => {
       id: 'registros',
       label: (
         <span className="flex items-center gap-2">
-          <Camera size={16} /> Registros
+          <Camera size={16} /> Registro
         </span>
       ),
       content: <RegistrosTab />,

@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 // Pages
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import GoogleDriveCallback from "./pages/GoogleDriveCallback";
 import Dashboard from "./pages/Dashboard";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalDashboard from "./pages/portal/PortalDashboard";
@@ -54,6 +55,7 @@ const App = () => (
 
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/google-drive/callback" element={<GoogleDriveCallback />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
             <Route path="/report/:schoolId/:date" element={<PublicDailyReport />} />
             
