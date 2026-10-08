@@ -9,6 +9,12 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     proxy: {
+      '/api/wa-akg-local': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/wa-akg-local/, ''),
+        secure: false,
+      },
       '/api/asaas': {
         target: 'https://api.asaas.com/v3',
         changeOrigin: true,

@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Loader2, QrCode, RefreshCw, Send, Power, Webhook, Server, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { callWaAkg } from '@/services/waAkgClient';
 
 interface StatusResponse {
   instance?: {
@@ -24,6 +25,10 @@ interface StatusResponse {
 }
 
 async function callGateway<T>(functionName: 'wa-akg' | 'uazapi', action: string, data: Record<string, unknown> = {}) {
+  if (functionName === 'wa-akg') {
+    const res = await callWaAkg(action as any, data);
+    return res as T;
+  }
   const { data: result, error } = await supabase.functions.invoke(functionName, { body: { action, data } });
   if (error) throw error;
   if ((result as { error?: string })?.error) throw new Error((result as { error: string }).error);

@@ -10,6 +10,7 @@ import {
   WhatsAppResolutionData,
 } from '@/types/mensagens';
 import { toast } from 'sonner';
+import { callWaAkg } from '@/services/waAkgClient';
 
 export interface UaizapStatusData {
   connected: boolean;
@@ -68,20 +69,15 @@ function useWhatsAppInboxState() {
     queryKey: ['whatsapp-gateway-status', activeGatewayProvider],
     queryFn: async () => {
       try {
-        const functionName = activeGatewayProvider === 'wa-akg' ? 'wa-akg' : 'uazapi';
-        const gatewayData = activeGatewayProvider === 'wa-akg'
-          ? {
-              waAkgUrl: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_url') || undefined : undefined,
-              waAkgApiKey: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_api_key') || undefined : undefined,
-              sessionId: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_session_id') || undefined : undefined,
-            }
-          : {};
+        if (activeGatewayProvider === 'wa-akg') {
+          return await callWaAkg('status');
+        }
 
-        const { data: res, error } = await supabase.functions.invoke(functionName, {
-          body: { action: 'status', data: gatewayData },
+        const { data: res, error } = await supabase.functions.invoke('uazapi', {
+          body: { action: 'status', data: {} },
         });
         if (error) {
-          console.warn(`${functionName} status error:`, error);
+          console.warn('uazapi status error:', error);
           return null;
         }
         return res;
@@ -597,24 +593,23 @@ function useWhatsAppInboxState() {
           ? (localStorage.getItem('whatsapp_gateway_active_provider') || 'wa-akg')
           : 'wa-akg';
 
-        const functionName = activeProvider === 'wa-akg' ? 'wa-akg' : 'uazapi';
-        const gatewayData = activeProvider === 'wa-akg'
-          ? {
-              ...uazData,
-              waAkgUrl: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_url') || undefined : undefined,
-              waAkgApiKey: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_api_key') || undefined : undefined,
-              sessionId: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_session_id') || undefined : undefined,
-            }
-          : uazData;
-
-        const uazRes = await supabase.functions.invoke(functionName, {
-          body: { action: uazAction, data: gatewayData },
-        });
-
-        if (uazRes.error || (uazRes.data as any)?.error) {
-          console.warn(`${functionName} dispatch error:`, uazRes.error || (uazRes.data as any)?.error);
+        if (activeProvider === 'wa-akg') {
+          const akgRes = await callWaAkg(uazAction as any, uazData);
+          if (akgRes.error) {
+            console.warn('wa-akg dispatch error:', akgRes.error);
+          } else {
+            dispatched = true;
+          }
         } else {
-          dispatched = true;
+          const uazRes = await supabase.functions.invoke('uazapi', {
+            body: { action: uazAction, data: uazData },
+          });
+
+          if (uazRes.error || (uazRes.data as any)?.error) {
+            console.warn('uazapi dispatch error:', uazRes.error || (uazRes.data as any)?.error);
+          } else {
+            dispatched = true;
+          }
         }
       } catch (err: any) {
         console.warn('Uazapi call caught error:', err);
@@ -938,26 +933,19 @@ function useWhatsAppInboxState() {
             ? (localStorage.getItem('whatsapp_gateway_active_provider') || 'wa-akg')
             : 'wa-akg';
 
-          const functionName = activeProvider === 'wa-akg' ? 'wa-akg' : 'uazapi';
-          const gatewayData = activeProvider === 'wa-akg'
-            ? {
-                phone: formattedPhone,
-                message: initialMessage.trim(),
-                waAkgUrl: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_url') || undefined : undefined,
-                waAkgApiKey: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_api_key') || undefined : undefined,
-                sessionId: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_session_id') || undefined : undefined,
-              }
-            : {
-                phone: formattedPhone,
-                message: initialMessage.trim(),
-              };
-
-          await supabase.functions.invoke(functionName, {
-            body: {
-              action: 'send-text',
-              data: gatewayData,
-            },
-          });
+          if (activeProvider === 'wa-akg') {
+            await callWaAkg('send-text', {
+              phone: formattedPhone,
+              message: initialMessage.trim(),
+            });
+          } else {
+            await supabase.functions.invoke('uazapi', {
+              body: {
+                action: 'send-text',
+                data: { phone: formattedPhone, message: initialMessage.trim() },
+              },
+            });
+          }
           toast.success(`Mensagem enviada para ${contactName}!`);
         } catch {
           // ignore
