@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.google-drive]
 verify_jwt = false
+
+[functions.wa-akg]
+verify_jwt = false

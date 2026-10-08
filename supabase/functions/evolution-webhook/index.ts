@@ -432,12 +432,13 @@ serve(async (req) => {
 
     const payload = await req.json();
 
-    // Support Uazapi format and Evolution format
+    // Support Uazapi format, Evolution format, and WA-AKG format
     const isUazapi =
       payload.EventType === 'messages' ||
       payload.event === 'messages' ||
       (payload.message && (payload.owner || payload.token || payload.chatid));
     const isEvolution = payload.event === 'messages.upsert';
+    const isWaAkg = payload.event === 'message.received' || (Boolean(payload.sessionId) && Boolean(payload.data?.key));
 
     // Handle updates and connection events
     if (
@@ -450,13 +451,13 @@ serve(async (req) => {
       });
     }
 
-    if (payload.event === 'connection.update' || payload.EventType === 'connection') {
+    if (payload.event === 'connection.update' || payload.EventType === 'connection' || payload.event === 'connection') {
       return new Response(JSON.stringify({ status: 'connection_acknowledged' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    if (!isUazapi && !isEvolution) {
+    if (!isUazapi && !isEvolution && !isWaAkg) {
       // Check if it's a test ping
       return new Response(JSON.stringify({ status: 'acknowledged', raw: payload }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -466,6 +467,7 @@ serve(async (req) => {
     const eventType = String(payload.EventType || payload.event || '').toLowerCase();
     const messagePayload = payload.message && typeof payload.message === 'object' ? payload.message : {};
     const instanceCandidates = [
+      payload.sessionId,
       payload.instanceName,
       typeof payload.instance === 'string' ? payload.instance : payload.instance?.name,
       payload.owner,
@@ -538,6 +540,23 @@ serve(async (req) => {
         mediaUrl = message.message.stickerMessage.url || null;
       } else {
         body = '[Mensagem]';
+      }
+    } else if (isWaAkg) {
+      const akgData = payload.data || {};
+      isFromMe = Boolean(akgData.key?.fromMe);
+      const remoteJid = String(akgData.key?.remoteJid || akgData.from || '');
+      isGroup = Boolean(akgData.isGroup || remoteJid.endsWith('@g.us'));
+      phone = remoteJid.replace(/@.*/, '').replace(/\D/g, '');
+      messageId = String(akgData.key?.id || `akg-${Date.now()}`);
+      pushName = akgData.pushName || akgData.senderName || 'Responsável';
+      body = akgData.content || akgData.text || '';
+      messageType = normalizeMessageType(akgData.type || 'text');
+
+      if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
+        mediaUrl = akgData.fileUrl || akgData.mediaUrl || akgData.url || null;
+        mediaCaption = akgData.caption || akgData.content || null;
+        mediaFilename = akgData.fileName || akgData.docName || null;
+        body = mediaCaption || mediaDefaults(messageType as MediaKind).label;
       }
     }
 

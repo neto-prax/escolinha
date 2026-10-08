@@ -54,26 +54,39 @@ function useWhatsAppInboxState() {
   const [optimisticMessages, setOptimisticMessages] = useState<WhatsAppChatMessage[]>([]);
 
   // ----------------------------------------------------
-  // 1. QUERY UAZAPI STATUS
+  // 1. QUERY WHATSAPP GATEWAY STATUS (WA-AKG ou UAZAPI)
   // ----------------------------------------------------
+  const activeGatewayProvider = typeof window !== 'undefined'
+    ? (localStorage.getItem('whatsapp_gateway_active_provider') || 'wa-akg')
+    : 'wa-akg';
+
   const {
     data: uazapiRawStatus,
     isLoading: isCheckingUazapi,
     refetch: refetchUazapiStatus,
   } = useQuery({
-    queryKey: ['uazapi-status'],
+    queryKey: ['whatsapp-gateway-status', activeGatewayProvider],
     queryFn: async () => {
       try {
-        const { data: res, error } = await supabase.functions.invoke('uazapi', {
-          body: { action: 'status' },
+        const functionName = activeGatewayProvider === 'wa-akg' ? 'wa-akg' : 'uazapi';
+        const gatewayData = activeGatewayProvider === 'wa-akg'
+          ? {
+              waAkgUrl: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_url') || undefined : undefined,
+              waAkgApiKey: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_api_key') || undefined : undefined,
+              sessionId: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_session_id') || undefined : undefined,
+            }
+          : {};
+
+        const { data: res, error } = await supabase.functions.invoke(functionName, {
+          body: { action: 'status', data: gatewayData },
         });
         if (error) {
-          console.warn('Uazapi status error:', error);
+          console.warn(`${functionName} status error:`, error);
           return null;
         }
         return res;
       } catch (err) {
-        console.warn('Uazapi status exception:', err);
+        console.warn('WhatsApp gateway status exception:', err);
         return null;
       }
     },
@@ -84,21 +97,22 @@ function useWhatsAppInboxState() {
     const isConn = Boolean(
       uazapiRawStatus?.status?.connected ||
       uazapiRawStatus?.instance?.status === 'connected' ||
-      uazapiRawStatus?.connected
+      uazapiRawStatus?.connected ||
+      uazapiRawStatus?.isConnected
     );
     const instance = uazapiRawStatus?.instance;
 
     return {
       connected: isConn,
-      instanceName: instance?.name || 'Neto',
-      profileName: instance?.profileName || 'Neto Oliver',
-      ownerPhone: instance?.owner || '557583690441',
+      instanceName: instance?.name || (activeGatewayProvider === 'wa-akg' ? 'WA-AKG' : 'Uazapi'),
+      profileName: instance?.profileName || 'WhatsApp',
+      ownerPhone: instance?.owner || '',
       profilePicUrl: instance?.profilePicUrl,
       statusText: isConn ? 'Conectado (Online)' : 'Desconectado',
       lastChecked: new Date().toISOString(),
       isChecking: isCheckingUazapi,
     };
-  }, [uazapiRawStatus, isCheckingUazapi]);
+  }, [uazapiRawStatus, isCheckingUazapi, activeGatewayProvider]);
 
   // ----------------------------------------------------
   // 2. FETCH SECTORS FROM SUPABASE
@@ -579,12 +593,26 @@ function useWhatsAppInboxState() {
               message: text,
             };
 
-        const uazRes = await supabase.functions.invoke('uazapi', {
-          body: { action: uazAction, data: uazData },
+        const activeProvider = typeof window !== 'undefined'
+          ? (localStorage.getItem('whatsapp_gateway_active_provider') || 'wa-akg')
+          : 'wa-akg';
+
+        const functionName = activeProvider === 'wa-akg' ? 'wa-akg' : 'uazapi';
+        const gatewayData = activeProvider === 'wa-akg'
+          ? {
+              ...uazData,
+              waAkgUrl: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_url') || undefined : undefined,
+              waAkgApiKey: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_api_key') || undefined : undefined,
+              sessionId: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_session_id') || undefined : undefined,
+            }
+          : uazData;
+
+        const uazRes = await supabase.functions.invoke(functionName, {
+          body: { action: uazAction, data: gatewayData },
         });
 
         if (uazRes.error || (uazRes.data as any)?.error) {
-          console.warn('Uazapi dispatch error:', uazRes.error || (uazRes.data as any)?.error);
+          console.warn(`${functionName} dispatch error:`, uazRes.error || (uazRes.data as any)?.error);
         } else {
           dispatched = true;
         }
@@ -906,13 +934,28 @@ function useWhatsAppInboxState() {
 
       if (initialMessage?.trim()) {
         try {
-          await supabase.functions.invoke('uazapi', {
-            body: {
-              action: 'send-text',
-              data: {
+          const activeProvider = typeof window !== 'undefined'
+            ? (localStorage.getItem('whatsapp_gateway_active_provider') || 'wa-akg')
+            : 'wa-akg';
+
+          const functionName = activeProvider === 'wa-akg' ? 'wa-akg' : 'uazapi';
+          const gatewayData = activeProvider === 'wa-akg'
+            ? {
                 phone: formattedPhone,
                 message: initialMessage.trim(),
-              },
+                waAkgUrl: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_url') || undefined : undefined,
+                waAkgApiKey: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_api_key') || undefined : undefined,
+                sessionId: typeof window !== 'undefined' ? localStorage.getItem('wa_akg_session_id') || undefined : undefined,
+              }
+            : {
+                phone: formattedPhone,
+                message: initialMessage.trim(),
+              };
+
+          await supabase.functions.invoke(functionName, {
+            body: {
+              action: 'send-text',
+              data: gatewayData,
             },
           });
           toast.success(`Mensagem enviada para ${contactName}!`);
