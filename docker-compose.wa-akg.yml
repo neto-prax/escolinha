@@ -3,7 +3,7 @@
 services:
   # Servidor do Gateway WA-AKG (Next.js 15 + Baileys)
   wa-akg:
-    image: node:22-alpine
+    image: node:22-bookworm-slim
     container_name: wa-akg-gateway
     restart: unless-stopped
     working_dir: /app
@@ -14,20 +14,22 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=mysql://akg_user:akg_pass123@wa-akg-mysql:3306/wa_akg
       - AUTH_SECRET=sua-chave-secreta-jwt-32-caracteres-minimo
+      - AUTH_TRUST_HOST=true
       - WEBHOOK_URL=https://eafntyicpalnyzonnrgn.supabase.co/functions/v1/evolution-webhook
     depends_on:
       wa-akg-mysql:
         condition: service_healthy
     command: >
       sh -c "
+        apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates git python3 make g++ && rm -rf /var/lib/apt/lists/*;
         if [ ! -f package.json ]; then
           echo 'Clonando repositório WA-AKG...';
-          apk add --no-cache git python3 make g++;
           git clone --depth 1 https://github.com/mrifqidaffaaditya/WA-AKG.git /tmp/wa-repo;
           cp -r /tmp/wa-repo/. /app/;
           rm -rf /tmp/wa-repo;
-          npm install;
+          npm install --include=dev;
         fi;
+        npx prisma generate;
         npx prisma db push;
         npm run build;
         npm run start;
