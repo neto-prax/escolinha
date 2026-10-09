@@ -1,5 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 
+export const WA_AKG_DEFAULT_API_KEY = 'wag_vJGLccAD1L4JciTdBeHTxqDMx5ywrkxr';
+export const WA_AKG_DEFAULT_SESSION = 'cd4iyk';
+
 export interface WaAkgStandardResponse {
   status?: {
     connected?: boolean;
@@ -28,14 +31,87 @@ export function getStoredWaAkgConfig(): Required<WaAkgConfig> {
   const url =
     (typeof window !== 'undefined' ? localStorage.getItem('wa_akg_url') : null) ||
     'http://localhost:3000';
-  const apiKey =
+  let apiKey =
     (typeof window !== 'undefined' ? localStorage.getItem('wa_akg_api_key') : null) ||
     '';
-  const sessionId =
+  if (!apiKey || apiKey === 'escola-secret-token') {
+    apiKey = WA_AKG_DEFAULT_API_KEY;
+  }
+
+  let sessionId =
     (typeof window !== 'undefined' ? localStorage.getItem('wa_akg_session_id') : null) ||
-    'interagir';
+    '';
+  if (!sessionId) {
+    sessionId = WA_AKG_DEFAULT_SESSION;
+  }
 
   return { url: url.trim(), apiKey: apiKey.trim(), sessionId: sessionId.trim() };
+}
+
+export interface WaAkgResolvedSession {
+  sessionId: string; // The Baileys sessionId string key (e.g. "cd4iyk")
+  id: string;        // The internal DB CUID (e.g. "cmv08svgi0003og0g18iyejj8")
+  name: string;      // The human friendly name (e.g. "interagir")
+  status: string;
+}
+
+let cachedSession: WaAkgResolvedSession | null = null;
+
+export async function resolveWaAkgSession(
+  baseUrl: string,
+  headers: Record<string, string>,
+  preferredIdOrName?: string
+): Promise<WaAkgResolvedSession> {
+  const target = preferredIdOrName || getStoredWaAkgConfig().sessionId;
+
+  if (
+    cachedSession &&
+    (cachedSession.sessionId === target ||
+      cachedSession.id === target ||
+      cachedSession.name?.toLowerCase() === target?.toLowerCase())
+  ) {
+    return cachedSession;
+  }
+
+  try {
+    const listUrl = resolveEndpointUrl(baseUrl, '/api/sessions');
+    const res = await fetch(listUrl, { method: 'GET', headers });
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      const list: any[] = Array.isArray(json) ? json : json?.data || json?.sessions || [];
+      if (Array.isArray(list) && list.length > 0) {
+        const found =
+          list.find(
+            (s) =>
+              s.sessionId === target ||
+              s.id === target ||
+              s.name?.toLowerCase() === target?.toLowerCase()
+          ) || list[0];
+
+        if (found) {
+          cachedSession = {
+            sessionId: found.sessionId || found.id,
+            id: found.id || found.sessionId,
+            name: found.name || 'interagir',
+            status: found.status || 'CONNECTED',
+          };
+          if (typeof window !== 'undefined' && found.sessionId) {
+            localStorage.setItem('wa_akg_session_id', found.sessionId);
+          }
+          return cachedSession;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[WA-AKG] Error resolving session from /api/sessions:', e);
+  }
+
+  return {
+    sessionId: target || WA_AKG_DEFAULT_SESSION,
+    id: target || WA_AKG_DEFAULT_SESSION,
+    name: target || 'interagir',
+    status: 'UNKNOWN',
+  };
 }
 
 /**
@@ -83,42 +159,27 @@ export async function callWaAkg(
     // ----------------------------------------------------
     if (action === 'status') {
       try {
-        const targetUrl = resolveEndpointUrl(rawUrl, '/api/sessions');
-        const res = await fetch(targetUrl, { method: 'GET', headers });
-
-        if (!res.ok) {
-          return {
-            status: { connected: false, jid: null },
-            instance: { name: sessionId, status: 'disconnected', qrcode: null, paircode: null },
-          };
-        }
-
-        const json = await res.json().catch(() => null);
-        const sessionsList = Array.isArray(json) ? json : json?.data || json?.sessions || [];
-        const currentSession = sessionsList.find(
-          (s: any) => s.id === sessionId || s.name === sessionId || s.sessionId === sessionId
-        );
-
+        const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
         const isConnected = Boolean(
-          currentSession?.status === 'CONNECTED' ||
-          currentSession?.status === 'connected' ||
-          currentSession?.isConnected === true
+          resolved.status === 'CONNECTED' ||
+          resolved.status === 'connected' ||
+          resolved.status === 'ONLINE'
         );
 
         return {
           success: true,
           status: {
             connected: isConnected,
-            jid: currentSession?.jid || currentSession?.phone || null,
+            jid: null,
           },
           instance: {
-            name: sessionId,
+            name: resolved.name || sessionId,
             status: isConnected ? 'connected' : 'disconnected',
-            qrcode: currentSession?.qr || currentSession?.qrcode || null,
-            paircode: currentSession?.paircode || null,
-            profileName: currentSession?.name || 'WA-AKG',
+            qrcode: null,
+            paircode: null,
+            profileName: resolved.name || 'WA-AKG',
           },
-          details: currentSession,
+          details: resolved,
         };
       } catch {
         return {
@@ -132,7 +193,10 @@ export async function callWaAkg(
     // ACTION: CONNECT (Create Session & Get QR Code)
     // ----------------------------------------------------
     if (action === 'connect') {
-      // 1. Ensure session is created
+      const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+      const targetSessionId = resolved.sessionId || sessionId;
+
+      // 1. Ensure session is created if needed
       const createUrl = resolveEndpointUrl(rawUrl, '/api/sessions');
       await fetch(createUrl, {
         method: 'POST',
@@ -140,8 +204,8 @@ export async function callWaAkg(
         body: JSON.stringify({ name: sessionId }),
       }).catch(() => null);
 
-      // 2. Fetch QR Code from /api/sessions/{sessionId}/qr
-      const qrUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(sessionId)}/qr`);
+      // 2. Fetch QR Code from /api/sessions/{targetSessionId}/qr
+      const qrUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}/qr`);
       const qrRes = await fetch(qrUrl, { method: 'GET', headers });
 
       const text = await qrRes.text();
@@ -183,7 +247,9 @@ export async function callWaAkg(
     // ACTION: DISCONNECT
     // ----------------------------------------------------
     if (action === 'disconnect') {
-      const deleteUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(sessionId)}`);
+      const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+      const targetSessionId = resolved.sessionId || sessionId;
+      const deleteUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}`);
       await fetch(deleteUrl, { method: 'DELETE', headers });
       return {
         success: true,
@@ -196,11 +262,18 @@ export async function callWaAkg(
     // ACTION: SEND TEXT
     // ----------------------------------------------------
     if (action === 'send-text') {
-      const rawPhone = String(data.phone ?? '').replace(/\D/g, '');
-      const formattedPhone = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
+      const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+      const targetSessionId = resolved.sessionId || sessionId;
+
+      const rawPhone = String(data.phone ?? '').trim();
+      const cleanPhone = rawPhone.replace(/\D/g, '');
+      const formattedPhone = rawPhone.includes('@')
+        ? rawPhone
+        : (cleanPhone.startsWith('55') ? `${cleanPhone}@s.whatsapp.net` : `55${cleanPhone}@s.whatsapp.net`);
+
       const sendUrl = resolveEndpointUrl(
         rawUrl,
-        `/api/messages/${encodeURIComponent(sessionId)}/${encodeURIComponent(formattedPhone)}/send`
+        `/api/messages/${encodeURIComponent(targetSessionId)}/${encodeURIComponent(formattedPhone)}/send`
       );
 
       const res = await fetch(sendUrl, {
@@ -232,11 +305,18 @@ export async function callWaAkg(
     // ACTION: SEND MEDIA
     // ----------------------------------------------------
     if (action === 'send-media') {
-      const rawPhone = String(data.phone ?? '').replace(/\D/g, '');
-      const formattedPhone = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
+      const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+      const targetSessionId = resolved.sessionId || sessionId;
+
+      const rawPhone = String(data.phone ?? '').trim();
+      const cleanPhone = rawPhone.replace(/\D/g, '');
+      const formattedPhone = rawPhone.includes('@')
+        ? rawPhone
+        : (cleanPhone.startsWith('55') ? `${cleanPhone}@s.whatsapp.net` : `55${cleanPhone}@s.whatsapp.net`);
+
       const sendUrl = resolveEndpointUrl(
         rawUrl,
-        `/api/messages/${encodeURIComponent(sessionId)}/${encodeURIComponent(formattedPhone)}/send`
+        `/api/messages/${encodeURIComponent(targetSessionId)}/${encodeURIComponent(formattedPhone)}/send`
       );
 
       const mediaType = String(data.mediaType || 'image').toLowerCase();
@@ -285,19 +365,32 @@ export async function callWaAkg(
         (data.url as string) ||
         `${import.meta.env.VITE_SUPABASE_URL || 'https://eafntyicpalnyzonnrgn.supabase.co'}/functions/v1/evolution-webhook`;
 
-      const primaryUrl = resolveEndpointUrl(rawUrl, `/api/webhooks/${encodeURIComponent(sessionId)}`);
-      let res = await fetch(primaryUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: 'Escolinha Webhook',
-          url: webhookUrl,
-          secret: 'escola-webhook-secret',
-          events: ['message.received', 'message.sent'],
-        }),
-      });
+      const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+      const candidateIds = [resolved.sessionId, resolved.id, sessionId].filter(Boolean) as string[];
 
-      if (!res.ok && res.status === 404) {
+      let res: Response | null = null;
+      for (const targetId of candidateIds) {
+        const targetUrl = resolveEndpointUrl(rawUrl, `/api/webhooks/${encodeURIComponent(targetId)}`);
+        const attempt = await fetch(targetUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            name: 'Escolinha Webhook',
+            url: webhookUrl,
+            secret: 'escola-webhook-secret',
+            events: ['message.received', 'message.sent', 'message.status'],
+          }),
+        }).catch(() => null);
+
+        if (attempt && attempt.ok) {
+          res = attempt;
+          break;
+        } else if (attempt && !res) {
+          res = attempt;
+        }
+      }
+
+      if (!res || !res.ok) {
         const fallbackUrl = resolveEndpointUrl(rawUrl, '/api/webhooks');
         const fallbackRes = await fetch(fallbackUrl, {
           method: 'POST',
@@ -305,15 +398,19 @@ export async function callWaAkg(
           body: JSON.stringify({
             name: 'Escolinha Webhook',
             url: webhookUrl,
-            sessionId,
+            sessionId: resolved.sessionId || sessionId,
             secret: 'escola-webhook-secret',
-            events: ['message.received', 'message.sent'],
+            events: ['message.received', 'message.sent', 'message.status'],
           }),
         }).catch(() => null);
 
         if (fallbackRes && fallbackRes.ok) {
           res = fallbackRes;
         }
+      }
+
+      if (!res) {
+        throw new Error('Não foi possível conectar ao servidor WA-AKG para cadastrar webhook.');
       }
 
       const text = await res.text();
@@ -349,7 +446,6 @@ export async function callWaAkg(
 export async function syncWaAkgChats(schoolId: string): Promise<{ synced: number; error?: string }> {
   const stored = getStoredWaAkgConfig();
 
-  const targetUrl = resolveEndpointUrl(stored.url, `/api/chat/${encodeURIComponent(stored.sessionId)}`);
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -357,6 +453,10 @@ export async function syncWaAkgChats(schoolId: string): Promise<{ synced: number
     headers['X-API-Key'] = stored.apiKey;
     headers['Authorization'] = `Bearer ${stored.apiKey}`;
   }
+
+  // 1. Resolve effective session string or id from /api/sessions
+  const session = await resolveWaAkgSession(stored.url, headers, stored.sessionId);
+  const targetUrl = resolveEndpointUrl(stored.url, `/api/chat/${encodeURIComponent(session.sessionId)}`);
 
   try {
     const res = await fetch(targetUrl, { method: 'GET', headers });
@@ -431,7 +531,7 @@ export async function syncWaAkgChats(schoolId: string): Promise<{ synced: number
       if (convId) {
         syncedCount++;
         // Sync recent messages for this chat if available
-        await syncWaAkgMessages(convId, formattedPhone).catch(() => null);
+        await syncWaAkgMessages(convId, rawJid || formattedPhone).catch(() => null);
       }
     }
 
@@ -447,13 +547,6 @@ export async function syncWaAkgChats(schoolId: string): Promise<{ synced: number
 export async function syncWaAkgMessages(conversationId: string, phone: string): Promise<number> {
   const stored = getStoredWaAkgConfig();
 
-  const rawPhone = phone.replace(/\D/g, '');
-  const jid = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
-  const targetUrl = resolveEndpointUrl(
-    stored.url,
-    `/api/chat/${encodeURIComponent(stored.sessionId)}/${encodeURIComponent(jid)}`
-  );
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -462,21 +555,40 @@ export async function syncWaAkgMessages(conversationId: string, phone: string): 
     headers['Authorization'] = `Bearer ${stored.apiKey}`;
   }
 
+  const session = await resolveWaAkgSession(stored.url, headers, stored.sessionId);
+
+  let jid = phone.trim();
+  if (!jid.includes('@')) {
+    const clean = jid.replace(/\D/g, '');
+    const with55 = clean.startsWith('55') ? clean : `55${clean}`;
+    jid = `${with55}@s.whatsapp.net`;
+  }
+
+  const targetUrl = resolveEndpointUrl(
+    stored.url,
+    `/api/chat/${encodeURIComponent(session.sessionId)}/${encodeURIComponent(jid)}`
+  );
+
   try {
     const res = await fetch(targetUrl, { method: 'GET', headers });
     if (!res.ok) return 0;
 
     const json = await res.json().catch(() => null);
-    const messages = Array.isArray(json) ? json : json?.data || json?.messages || [];
+    const messages = Array.isArray(json?.data)
+      ? json.data
+      : Array.isArray(json)
+      ? json
+      : json?.data?.messages || json?.messages || [];
     if (!Array.isArray(messages) || messages.length === 0) return 0;
 
     let saved = 0;
     for (const msg of messages) {
-      const extId = String(msg.id || msg.key?.id || '');
+      const extId = String(msg.id || msg.keyId || msg.key?.id || '');
       if (!extId) continue;
 
       const isFromMe = Boolean(msg.fromMe ?? msg.key?.fromMe);
       const text =
+        msg.content ||
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
         msg.text ||
@@ -484,7 +596,7 @@ export async function syncWaAkgMessages(conversationId: string, phone: string): 
         '';
 
       const time = msg.timestamp
-        ? new Date(Number(msg.timestamp) * 1000).toISOString()
+        ? new Date(msg.timestamp).toISOString()
         : msg.createdAt || new Date().toISOString();
 
       const { data: dup } = await supabase

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Loader2, QrCode, RefreshCw, Send, Power, Webhook, Server, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
-import { callWaAkg } from '@/services/waAkgClient';
+import { callWaAkg, WA_AKG_DEFAULT_API_KEY } from '@/services/waAkgClient';
 
 interface StatusResponse {
   instance?: {
@@ -40,7 +40,7 @@ export function UazapiSettings() {
 
   // WA-AKG Config State
   const [akgUrl, setAkgUrl] = useState('http://localhost:3000');
-  const [akgApiKey, setAkgApiKey] = useState('');
+  const [akgApiKey, setAkgApiKey] = useState(WA_AKG_DEFAULT_API_KEY);
   const [akgSessionId, setAkgSessionId] = useState('interagir');
 
   // Connection & Testing State
@@ -62,7 +62,11 @@ export function UazapiSettings() {
       if (savedUrl) setAkgUrl(savedUrl);
 
       const savedApiKey = localStorage.getItem('wa_akg_api_key');
-      if (savedApiKey) setAkgApiKey(savedApiKey);
+      if (savedApiKey && savedApiKey !== 'escola-secret-token') {
+        setAkgApiKey(savedApiKey);
+      } else {
+        setAkgApiKey(WA_AKG_DEFAULT_API_KEY);
+      }
 
       const savedSession = localStorage.getItem('wa_akg_session_id');
       if (savedSession) setAkgSessionId(savedSession);

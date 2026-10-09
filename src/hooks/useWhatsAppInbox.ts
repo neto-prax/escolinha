@@ -1,4 +1,4 @@
-import { createContext, createElement, ReactNode, useState, useEffect, useMemo, useCallback, useContext } from 'react';
+import { createContext, createElement, ReactNode, useState, useEffect, useMemo, useCallback, useContext, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -295,6 +295,22 @@ function useWhatsAppInboxState() {
       supabase.removeChannel(channel);
     };
   }, [queryClient, schoolId]);
+
+  // Auto-sync existing conversations in background on load if connected to WA-AKG
+  const hasAutoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (activeGatewayProvider === 'wa-akg' && schoolId && uaizapStatus.connected && !hasAutoSyncedRef.current) {
+      hasAutoSyncedRef.current = true;
+      syncWaAkgChats(schoolId)
+        .then((res) => {
+          if (res.synced > 0) {
+            queryClient.invalidateQueries({ queryKey: ['inbox-db-conversations'] });
+            queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
+          }
+        })
+        .catch(() => null);
+    }
+  }, [activeGatewayProvider, schoolId, uaizapStatus.connected, queryClient]);
 
   // Map DB conversations into WhatsAppChatConversation format
   const mappedDbConversations: WhatsAppChatConversation[] = useMemo(() => {
