@@ -10,7 +10,7 @@ import {
   WhatsAppResolutionData,
 } from '@/types/mensagens';
 import { toast } from 'sonner';
-import { callWaAkg } from '@/services/waAkgClient';
+import { callWaAkg, syncWaAkgChats, syncWaAkgMessages } from '@/services/waAkgClient';
 
 export interface UaizapStatusData {
   connected: boolean;
@@ -466,6 +466,10 @@ function useWhatsAppInboxState() {
         } else {
           return [];
         }
+      }
+
+      if (activeGatewayProvider === 'wa-akg') {
+        await syncWaAkgMessages(conversationDbId, activeConversation.phone).catch(() => null);
       }
 
       let msgQuery = supabase
@@ -967,6 +971,15 @@ function useWhatsAppInboxState() {
       const isOnline = Boolean(statusResult.data?.status?.connected);
       const instanceName = statusResult.data?.instance?.profileName || statusResult.data?.instance?.name || 'Online';
 
+      let waAkgSynced = 0;
+      if (activeGatewayProvider === 'wa-akg' && schoolId) {
+        const syncRes = await syncWaAkgChats(schoolId);
+        waAkgSynced = syncRes.synced;
+        if (syncRes.error) {
+          toast.info(`WA-AKG: ${syncRes.error}`);
+        }
+      }
+
       await refetchDbConversations();
       await refetchDbMessages();
       await queryClient.invalidateQueries({ queryKey: ['inbox-db-messages'] });
@@ -974,7 +987,11 @@ function useWhatsAppInboxState() {
 
       const providerLabel = activeGatewayProvider === 'wa-akg' ? 'WA-AKG' : 'Uazapi';
       if (isOnline) {
-        toast.success(`${providerLabel} online (${instanceName})! Conversas atualizadas.`);
+        if (activeGatewayProvider === 'wa-akg' && waAkgSynced > 0) {
+          toast.success(`${providerLabel} online! ${waAkgSynced} conversas sincronizadas.`);
+        } else {
+          toast.success(`${providerLabel} online (${instanceName})! Conversas atualizadas.`);
+        }
       } else {
         toast.warning(`${providerLabel}: Instância aguardando conexão no WhatsApp.`);
       }

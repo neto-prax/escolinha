@@ -1,3 +1,5 @@
+import { supabase } from '@/integrations/supabase/client';
+
 export interface WaAkgStandardResponse {
   status?: {
     connected?: boolean;
@@ -320,5 +322,175 @@ export async function callWaAkg(
       };
     }
     throw err;
+  }
+}
+
+/**
+ * Fetches all chats from the local WA-AKG instance and syncs them to Supabase whatsapp_conversations.
+ */
+export async function syncWaAkgChats(schoolId: string): Promise<{ synced: number; error?: string }> {
+  const stored = getStoredWaAkgConfig();
+
+  const targetUrl = resolveEndpointUrl(stored.url, `/api/chat/${encodeURIComponent(stored.sessionId)}`);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (stored.apiKey) {
+    headers['X-API-Key'] = stored.apiKey;
+    headers['Authorization'] = `Bearer ${stored.apiKey}`;
+  }
+
+  try {
+    const res = await fetch(targetUrl, { method: 'GET', headers });
+    if (!res.ok) {
+      if (res.status === 401) {
+        return { synced: 0, error: 'Chave de API do WA-AKG necessária para sincronizar conversas.' };
+      }
+      return { synced: 0, error: `Erro ${res.status} ao consultar conversas no WA-AKG` };
+    }
+
+    const json = await res.json().catch(() => null);
+    const chats = Array.isArray(json) ? json : json?.data || json?.chats || [];
+
+    if (!Array.isArray(chats) || chats.length === 0) {
+      return { synced: 0 };
+    }
+
+    let syncedCount = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const chat of chats) {
+      const rawJid = String(chat.jid || chat.id || '');
+      if (!rawJid || rawJid.endsWith('@g.us')) continue; // Ignore groups
+
+      const cleanPhone = rawJid.replace(/@.*/, '').replace(/\D/g, '');
+      if (!cleanPhone) continue;
+
+      const formattedPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+      const contactName = chat.name || chat.pushName || formattedPhone;
+      const lastMsgText = typeof chat.lastMessage === 'string'
+        ? chat.lastMessage
+        : chat.lastMessage?.text || chat.lastMessage?.message?.conversation || chat.lastMessage?.message?.extendedTextMessage?.text || '[Mensagem]';
+
+      const lastMsgTime = chat.lastMessage?.timestamp
+        ? new Date(Number(chat.lastMessage.timestamp) * 1000).toISOString()
+        : nowIso;
+
+      const { data: existing } = await supabase
+        .from('whatsapp_conversations')
+        .select('id')
+        .eq('school_id', schoolId)
+        .or(`phone.eq.${cleanPhone},phone.eq.${formattedPhone}`)
+        .maybeSingle();
+
+      let convId = existing?.id;
+      if (!convId) {
+        const { data: created } = await supabase
+          .from('whatsapp_conversations')
+          .insert({
+            school_id: schoolId,
+            phone: formattedPhone,
+            contact_name: contactName,
+            ticket_status: 'open',
+            unread_count: chat.unreadCount || 0,
+            last_message: lastMsgText,
+            last_message_at: lastMsgTime,
+          })
+          .select('id')
+          .maybeSingle();
+        convId = created?.id;
+      } else {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({
+            contact_name: contactName,
+            last_message: lastMsgText,
+            last_message_at: lastMsgTime,
+          })
+          .eq('id', convId);
+      }
+
+      if (convId) {
+        syncedCount++;
+        // Sync recent messages for this chat if available
+        await syncWaAkgMessages(convId, formattedPhone).catch(() => null);
+      }
+    }
+
+    return { synced: syncedCount };
+  } catch (err: any) {
+    return { synced: 0, error: err?.message || 'Falha de comunicação' };
+  }
+}
+
+/**
+ * Fetches recent messages for a specific chat from WA-AKG and inserts them into whatsapp_messages.
+ */
+export async function syncWaAkgMessages(conversationId: string, phone: string): Promise<number> {
+  const stored = getStoredWaAkgConfig();
+
+  const rawPhone = phone.replace(/\D/g, '');
+  const jid = rawPhone.includes('@') ? rawPhone : `${rawPhone}@s.whatsapp.net`;
+  const targetUrl = resolveEndpointUrl(
+    stored.url,
+    `/api/chat/${encodeURIComponent(stored.sessionId)}/${encodeURIComponent(jid)}`
+  );
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (stored.apiKey) {
+    headers['X-API-Key'] = stored.apiKey;
+    headers['Authorization'] = `Bearer ${stored.apiKey}`;
+  }
+
+  try {
+    const res = await fetch(targetUrl, { method: 'GET', headers });
+    if (!res.ok) return 0;
+
+    const json = await res.json().catch(() => null);
+    const messages = Array.isArray(json) ? json : json?.data || json?.messages || [];
+    if (!Array.isArray(messages) || messages.length === 0) return 0;
+
+    let saved = 0;
+    for (const msg of messages) {
+      const extId = String(msg.id || msg.key?.id || '');
+      if (!extId) continue;
+
+      const isFromMe = Boolean(msg.fromMe ?? msg.key?.fromMe);
+      const text =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.text ||
+        msg.body ||
+        '';
+
+      const time = msg.timestamp
+        ? new Date(Number(msg.timestamp) * 1000).toISOString()
+        : msg.createdAt || new Date().toISOString();
+
+      const { data: dup } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('external_id', extId)
+        .maybeSingle();
+
+      if (!dup) {
+        await supabase.from('whatsapp_messages').insert({
+          conversation_id: conversationId,
+          body: text || '[Mensagem]',
+          direction: isFromMe ? 'outgoing' : 'incoming',
+          message_type: 'text',
+          status: isFromMe ? 'delivered' : 'read',
+          external_id: extId,
+          created_at: time,
+        });
+        saved++;
+      }
+    }
+
+    return saved;
+  } catch {
+    return 0;
   }
 }

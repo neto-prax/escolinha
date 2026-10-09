@@ -152,6 +152,25 @@ export function UazapiSettings() {
           waAkgApiKey: akgApiKey.trim(),
           sessionId: akgSessionId.trim(),
         });
+
+        // Ensure instance is registered in evolution_instances for school routing
+        const { data: schools } = await supabase.from('schools').select('id').limit(1);
+        const targetSchoolId = schools?.[0]?.id;
+        if (targetSchoolId) {
+          const { data: existing } = await supabase
+            .from('evolution_instances')
+            .select('id')
+            .eq('instance_name', akgSessionId.trim())
+            .maybeSingle();
+
+          if (!existing) {
+            await supabase.from('evolution_instances').insert({
+              school_id: targetSchoolId,
+              instance_name: akgSessionId.trim(),
+              status: 'connected',
+            });
+          }
+        }
       } else {
         await callGateway('uazapi', 'configure-webhook');
       }
