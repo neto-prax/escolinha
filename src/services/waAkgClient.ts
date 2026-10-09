@@ -285,18 +285,36 @@ export async function callWaAkg(
         (data.url as string) ||
         `${import.meta.env.VITE_SUPABASE_URL || 'https://eafntyicpalnyzonnrgn.supabase.co'}/functions/v1/evolution-webhook`;
 
-      const targetUrl = resolveEndpointUrl(rawUrl, '/api/webhooks');
-      const res = await fetch(targetUrl, {
+      const primaryUrl = resolveEndpointUrl(rawUrl, `/api/webhooks/${encodeURIComponent(sessionId)}`);
+      let res = await fetch(primaryUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           name: 'Escolinha Webhook',
           url: webhookUrl,
           secret: 'escola-webhook-secret',
-          sessionId,
           events: ['message.received', 'message.sent'],
         }),
       });
+
+      if (!res.ok && res.status === 404) {
+        const fallbackUrl = resolveEndpointUrl(rawUrl, '/api/webhooks');
+        const fallbackRes = await fetch(fallbackUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            name: 'Escolinha Webhook',
+            url: webhookUrl,
+            sessionId,
+            secret: 'escola-webhook-secret',
+            events: ['message.received', 'message.sent'],
+          }),
+        }).catch(() => null);
+
+        if (fallbackRes && fallbackRes.ok) {
+          res = fallbackRes;
+        }
+      }
 
       const text = await res.text();
       let parsed: any;
