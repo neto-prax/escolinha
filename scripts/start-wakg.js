@@ -99,3 +99,4 @@ async function startWakg() {
 startWakg().catch((err) => {
   console.warn('[WAKG] Falha ao verificar/iniciar servidor WAKG:', err?.message || err);
 });
+

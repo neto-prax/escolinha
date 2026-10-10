@@ -557,7 +557,13 @@ function useWhatsAppInboxState() {
       return !dbList.some((dbMsg) => dbMsg.body === opt.body && Math.abs(new Date(dbMsg.created_at).getTime() - new Date(opt.created_at).getTime()) < 10000);
     });
 
-    return [...dbList, ...pending];
+    const combined = [...dbList, ...pending];
+    return combined.sort((a, b) => {
+      const tA = new Date(a.created_at).getTime() || 0;
+      const tB = new Date(b.created_at).getTime() || 0;
+      if (tA !== tB) return tA - tB;
+      return (a.id || '').localeCompare(b.id || '');
+    });
   }, [activeConversation, dbMessages, optimisticMessages, profile?.full_name]);
 
   // ----------------------------------------------------

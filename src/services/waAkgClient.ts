@@ -160,26 +160,43 @@ export async function callWaAkg(
     if (action === 'status') {
       try {
         const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+        const detailsUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(resolved.sessionId)}`);
+        const detailsRes = await fetch(detailsUrl, { method: 'GET', headers }).catch(() => null);
+
+        let liveStatus = resolved.status;
+        let qrCode = null;
+        let mePhone = null;
+
+        if (detailsRes && detailsRes.ok) {
+          const detailsJson = await detailsRes.json().catch(() => null);
+          const sData = detailsJson?.data;
+          if (sData) {
+            liveStatus = sData.status || liveStatus;
+            qrCode = sData.qr || null;
+            mePhone = sData.me?.id || sData.jid || null;
+          }
+        }
+
         const isConnected = Boolean(
-          resolved.status === 'CONNECTED' ||
-          resolved.status === 'connected' ||
-          resolved.status === 'ONLINE'
+          liveStatus === 'CONNECTED' ||
+          liveStatus === 'connected' ||
+          liveStatus === 'ONLINE'
         );
 
         return {
           success: true,
           status: {
             connected: isConnected,
-            jid: null,
+            jid: mePhone,
           },
           instance: {
             name: resolved.name || sessionId,
-            status: isConnected ? 'connected' : 'disconnected',
-            qrcode: null,
+            status: isConnected ? 'connected' : (liveStatus === 'SCAN_QR' ? 'connecting' : 'disconnected'),
+            qrcode: isConnected ? null : qrCode,
             paircode: null,
             profileName: resolved.name || 'WA-AKG',
           },
-          details: resolved,
+          details: { ...resolved, status: liveStatus },
         };
       } catch {
         return {
@@ -193,42 +210,96 @@ export async function callWaAkg(
     // ACTION: CONNECT (Create Session & Get QR Code)
     // ----------------------------------------------------
     if (action === 'connect') {
-      const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
-      const targetSessionId = resolved.sessionId || sessionId;
+      let resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+      let targetSessionId = resolved.sessionId || sessionId;
 
-      // 1. Ensure session is created if needed
-      const createUrl = resolveEndpointUrl(rawUrl, '/api/sessions');
-      await fetch(createUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ name: sessionId }),
-      }).catch(() => null);
-
-      // 2. Fetch QR Code from /api/sessions/{targetSessionId}/qr
-      const qrUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}/qr`);
-      const qrRes = await fetch(qrUrl, { method: 'GET', headers });
-
-      const text = await qrRes.text();
-      let parsed: any;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = { raw: text };
+      // 1. Only create if no session exists at all
+      const listUrl = resolveEndpointUrl(rawUrl, '/api/sessions');
+      const listRes = await fetch(listUrl, { method: 'GET', headers }).catch(() => null);
+      let sessionsList: any[] = [];
+      if (listRes && listRes.ok) {
+        const listJson = await listRes.json().catch(() => null);
+        sessionsList = Array.isArray(listJson) ? listJson : listJson?.data || [];
       }
 
-      if (!qrRes.ok) {
-        if (qrRes.status === 500 && (text.includes('ECONNREFUSED') || text.includes('proxy'))) {
-          throw new Error(
-            `O servidor WA-AKG não está acessível em ${rawUrl}. Verifique se o container está rodando via "sudo docker compose -f docker-compose.wa-akg.yml up -d".`
-          );
-        }
-        if (qrRes.status === 401) {
-          throw new Error('Chave de API do WA-AKG não informada ou inválida. Obtenha a API Key no painel do WA-AKG (Settings → API Keys).');
-        }
-        throw new Error(parsed?.message || parsed?.error || `Erro ${qrRes.status} ao obter QR Code do WA-AKG`);
+      if (sessionsList.length === 0) {
+        const createUrl = resolveEndpointUrl(rawUrl, '/api/sessions');
+        await fetch(createUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ name: sessionId }),
+        }).catch(() => null);
+        resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
+        targetSessionId = resolved.sessionId || sessionId;
       }
 
-      const qrCode = parsed?.qr || parsed?.qrcode || parsed?.data?.qr || parsed?.data?.qrcode || (typeof parsed === 'string' ? parsed : null);
+      // 2. Start the session so Baileys initializes and generates QR
+      const startUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}/start`);
+      await fetch(startUrl, { method: 'POST', headers }).catch(() => null);
+
+      // 3. Poll for QR Code with retries
+      let qrCode: string | null = null;
+      let pairCode: string | null = null;
+      let isAlreadyConnected = false;
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise((r) => setTimeout(r, attempt === 0 ? 800 : 1200));
+
+        const qrUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}/qr`);
+        const qrRes = await fetch(qrUrl, { method: 'GET', headers }).catch(() => null);
+
+        if (qrRes) {
+          const text = await qrRes.text();
+          let parsed: any;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            parsed = { raw: text };
+          }
+
+          if (qrRes.ok) {
+            qrCode = parsed?.base64 || parsed?.qr || parsed?.qrcode || null;
+            pairCode = parsed?.paircode || null;
+            if (qrCode) break;
+          } else if (
+            qrRes.status === 400 &&
+            (parsed?.connected || parsed?.error?.includes('Already connected'))
+          ) {
+            isAlreadyConnected = true;
+            break;
+          }
+        }
+      }
+
+      if (isAlreadyConnected) {
+        return {
+          success: true,
+          status: { connected: true, jid: null },
+          instance: {
+            name: sessionId,
+            status: 'connected',
+            qrcode: null,
+            paircode: null,
+          },
+        };
+      }
+
+      if (!qrCode) {
+        // Fallback: check session details directly
+        const detailsUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}`);
+        const detailsRes = await fetch(detailsUrl, { method: 'GET', headers }).catch(() => null);
+        if (detailsRes && detailsRes.ok) {
+          const detailsJson = await detailsRes.json().catch(() => null);
+          if (detailsJson?.data?.status === 'CONNECTED') {
+            return {
+              success: true,
+              status: { connected: true, jid: null },
+              instance: { name: sessionId, status: 'connected', qrcode: null, paircode: null },
+            };
+          }
+          qrCode = detailsJson?.data?.qr || null;
+        }
+      }
 
       return {
         success: true,
@@ -237,9 +308,8 @@ export async function callWaAkg(
           name: sessionId,
           status: 'connecting',
           qrcode: qrCode,
-          paircode: parsed?.paircode || parsed?.pairingCode || null,
+          paircode: pairCode,
         },
-        details: parsed,
       };
     }
 
@@ -249,8 +319,8 @@ export async function callWaAkg(
     if (action === 'disconnect') {
       const resolved = await resolveWaAkgSession(rawUrl, headers, sessionId);
       const targetSessionId = resolved.sessionId || sessionId;
-      const deleteUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}`);
-      await fetch(deleteUrl, { method: 'DELETE', headers });
+      const logoutUrl = resolveEndpointUrl(rawUrl, `/api/sessions/${encodeURIComponent(targetSessionId)}/logout`);
+      await fetch(logoutUrl, { method: 'POST', headers }).catch(() => null);
       return {
         success: true,
         status: { connected: false, jid: null },

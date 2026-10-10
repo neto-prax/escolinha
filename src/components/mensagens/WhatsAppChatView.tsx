@@ -116,7 +116,7 @@ export function WhatsAppChatView() {
     resolveConversation,
   } = useWhatsAppInbox();
 
-  const { triggers } = useWhatsAppTriggers();
+  const { triggers, updateTrigger, addTrigger } = useWhatsAppTriggers();
   const { school } = useAuth();
 
   // Filas de atendimento: 'unread' (Não lidas / Aguardando), 'in_progress' (Em Conversa), 'resolved' (Resolvidos), 'all' (Todas)
@@ -143,10 +143,20 @@ export function WhatsAppChatView() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Ordenação cronológica estrita das mensagens da conversa
+  const sortedMessages = useMemo(() => {
+    return [...activeMessages].sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime() || 0;
+      const timeB = new Date(b.created_at).getTime() || 0;
+      if (timeA !== timeB) return timeA - timeB;
+      return (a.id || '').localeCompare(b.id || '');
+    });
+  }, [activeMessages]);
+
   // Auto scroll messages to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeMessages]);
+  }, [sortedMessages]);
 
   // Load registered students from localStorage for quick picking
   const registeredStudents = useMemo(() => {
@@ -241,9 +251,9 @@ export function WhatsAppChatView() {
     };
   }, [conversations]);
 
-  // Filter conversations por fila, setor, status e busca
+  // Filter conversations por fila, setor, status e busca com ordenação cronológica
   const filteredConversations = useMemo(() => {
-    return conversations.filter((c) => {
+    const list = conversations.filter((c) => {
       // 1. Fila de atendimento
       const isResolved = c.ticket_status === 'resolved' || c.ticket_status === 'closed';
       const isUnread = (c.unread_count > 0 || !c.opened_at) && !isResolved;
@@ -271,6 +281,12 @@ export function WhatsAppChatView() {
         return matchesName || matchesPhone || matchesStudent || matchesLastMsg;
       }
       return true;
+    });
+
+    return [...list].sort((a, b) => {
+      const timeA = new Date(a.last_message_at || a.opened_at || 0).getTime() || 0;
+      const timeB = new Date(b.last_message_at || b.opened_at || 0).getTime() || 0;
+      return timeB - timeA;
     });
   }, [conversations, activeQueue, selectedSectorFilter, selectedStatusFilter, searchQuery]);
 
@@ -341,6 +357,17 @@ export function WhatsAppChatView() {
         return 'Ontem';
       }
       return format(date, 'dd/MM/yyyy', { locale: ptBR });
+    } catch {
+      return '';
+    }
+  };
+
+  const getDateDividerLabel = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      if (isToday(date)) return 'Hoje';
+      if (isYesterday(date)) return 'Ontem';
+      return format(date, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
     } catch {
       return '';
     }
@@ -816,16 +843,17 @@ export function WhatsAppChatView() {
 
             {/* Ações do Atendimento */}
             <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-              {/* Botão Gatilho Rápido Ajustável */}
+              {/* Botão Central de Gatilhos & Automação */}
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 sm:h-8 px-2 sm:px-2.5 gap-1 sm:gap-1.5 text-xs text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-50 dark:hover:bg-amber-950/30 font-medium"
+                className="h-7 sm:h-8 px-2.5 gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 shadow-2xs transition-colors"
                 onClick={() => setTriggerModalOpen(true)}
-                title="Disparar gatilho ajustável e transferir de setor"
+                title="Abrir Central de Gatilhos: visualizar, alterar modelos ou disparar mensagem"
               >
                 <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                <span className="hidden sm:inline">Gatilho</span>
+                <span className="hidden sm:inline">Gatilhos ({triggers.length})</span>
+                <span className="sm:hidden">Gatilhos</span>
               </Button>
 
               {/* Botão Resolver Atendimento com Modal de Resumo */}
@@ -921,80 +949,108 @@ export function WhatsAppChatView() {
                 </span>
               </div>
 
-              {activeMessages.length === 0 ? (
+              {sortedMessages.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground text-xs space-y-1">
                   <MessageSquare className="w-8 h-8 mx-auto opacity-30" />
                   <p className="font-medium text-foreground">Nenhuma mensagem nesta conversa ainda</p>
                   <p className="text-[11px]">Envie uma mensagem abaixo para falar com o responsável.</p>
                 </div>
               ) : (
-                activeMessages.map((msg) => {
+                sortedMessages.map((msg, index) => {
                   const isMe = msg.direction === 'outgoing';
                   const isAuto = msg.is_automated;
 
+                  const currentDateKey = (() => {
+                    try {
+                      return format(new Date(msg.created_at), 'yyyy-MM-dd');
+                    } catch {
+                      return '';
+                    }
+                  })();
+
+                  const prevDateKey = (() => {
+                    if (index === 0) return null;
+                    try {
+                      return format(new Date(sortedMessages[index - 1].created_at), 'yyyy-MM-dd');
+                    } catch {
+                      return null;
+                    }
+                  })();
+
+                  const showDateDivider = currentDateKey && currentDateKey !== prevDateKey;
+
                   return (
-                    <div
-                      key={msg.id}
-                      className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-                    >
-                      <div
-                        className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-xs space-y-1 text-xs relative ${
-                          isMe
-                            ? isAuto
-                              ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs'
-                              : 'bg-primary text-primary-foreground rounded-br-xs'
-                            : 'bg-card text-card-foreground border rounded-bl-xs'
-                        }`}
-                      >
-                        {/* Remetente ou Badge de Gatilho / Trigger */}
-                        <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
-                          {isAuto ? (
-                            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
-                              <Bot className="w-3 h-3" />
-                              {msg.sender_name || 'Automação Purple Bot'}
-                            </span>
-                          ) : (
-                            <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
-                          )}
+                    <React.Fragment key={msg.id}>
+                      {showDateDivider && (
+                        <div className="flex justify-center my-3 sticky top-1 z-10">
+                          <span className="px-3.5 py-1 bg-background/90 dark:bg-muted/90 backdrop-blur-xs text-[11px] font-semibold text-muted-foreground rounded-full border shadow-2xs capitalize">
+                            {getDateDividerLabel(msg.created_at)}
+                          </span>
                         </div>
+                      )}
 
-                        <WhatsAppMediaRenderer message={msg} />
-
-                        {/* Conteúdo de Texto */}
-                        {msg.body && msg.body !== msg.media_caption && (
-                          <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
-                            {msg.body}
-                          </p>
-                        )}
-                        {msg.media_caption && (
-                          <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
-                            {msg.media_caption}
-                          </p>
-                        )}
-
-                        {/* Horário e Status de Entrega */}
+                      <div
+                        className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} my-0.5`}
+                      >
                         <div
-                          className={`flex items-center justify-end gap-1 text-[10px] pt-1 ${
-                            isMe && !isAuto ? 'text-primary-foreground/75' : 'text-muted-foreground'
+                          className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 shadow-xs space-y-1 text-xs relative ${
+                            isMe
+                              ? isAuto
+                                ? 'bg-amber-500/10 text-foreground border border-amber-500/30 rounded-br-xs shadow-2xs'
+                                : 'bg-primary text-primary-foreground rounded-br-xs shadow-2xs'
+                              : 'bg-card text-card-foreground border rounded-bl-xs shadow-2xs'
                           }`}
                         >
-                          <span>{formatMessageTime(msg.created_at)}</span>
-                          {isMe && (
-                            <span>
-                              {msg.status === 'read' ? (
-                                <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
-                              ) : msg.status === 'delivered' ? (
-                                <CheckCheck className="w-3.5 h-3.5" />
-                              ) : msg.status === 'sending' ? (
-                                <Clock className="w-3.5 h-3.5 animate-pulse" />
-                              ) : (
-                                <Check className="w-3.5 h-3.5" />
-                              )}
-                            </span>
+                          {/* Remetente ou Badge de Gatilho / Trigger */}
+                          <div className="flex items-center justify-between gap-2 text-[10px] font-medium opacity-80 mb-0.5">
+                            {isAuto ? (
+                              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-semibold">
+                                <Bot className="w-3 h-3" />
+                                {msg.sender_name || 'Automação Purple Bot'}
+                              </span>
+                            ) : (
+                              <span>{isMe ? msg.sender_name || 'Você' : activeConversation.contact_name}</span>
+                            )}
+                          </div>
+
+                          <WhatsAppMediaRenderer message={msg} />
+
+                          {/* Conteúdo de Texto */}
+                          {msg.body && msg.body !== msg.media_caption && (
+                            <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
+                              {msg.body}
+                            </p>
                           )}
+                          {msg.media_caption && (
+                            <p className="whitespace-pre-wrap leading-relaxed select-text text-[13px]">
+                              {msg.media_caption}
+                            </p>
+                          )}
+
+                          {/* Horário e Status de Entrega */}
+                          <div
+                            className={`flex items-center justify-end gap-1 text-[10px] pt-1 ${
+                              isMe && !isAuto ? 'text-primary-foreground/75' : 'text-muted-foreground'
+                            }`}
+                          >
+                            <span>{formatMessageTime(msg.created_at)}</span>
+                            {isMe && (
+                              <span>
+                                {msg.status === 'read' ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
+                                ) : msg.status === 'delivered' ? (
+                                  <CheckCheck className="w-3.5 h-3.5" />
+                                ) : msg.status === 'sending' ? (
+                                  <Clock className="w-3.5 h-3.5 animate-pulse" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </React.Fragment>
                   );
                 })
               )}
@@ -1004,38 +1060,49 @@ export function WhatsAppChatView() {
 
           {/* Barra de Digitação de Mensagem */}
           <div className="p-3 border-t bg-card">
-            {/* Atalhos Rápidos */}
+            {/* Atalhos Rápidos Baseados nos Gatilhos da Escola */}
             <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 text-[11px] text-muted-foreground">
-              <span className="font-medium text-xs flex items-center gap-1 text-primary">
-                <Sparkles className="w-3 h-3" /> Respostas Rápidas:
-              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setTriggerModalOpen(true)}
+                className="h-6 px-2 text-[11px] font-semibold gap-1 text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 whitespace-nowrap shadow-2xs"
+                title="Abrir Central de Gatilhos e alterar modelos"
+              >
+                <Zap className="w-3 h-3 fill-amber-500 text-amber-500" />
+                <span>Gatilhos:</span>
+              </Button>
+              {triggers.slice(0, 5).map((t) => {
+                const trigText = t.respostaTexto || (t as any).text || '';
+                const contactFirst = activeConversation?.contact_name?.split(' ')[0] || '';
+                const studentName = activeConversation?.student_info?.name || '';
+                const interpolated = trigText
+                  .replace(/\{\{nome\}\}/gi, contactFirst)
+                  .replace(/\{\{responsavel\}\}/gi, activeConversation?.contact_name || '')
+                  .replace(/\{\{aluno\}\}/gi, studentName)
+                  .replace(/\{\{escola\}\}/gi, school?.name || 'Escola')
+                  .replace(/\{\{setor\}\}/gi, activeConversation?.sector_name || 'Atendimento');
+
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setInputText(interpolated)}
+                    className="px-2.5 py-0.5 bg-muted/80 hover:bg-muted text-foreground rounded-md border border-border/50 text-[11px] whitespace-nowrap transition-colors font-medium flex items-center gap-1"
+                    title={`Inserir: "${trigText.slice(0, 50)}..."`}
+                  >
+                    <span>⚡</span>
+                    <span>{t.nome}</span>
+                  </button>
+                );
+              })}
               <button
                 type="button"
-                onClick={() => setInputText('Olá! Como posso te ajudar hoje?')}
-                className="px-2 py-0.5 bg-muted rounded-md hover:bg-muted/80 whitespace-nowrap"
+                onClick={() => setTriggerModalOpen(true)}
+                className="px-2 py-0.5 text-muted-foreground hover:text-foreground text-[10px] whitespace-nowrap underline underline-offset-2 ml-1"
               >
-                Saudação
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputText('Estou gerando seu boleto e já te envio o código de barras.')}
-                className="px-2 py-0.5 bg-muted rounded-md hover:bg-muted/80 whitespace-nowrap"
-              >
-                Boleto / Pix
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputText('Sua solicitação de documento foi enviada para a secretaria.')}
-                className="px-2 py-0.5 bg-muted rounded-md hover:bg-muted/80 whitespace-nowrap"
-              >
-                Secretaria
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputText('Agradecemos pelo contato! Tenha um excelente dia.')}
-                className="px-2 py-0.5 bg-muted rounded-md hover:bg-muted/80 whitespace-nowrap"
-              >
-                Despedida
+                Ver todos ({triggers.length})
               </button>
             </div>
 
@@ -1439,7 +1506,7 @@ export function WhatsAppChatView() {
         onConfirmResolve={handleConfirmResolve}
       />
 
-      {/* ---------------- MODAL DE GATILHOS AJUSTÁVEIS ---------------- */}
+      {/* ---------------- CENTRAL DE GATILHOS AJUSTÁVEIS & EDIÇÃO ---------------- */}
       <WhatsAppAdjustableTriggerModal
         open={triggerModalOpen}
         onOpenChange={setTriggerModalOpen}
@@ -1448,6 +1515,8 @@ export function WhatsAppChatView() {
         triggers={triggers}
         schoolName={school?.name || 'Escola'}
         onDispatchTrigger={handleDispatchTrigger}
+        onUpdateTrigger={updateTrigger}
+        onAddTrigger={addTrigger}
       />
     </div>
   );
