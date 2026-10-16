@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { BackgroundUploadsWidget } from "@/lib/backgroundUploads";
 import { AppLayout } from "@/components/layout/AppLayout";
 
 // Pages
@@ -46,6 +47,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
+      <BackgroundUploadsWidget />
       <Sonner />
       <BrandingInitializer />
       <BrowserRouter>
