@@ -436,7 +436,7 @@ async function processAutomationTriggers(
           return;
         }
       }
-    }
+
 
     const activeTriggers = triggers
       .filter((t: any) => t.ativo !== false)

@@ -133,7 +133,7 @@ Deno.serve(async req => {
     const { data: classState } = await admin.from('app_state').select('value').eq('school_id', schoolId).eq('key', 'escolinha_turmas_pedagogico_v1').maybeSingle();
     const classes = Array.isArray(classState?.value) ? classState.value : [];
     const turma = classes.find((t: any) => t?.id === body.turma_id) as any;
-    if (!turma?.nome) return json({ error: 'Salve a turma em Turmas & Horários antes de enviar registros.' }, 400);
+    const turmaNome = body.turma_id === 'geral' ? 'Registros Gerais' : String(turma?.nome || body.turma_nome).slice(0, 200);
     if (!cfg) return json({ error: 'Google Drive não conectado.' }, 409);
     const token = await accessToken(cfg);
     let root = cfg.root_folder_id;
