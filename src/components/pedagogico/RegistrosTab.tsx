@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef } from 'react';
+import { runInBackground } from '@/lib/backgroundUploads';
 import { driveAction } from '@/lib/googleDrive';
 import { uploadToDrive } from '@/lib/driveUpload';
 import type { Json } from '@/integrations/supabase/types';
@@ -207,35 +208,35 @@ const NovoRegistroDialog = ({ open, onOpenChange, turmas, onSaved }: {
     if (!titulo.trim() || files.length === 0) return toast.error('Informe título e pelo menos um arquivo.');
     if (!data) return toast.error('Informe a data do registro.');
     if (files.some(f => !/^(image|video)\//.test(f.type) || !f.size)) return toast.error('Selecione apenas fotos e vídeos não vazios.');
-    setSaving(true);
-    try {
-      const arquivos: Arquivo[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        const uploaded = completed.current.get(f);
-        if (uploaded) { arquivos.push(uploaded); continue; }
-        const sedeId = (() => { try { return JSON.parse(localStorage.getItem('escolinha_active_sede_id') || '"todas"'); } catch { return 'todas'; } })();
-        const sedeNome = (() => { try { return (JSON.parse(localStorage.getItem('escolinha_sedes') || '[]') as { id: string; nome: string }[]).find(s => s.id === sedeId)?.nome; } catch { return undefined; } })();
-        const sess = await driveAction<{ upload_url: string }>({ action: 'upload-session', turma_id: turma.id, turma_nome: turma.nome, sede_id: sedeNome ? sedeId : 'geral', sede_nome: sedeNome || 'Todas as Sedes', file_name: f.name, mime_type: f.type, size: f.size, origin: window.location.origin });
-        const result = await uploadToDrive(sess.upload_url, f, (p) => setProgress((prev) => ({ ...prev, [i]: p })));
-        const arquivo: Arquivo = { drive_file_id: result.id, nome: result.name || f.name, mime_type: result.mimeType || f.type, tamanho_bytes: f.size, web_view_link: result.webViewLink || `https://drive.google.com/file/d/${result.id}/view` };
-        completed.current.set(f, arquivo);
-        arquivos.push(arquivo);
+    const schoolId = profile.school_id, userId = user.id, profNome = profile.full_name ?? null;
+    const jobFiles = [...files], jobTitulo = titulo.trim(), jobDesc = descricao.trim() || null;
+    const finalTag = tagInput.trim().replace(/^#/, '');
+    const jobTags = finalTag && !tags.includes(finalTag) ? [...tags, finalTag] : tags;
+    const sedeId = (() => { try { return JSON.parse(localStorage.getItem('escolinha_active_sede_id') || '"todas"'); } catch { return 'todas'; } })();
+    const sedeNome = (() => { try { return (JSON.parse(localStorage.getItem('escolinha_sedes') || '[]') as { id: string; nome: string }[]).find(s => s.id === sedeId)?.nome; } catch { return undefined; } })();
+    reset(); onOpenChange(false);
+    toast.info('Envio iniciado em segundo plano. Pode continuar usando o sistema.');
+    runInBackground(jobTitulo, async (setPct) => {
+      try {
+        const arquivos: Arquivo[] = [];
+        for (let i = 0; i < jobFiles.length; i++) {
+          const f = jobFiles[i];
+          const sess = await driveAction<{ upload_url: string }>({ action: 'upload-session', turma_id: turma.id, turma_nome: turma.nome, sede_id: sedeNome ? sedeId : 'geral', sede_nome: sedeNome || 'Todas as Sedes', file_name: f.name, mime_type: f.type, size: f.size, origin: window.location.origin });
+          const result = await uploadToDrive(sess.upload_url, f, (p) => setPct(((i + p / 100) / jobFiles.length) * 100));
+          arquivos.push({ drive_file_id: result.id, nome: result.name || f.name, mime_type: result.mimeType || f.type, tamanho_bytes: f.size, web_view_link: result.webViewLink || `https://drive.google.com/file/d/${result.id}/view` });
+        }
+        const { error } = await supabase.from('pedagogico_registros').insert({
+          school_id: schoolId, turma_id: turma.id, turma_nome: turma.nome, titulo: jobTitulo,
+          descricao: jobDesc, tags: jobTags, data_registro: data, professor_id: userId,
+          professor_nome: profNome, arquivos: arquivos as unknown as Json,
+        });
+        if (error) throw error;
+        toast.success(`"${jobTitulo}" salvo no Google Drive!`);
+        onSaved();
+      } catch (e) {
+        toast.error(`Falha ao enviar "${jobTitulo}": ${e instanceof Error ? e.message : 'erro'}`);
       }
-      const finalTag = tagInput.trim().replace(/^#/, '');
-      const { error } = await supabase.from('pedagogico_registros').insert({
-        school_id: profile.school_id, turma_id: turma.id, turma_nome: turma.nome, titulo: titulo.trim(),
-        descricao: descricao.trim() || null, tags: finalTag && !tags.includes(finalTag) ? [...tags, finalTag] : tags, data_registro: data, professor_id: user.id,
-        professor_nome: profile.full_name ?? null, arquivos: arquivos as unknown as Json,
-      });
-      if (error) throw error;
-      toast.success('Registro salvo no Google Drive!');
-      reset(); onOpenChange(false); onSaved();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar registro');
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   return (
