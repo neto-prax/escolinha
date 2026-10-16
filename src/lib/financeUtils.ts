@@ -59,6 +59,9 @@ export function getIntegratedLancamentos(
     const targetId = m.lancamentoId || `mensalidade-${m.id}`;
     if (!existingIds.has(String(targetId)) && !existingIds.has(String(m.id))) {
       const aluno = alunoMap.get(String(m.alunoId));
+      // Não puxa mensalidades de alunos que não existem ou que estão inativos
+      if (!aluno || aluno.status === 'Inativo') return;
+
       let dataLancamento: Date;
 
       if (m.status === 'Pago' && m.dataPagamento) {

@@ -20,6 +20,9 @@ Deno.serve(async (req) => {
         'disconnect',
         'send-text',
         'send-media',
+        'get-chat-avatar',
+        'chat-avatar',
+        'find-chats',
       ]),
       data: z.record(z.unknown()).optional().default({}),
     }).safeParse(await req.json());
@@ -89,6 +92,81 @@ Deno.serve(async (req) => {
         };
         break;
 
+      case 'get-chat-avatar':
+      case 'chat-avatar': {
+        const targetNumber = String(data.number ?? data.phone ?? '').replace(/\D/g, '');
+        if (!targetNumber) {
+          return new Response(JSON.stringify({ url: null }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const avatarPayload = {
+          number: targetNumber,
+          preview: data.preview !== undefined ? Boolean(data.preview) : true,
+          force: Boolean(data.force ?? false),
+        };
+
+        // 1. Rota oficial v2 /chat/avatar
+        let avatarRes = await fetch(`${UAZAPI_URL}/chat/avatar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+          body: JSON.stringify(avatarPayload),
+        });
+
+        // 2. Se retornar 404, tenta rota completa /chat/details
+        if (avatarRes.status === 404) {
+          avatarRes = await fetch(`${UAZAPI_URL}/chat/details`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+            body: JSON.stringify({ number: targetNumber }),
+          });
+        }
+
+        // 3. Se ainda retornar 404, tenta rota legado /chat/fetchProfilePictureUrl
+        if (avatarRes.status === 404) {
+          avatarRes = await fetch(`${UAZAPI_URL}/chat/fetchProfilePictureUrl`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
+            body: JSON.stringify({ number: targetNumber }),
+          });
+        }
+
+        if (!avatarRes.ok) {
+          return new Response(JSON.stringify({ url: null }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const avatarText = await avatarRes.text();
+        try {
+          const avatarJson = JSON.parse(avatarText);
+          const resolvedUrl =
+            (typeof avatarJson.url === 'string' && avatarJson.url) ||
+            (typeof avatarJson.image === 'string' && avatarJson.image) ||
+            (typeof avatarJson.imagePreview === 'string' && avatarJson.imagePreview) ||
+            (typeof avatarJson.profilePicUrl === 'string' && avatarJson.profilePicUrl) ||
+            (typeof avatarJson.profilePictureUrl === 'string' && avatarJson.profilePictureUrl) ||
+            null;
+
+          return new Response(JSON.stringify({ url: resolvedUrl }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch {
+          return new Response(JSON.stringify({ url: null }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      case 'find-chats':
+        endpoint = '/chat/find';
+        body = {
+          limit: Number(data.limit) || 100,
+          compact: true,
+          ...(typeof data === 'object' ? data : {}),
+        };
+        break;
     }
 
     const res = await fetch(`${UAZAPI_URL}${endpoint}`, {
@@ -106,6 +184,11 @@ Deno.serve(async (req) => {
     }
 
     if (!res.ok) {
+      if (action === 'get-chat-avatar' || action === 'chat-avatar') {
+        return new Response(JSON.stringify({ url: null }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       console.error(`Uazapi erro [${res.status}]:`, text);
       return new Response(
         JSON.stringify({ error: 'Falha na requisição à Uazapi', status: res.status, details: result }),

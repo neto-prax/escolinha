@@ -58,7 +58,14 @@ export function HistoricoFinanceiroTimeline({
     return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const getResultadoBadge = (status: CobrancaHistorico['statusResultado']) => {
+  const getResultadoBadge = (status: CobrancaHistorico['statusResultado'], tipo?: string) => {
+    if (tipo === 'lancamento' || tipo === 'pagamento' || status === 'pago') {
+      return (
+        <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 text-xs flex items-center gap-1 font-medium">
+          <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Pagamento / Entrada
+        </Badge>
+      );
+    }
     switch (status) {
       case 'promessa_pagamento':
         return (
@@ -93,7 +100,7 @@ export function HistoricoFinanceiroTimeline({
       default:
         return (
           <Badge variant="outline" className="text-xs">
-            Contato Registrado
+            Registro Financeiro
           </Badge>
         );
     }
@@ -148,56 +155,103 @@ export function HistoricoFinanceiroTimeline({
             className="relative rounded-lg border bg-card p-3 shadow-xs space-y-2 text-xs"
           >
             {/* Timeline pin */}
-            <div className="absolute -left-[23px] top-3.5 h-3 w-3 rounded-full border-2 border-primary bg-background" />
+            <div
+              className={`absolute -left-[23px] top-3.5 h-3 w-3 rounded-full border-2 bg-background ${
+                item.tipo === 'lancamento' || item.tipo === 'pagamento' || item.statusResultado === 'pago'
+                  ? 'border-emerald-500 bg-emerald-100'
+                  : 'border-primary'
+              }`}
+            />
 
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-foreground flex items-center gap-1">
-                  <User className="h-3 w-3 text-muted-foreground" />
-                  {item.colaboradorNome}
-                </span>
-                <span className="text-muted-foreground text-[11px]">cobrou</span>
-                <span className="font-semibold text-foreground">{item.responsavelNome}</span>
-                {item.responsavelContato && (
-                  <span className="text-muted-foreground text-[11px]">({item.responsavelContato})</span>
-                )}
-              </div>
+            {item.tipo === 'lancamento' || item.tipo === 'pagamento' ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground flex items-center gap-1">
+                      <DollarSign className="h-3.5 w-3.5 text-emerald-600" />
+                      {item.descricao || 'Entrada / Pagamento'}
+                    </span>
+                    {item.categoria && (
+                      <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-700">
+                        {item.categoria}
+                      </Badge>
+                    )}
+                  </div>
 
-              <span className="text-[11px] text-muted-foreground font-mono">
-                {formatDateBR(item.data)}
-              </span>
-            </div>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    {formatDateBR(item.data)}
+                  </span>
+                </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Canal Utilizado */}
-              {item.canal === 'whatsapp' ? (
-                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[11px] flex items-center gap-1">
-                  <MessageCircle className="h-3 w-3 text-emerald-600" /> WhatsApp
-                </Badge>
-              ) : (
-                <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 text-[11px] flex items-center gap-1">
-                  <PhoneCall className="h-3 w-3 text-blue-600" /> Ligação Telefônica
-                </Badge>
-              )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {getResultadoBadge(item.statusResultado, item.tipo)}
 
-              {/* Bloqueado WhatsApp Alert */}
-              {item.bloqueadoWhatsapp && (
-                <Badge variant="destructive" className="text-[11px] flex items-center gap-1">
-                  <ShieldAlert className="h-3 w-3" /> Bloqueado no WhatsApp
-                </Badge>
-              )}
+                  {item.formaPagamento && (
+                    <Badge variant="secondary" className="text-[11px]">
+                      {item.formaPagamento}
+                    </Badge>
+                  )}
 
-              {/* Status/Resultado */}
-              {getResultadoBadge(item.statusResultado)}
+                  <div className="ml-auto flex items-center gap-2 text-[11px]">
+                    <span className="text-muted-foreground">Valor:</span>
+                    <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-xs">
+                      {formatCurrency(item.valor ?? item.valorCobrado ?? 0)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground flex items-center gap-1">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      {item.colaboradorNome || 'Colaborador'}
+                    </span>
+                    <span className="text-muted-foreground text-[11px]">cobrou</span>
+                    <span className="font-semibold text-foreground">{item.responsavelNome}</span>
+                    {item.responsavelContato && (
+                      <span className="text-muted-foreground text-[11px]">({item.responsavelContato})</span>
+                    )}
+                  </div>
 
-              {/* Parcela e Valor */}
-              <div className="ml-auto flex items-center gap-2 text-[11px]">
-                <span className="text-muted-foreground">Mês: <strong>{formatMonthRef(item.mesReferencia)}</strong></span>
-                <span className="font-bold text-foreground bg-muted px-1.5 py-0.5 rounded">
-                  {formatCurrency(item.valorCobrado)}
-                </span>
-              </div>
-            </div>
+                  <span className="text-[11px] text-muted-foreground font-mono">
+                    {formatDateBR(item.data)}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Canal Utilizado */}
+                  {item.canal === 'whatsapp' ? (
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[11px] flex items-center gap-1">
+                      <MessageCircle className="h-3 w-3 text-emerald-600" /> WhatsApp
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 text-[11px] flex items-center gap-1">
+                      <PhoneCall className="h-3 w-3 text-blue-600" /> Ligação Telefônica
+                    </Badge>
+                  )}
+
+                  {/* Bloqueado WhatsApp Alert */}
+                  {item.bloqueadoWhatsapp && (
+                    <Badge variant="destructive" className="text-[11px] flex items-center gap-1">
+                      <ShieldAlert className="h-3 w-3" /> Bloqueado no WhatsApp
+                    </Badge>
+                  )}
+
+                  {/* Status/Resultado */}
+                  {getResultadoBadge(item.statusResultado, item.tipo)}
+
+                  {/* Parcela e Valor */}
+                  <div className="ml-auto flex items-center gap-2 text-[11px]">
+                    <span className="text-muted-foreground">Mês: <strong>{formatMonthRef(item.mesReferencia)}</strong></span>
+                    <span className="font-bold text-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {formatCurrency(item.valorCobrado ?? item.valor ?? 0)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Promessa de pagamento se houver */}
             {item.dataPromessa && (

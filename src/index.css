@@ -143,15 +143,16 @@
     @apply border-border;
   }
 
+  html,
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased overflow-x-hidden max-w-full;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
   /* Scrollbar personalizada */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
@@ -197,24 +198,34 @@
 
   /* Stat card */
   .stat-card {
-    @apply bg-card border rounded-lg p-4 space-y-2;
+    @apply bg-card border rounded-lg p-3.5 sm:p-4 space-y-2;
   }
 
   /* Page header */
   .page-header {
-    @apply mb-6 space-y-1;
+    @apply mb-4 sm:mb-6 space-y-1;
   }
 
   .page-title {
-    @apply text-2xl font-semibold tracking-tight;
+    @apply text-xl sm:text-2xl font-semibold tracking-tight;
   }
 
   .page-description {
-    @apply text-muted-foreground;
+    @apply text-xs sm:text-sm text-muted-foreground;
   }
 }
 
 @layer utilities {
+  /* Hide scrollbar while preserving scroll functionality on mobile tabs/tables */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
   /* Fade in animation */
   .animate-fade-in {
     animation: fadeIn 0.3s ease-out;

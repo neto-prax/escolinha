@@ -27,7 +27,8 @@ import { DocumentosImpressaoModal } from '@/components/alunos/DocumentosImpressa
 import { DocumentoEscolarTemplate, DEFAULT_DOCUMENTOS_ESCOLARES } from '@/types/documentoEscolar';
 import { useAuth } from '@/contexts/AuthContext';
 import { Printer, Sun, Moon, Clock, CreditCard, Sparkles } from 'lucide-react';
-import { MatriculaWizardModal } from '@/components/alunos/MatriculaWizardModal';
+import { useSedes, resolveSedeFromImport } from '@/hooks/useSedes';
+import { saveCloudState } from '@/lib/cloudState';
 import { User, MapPin, ChevronLeft } from 'lucide-react';
 import { TutorialTour, TutorialButton, MATRICULA_TUTORIAL_STEPS } from '@/components/common/TutorialTour';
 import { usePagination } from '@/hooks/usePagination';
@@ -48,6 +49,8 @@ import { generatePixCopiaECola, openBoletoInNewTab, getBankDisplayName, detectBa
 import { getActiveBankingGateway, hasCoraCredentials } from '@/services/coraService';
 import { Caixa } from '@/types/finance';
 import { mockCaixas } from '@/data/mockData';
+import { HistoricoFinanceiroTimeline } from '@/components/alunos/HistoricoFinanceiroTimeline';
+import { reconcileAllLancamentosWithAlunos, cleanSpuriousMensalidades } from '@/utils/studentFinanceReconciliation';
 
 type PaymentDetail = {
   mensalidadeId: string;
@@ -67,6 +70,13 @@ const Alunos = () => {
   const [lancamentos, setLancamentos] = useLocalStorage<Lancamento[]>('escolinha_lancamentos_v2', []);
   const [activeTab, setActiveTab] = useState('gestao');
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
+  const [historicoAluno, setHistoricoAluno] = useState<Aluno | null>(null);
+
+  const { activeSedeId, activeSede, matrizSede, isItemInActiveSede, sedes } = useSedes();
+
+  const sedeAlunos = React.useMemo(() => {
+    return alunos.filter((a) => isItemInActiveSede(a.sedeId, a.unidade));
+  }, [alunos, isItemInActiveSede]);
 
   const { canAccessTab } = usePermissions();
   const canAccessGestao = canAccessTab('alunos', 'gestao');
@@ -147,7 +157,66 @@ const Alunos = () => {
     boletoUrl: '',
   });
 
-  const { school } = useAuth();
+  const { school, roles, isSuperAdmin } = useAuth();
+  const isDirector = roles.includes('director') || isSuperAdmin;
+
+  const [isDeleteSelectedOpen, setIsDeleteSelectedOpen] = useState(false);
+  const [isZerarUnidadeOpen, setIsZerarUnidadeOpen] = useState(false);
+  const [alunoToDelete, setAlunoToDelete] = useState<Aluno | null>(null);
+  const [isDeleteSingleOpen, setIsDeleteSingleOpen] = useState(false);
+
+  const handleDeleteSelected = async () => {
+    const toDelete = new Set(selectedAlunosIds);
+    const remainingAlunos = alunos.filter(a => !toDelete.has(a.id));
+    const remainingMensalidades = mensalidades.filter(m => !toDelete.has(m.alunoId));
+
+    setAlunos(remainingAlunos);
+    setMensalidades(remainingMensalidades);
+    setSelectedAlunosIds([]);
+    setIsDeleteSelectedOpen(false);
+
+    if (school?.id) {
+      await saveCloudState('escolinha_alunos', remainingAlunos, school.id);
+      await saveCloudState('escolinha_mensalidades', remainingMensalidades, school.id);
+    }
+    toast.success(`${toDelete.size} aluno(s) excluído(s) com sucesso!`);
+  };
+
+  const handleZerarUnidade = async () => {
+    const toDelete = new Set(sedeAlunos.map(a => a.id));
+    const remainingAlunos = alunos.filter(a => !toDelete.has(a.id));
+    const remainingMensalidades = mensalidades.filter(m => !toDelete.has(m.alunoId));
+
+    setAlunos(remainingAlunos);
+    setMensalidades(remainingMensalidades);
+    setSelectedAlunosIds([]);
+    setIsZerarUnidadeOpen(false);
+
+    if (school?.id) {
+      await saveCloudState('escolinha_alunos', remainingAlunos, school.id);
+      await saveCloudState('escolinha_mensalidades', remainingMensalidades, school.id);
+    }
+    toast.success(`Todos os ${toDelete.size} alunos desta unidade foram removidos com sucesso. A unidade agora está 100% zerada!`);
+  };
+
+  const handleDeleteSingle = async () => {
+    if (!alunoToDelete) return;
+    const remainingAlunos = alunos.filter(a => a.id !== alunoToDelete.id);
+    const remainingMensalidades = mensalidades.filter(m => m.alunoId !== alunoToDelete.id);
+
+    setAlunos(remainingAlunos);
+    setMensalidades(remainingMensalidades);
+    setSelectedAlunosIds(prev => prev.filter(id => id !== alunoToDelete.id));
+    setAlunoToDelete(null);
+    setIsDeleteSingleOpen(false);
+
+    if (school?.id) {
+      await saveCloudState('escolinha_alunos', remainingAlunos, school.id);
+      await saveCloudState('escolinha_mensalidades', remainingMensalidades, school.id);
+    }
+    toast.success(`Aluno "${alunoToDelete.nome}" excluído com sucesso!`);
+  };
+
   // Estados para Modal Multi-Step de Matrícula (3 Steps: Turma, Financeiro, Contrato)
   const [matricularStep, setMatricularStep] = useState<1 | 2 | 3>(1);
   const [matricularTurmaInfo, setMatricularTurmaInfo] = useState('');
@@ -190,6 +259,58 @@ const Alunos = () => {
       }
     }
   }, [alunos]);
+
+  // Limpeza de mensalidades espúrias (alunos sem mensalidades contratadas ou faturas geradas indevidamente)
+  useEffect(() => {
+    if (mensalidades && mensalidades.length > 0 && alunos && alunos.length > 0) {
+      const { cleanedMensalidades, updatedAlunos, removedCount } = cleanSpuriousMensalidades(mensalidades, alunos, lancamentos);
+      if (removedCount > 0) {
+        setMensalidades(cleanedMensalidades);
+        setAlunos(updatedAlunos);
+      }
+    }
+  }, [mensalidades, alunos, lancamentos]);
+
+  // Garante que os alunos atuais pertençam à sede Papagaio
+  useEffect(() => {
+    if (alunos && alunos.length > 0) {
+      const papagaioSede =
+        sedes.find(
+          (s) =>
+            s.nome.toLowerCase().includes('papagaio') ||
+            (s.codigo && s.codigo.toLowerCase() === 'pap')
+        ) ||
+        matrizSede ||
+        sedes[0] || { id: 'sede-matriz', nome: 'Sede Principal (Papagaio)' };
+
+      const migrationKey = 'escolinha_migrated_alunos_to_papagaio_v2';
+      const alreadyMigrated = window.localStorage.getItem(migrationKey);
+
+      let changed = false;
+      const updatedAlunos = alunos.map((aluno) => {
+        // Na primeira execução, migra todos os alunos atuais para a Sede Papagaio;
+        // Nas seguintes, garante que qualquer aluno sem sede definida ou com dados legados receba Papagaio
+        if (!alreadyMigrated || !aluno.sedeId || !aluno.unidade || aluno.unidade === 'Todas') {
+          if (aluno.sedeId !== papagaioSede.id || aluno.unidade !== papagaioSede.nome) {
+            changed = true;
+            return {
+              ...aluno,
+              sedeId: papagaioSede.id,
+              unidade: papagaioSede.nome,
+            };
+          }
+        }
+        return aluno;
+      });
+
+      if (changed) {
+        setAlunos(updatedAlunos);
+      }
+      if (!alreadyMigrated) {
+        window.localStorage.setItem(migrationKey, 'true');
+      }
+    }
+  }, [alunos, sedes, matrizSede]);
 
   const handleOpenTransferSingle = (alunoId: string) => {
     setTransferAlunosIds([alunoId]);
@@ -277,16 +398,42 @@ const Alunos = () => {
   };
 
   const handleExport = () => {
+    const formatDateForExport = (val?: string): string => {
+      if (!val) return '';
+      if (val.includes('-')) {
+        const parts = val.split('T')[0].split('-');
+        if (parts.length === 3) {
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+      return val;
+    };
+
     const dataToExport = alunos.map(a => ({
       Matrícula: a.matricula,
       Nome: a.nome,
+      'Data de Nascimento': formatDateForExport(a.dataNascimento),
+      'CPF Aluno': a.cpf || '',
       Responsável: a.nomeResponsavel,
-      'Contato Responsável': a.contatoResponsavel,
+      Parentesco: a.parentescoResponsavel || a.responsaveis?.[0]?.parentesco || 'Mãe',
+      'CPF Responsável': a.cpfResponsavel || a.responsaveis?.[0]?.cpf || '',
+      'Email Responsável': a.emailResponsavel || a.responsaveis?.[0]?.email || '',
+      'Contato Responsável': a.contatoResponsavel || a.responsaveis?.[0]?.contato || '',
+      CEP: a.cep || '',
+      Endereço: a.rua || '',
+      Número: a.numero || '',
+      Complemento: a.complemento || '',
+      Bairro: a.bairro || '',
+      Cidade: a.cidade || '',
+      UF: a.uf || '',
+      Sede: a.unidade || (sedes.find(s => s.id === a.sedeId)?.nome) || 'Sede Principal (Papagaio)',
       Setor: a.setor || '',
       Classe: a.classe || '',
       Turma: a.turma || '',
+      Turno: a.turno || 'Matutino',
       Valor: a.valorBase ? parseFloat(a.valorBase) : '',
       Desconto: a.descontoMensalidade ? parseFloat(a.descontoMensalidade) : '',
+      'Dia de Vencimento': a.diaVencimento ? parseInt(a.diaVencimento) : 10,
       Status: a.status
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -297,18 +444,62 @@ const Alunos = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const templateData = [{
-      Matrícula: '2024001',
-      Nome: 'Joãozinho da Silva',
-      Responsável: 'Maria da Silva',
-      'Contato Responsável': '(11) 99999-9999',
-      Setor: 'Educação Infantil',
-      Classe: 'Maternal',
-      Turma: 'A',
-      Valor: 450.00,
-      Desconto: 50.00,
-      Status: 'Ativo'
-    }];
+    const templateData = [
+      {
+        Matrícula: '2026001',
+        Nome: 'Joãozinho da Silva',
+        'Data de Nascimento': '15/03/2018',
+        'CPF Aluno': '000.000.000-00',
+        Responsável: 'Maria da Silva',
+        Parentesco: 'Mãe',
+        'CPF Responsável': '123.456.789-00',
+        'Email Responsável': 'maria.silva@email.com',
+        'Contato Responsável': '(11) 99999-9999',
+        CEP: '01310-100',
+        Endereço: 'Av. Paulista',
+        Número: '1500',
+        Complemento: 'Apto 42',
+        Bairro: 'Bela Vista',
+        Cidade: 'São Paulo',
+        UF: 'SP',
+        Sede: 'Papagaio',
+        Setor: 'Ensino Fundamental I',
+        Classe: '1º Ano',
+        Turma: 'A',
+        Turno: 'Matutino',
+        Valor: 650.00,
+        Desconto: 50.00,
+        'Dia de Vencimento': 10,
+        Status: 'Ativo'
+      },
+      {
+        Matrícula: '2026002',
+        Nome: 'Ana Beatriz Souza',
+        'Data de Nascimento': '22/07/2020',
+        'CPF Aluno': '',
+        Responsável: 'Carlos Eduardo Souza',
+        Parentesco: 'Pai',
+        'CPF Responsável': '987.654.321-99',
+        'Email Responsável': 'carlos.souza@email.com',
+        'Contato Responsável': '(11) 98888-8888',
+        CEP: '04538-133',
+        Endereço: 'Rua Joaquim Floriano',
+        Número: '250',
+        Complemento: '',
+        Bairro: 'Itaim Bibi',
+        Cidade: 'São Paulo',
+        UF: 'SP',
+        Sede: 'Papagaio',
+        Setor: 'Educação Infantil',
+        Classe: 'Maternal',
+        Turma: 'B',
+        Turno: 'Vespertino',
+        Valor: 550.00,
+        Desconto: 0.00,
+        'Dia de Vencimento': 5,
+        Status: 'Ativo'
+      }
+    ];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
@@ -350,18 +541,78 @@ const Alunos = () => {
           return isNaN(num) ? '' : String(num);
         };
 
+        const parseDateString = (val: any): string | undefined => {
+          if (val === undefined || val === null || val === '') return undefined;
+          if (typeof val === 'number') {
+            const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+            const date = new Date(excelEpoch.getTime() + val * 86400000);
+            if (!isNaN(date.getTime())) {
+              return date.toISOString().split('T')[0];
+            }
+          }
+          const str = String(val).trim();
+          if (str.includes('/')) {
+            const parts = str.split('/');
+            if (parts.length === 3) {
+              const day = parts[0].padStart(2, '0');
+              const month = parts[1].padStart(2, '0');
+              const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+              return `${year}-${month}-${day}`;
+            }
+          }
+          if (str.includes('-')) {
+            const parts = str.split('T')[0].split('-');
+            if (parts.length === 3) {
+              return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+            }
+          }
+          return undefined;
+        };
+
         const novosAlunos: Aluno[] = [];
         const novasMensalidadesGeradas: Mensalidade[] = [];
 
         data.forEach((row: any, index: number) => {
           const matriculaGerada = `${currentYear}${(proximoNumero + index).toString().padStart(3, '0')}`;
           
-          // Fallbacks mais resilientes caso o usuário não use o modelo exato
+          // Dados do Responsável
+          const rawNomeResp = row.Responsável ?? row.Responsavel ?? row['Nome do Responsável'] ?? row['Nome Responsável'] ?? row['Nome do Responsavel'] ?? '';
+          const rawParentesco = row.Parentesco ?? row['Grau de Parentesco'] ?? row['Parentesco Responsável'] ?? 'Mãe';
+          const rawCpfResp = row['CPF Responsável'] ?? row['CPF do Responsável'] ?? row['Cpf Responsavel'] ?? row['CPF'] ?? row['cpf'] ?? row['Cpf'] ?? '';
+          const rawRgResp = row['RG Responsável'] ?? row['RG do Responsável'] ?? row['Rg Responsavel'] ?? '';
+          const rawEmailResp = row['Email Responsável'] ?? row['E-mail Responsável'] ?? row['Email do Responsável'] ?? row['E-mail do Responsável'] ?? row['Email'] ?? row['email'] ?? row['E-mail'] ?? '';
+          const rawContatoResp = row['Contato Responsável'] ?? row['Telefone Responsável'] ?? row['Celular Responsável'] ?? row['WhatsApp Responsável'] ?? row['Telefone'] ?? row['Contato'] ?? '';
+
+          // Dados do Aluno
+          const rawDataNascimento = row['Data de Nascimento'] ?? row['Data Nascimento'] ?? row['Nascimento'] ?? row['dataNascimento'] ?? row['D.N.'];
+          const rawCpfAluno = row['CPF Aluno'] ?? row['CPF do Aluno'] ?? row['Cpf Aluno'] ?? row['Documento Aluno'];
+          const rawRgAluno = row['RG Aluno'] ?? row['RG do Aluno'] ?? row['Rg Aluno'];
+
+          // Endereço Residencial
+          const rawCep = row.CEP ?? row.Cep ?? row.cep;
+          const rawEndereco = row['Endereço'] ?? row.Endereco ?? row.Rua ?? row.Logradouro ?? row.rua;
+          const rawNumero = row['Número'] ?? row.Numero ?? row['Nº'] ?? row.numero;
+          const rawComplemento = row.Complemento ?? row.complemento ?? row.Apto;
+          const rawBairro = row.Bairro ?? row.bairro;
+          const rawCidade = row.Cidade ?? row.cidade ?? row['Município'];
+          const rawUf = row.UF ?? row.Uf ?? row.uf ?? row.Estado;
+
+          // Dados da Sede / Unidade
+          const rawSede = row.Sede ?? row.sede ?? row.SEDE ?? row.Unidade ?? row.unidade ?? row.UNIDADE ?? row['Sede / Unidade'] ?? row['Sede/Unidade'];
+          const resolvedSede = resolveSedeFromImport({
+            rawSede,
+            sedes,
+            activeSede: activeSedeId !== 'todas' ? activeSede : null,
+            matrizSede,
+          });
+
+          // Dados Acadêmicos & Turma
           const rawSetor = row.Setor ?? row.Segmento ?? row.Categoria;
           const rawClasse = row.Classe ?? (row.Turma && !row.Classe ? row.Turma : null);
           const rawTurma = row.Classe ? row.Turma : (row.Letra ?? null);
+          const rawTurno = row.Turno ?? row['Período'] ?? row.turno;
 
-          // Extração de valor e desconto com suporte a variações de cabeçalho
+          // Dados Financeiros
           const rawValor = row['Valor'] ?? row['valor'] ?? row['VALOR'] ?? row['Valor da Mensalidade'] ?? row['Valor Mensalidade'] ?? row['Valor Base'] ?? row['Mensalidade'];
           const rawDesconto = row['Desconto'] ?? row['desconto'] ?? row['DESCONTO'] ?? row['Desconto Mensalidade'] ?? row['Desconto (R$)'];
           const rawVencimento = row['Dia de Vencimento'] ?? row['Dia Vencimento'] ?? row['Vencimento'] ?? row['vencimento'];
@@ -374,17 +625,45 @@ const Alunos = () => {
 
           const alunoObj: Aluno = {
             id: alunoId,
-            matricula: matriculaGerada,
-            nome: row.Nome || 'Aluno Sem Nome',
-            nomeResponsavel: row.Responsável || '',
-            contatoResponsavel: String(row['Contato Responsável'] || ''),
+            matricula: row.Matrícula ? String(row.Matrícula).trim() : matriculaGerada,
+            nome: row.Nome || row['Nome'] || 'Aluno Sem Nome',
+            dataNascimento: parseDateString(rawDataNascimento),
+            cpf: rawCpfAluno ? String(rawCpfAluno).trim() : undefined,
+            rg: rawRgAluno ? String(rawRgAluno).trim() : undefined,
+            nomeResponsavel: String(rawNomeResp || ''),
+            parentescoResponsavel: rawNomeResp ? String(rawParentesco).trim() : undefined,
+            contatoResponsavel: String(rawContatoResp || ''),
+            cpfResponsavel: rawCpfResp ? String(rawCpfResp).trim() : undefined,
+            rgResponsavel: rawRgResp ? String(rawRgResp).trim() : undefined,
+            emailResponsavel: rawEmailResp ? String(rawEmailResp).trim() : undefined,
+            responsaveis: rawNomeResp ? [{
+              id: crypto.randomUUID(),
+              nome: String(rawNomeResp).trim(),
+              contato: String(rawContatoResp || '').trim(),
+              parentesco: String(rawParentesco).trim() || 'Mãe',
+              cpf: rawCpfResp ? String(rawCpfResp).trim() : undefined,
+              rg: rawRgResp ? String(rawRgResp).trim() : undefined,
+              email: rawEmailResp ? String(rawEmailResp).trim() : undefined,
+              responsavelFinanceiro: true,
+              responsavelDidatico: true,
+            }] : undefined,
+            cep: rawCep ? String(rawCep).trim() : undefined,
+            rua: rawEndereco ? String(rawEndereco).trim() : undefined,
+            numero: rawNumero ? String(rawNumero).trim() : undefined,
+            complemento: rawComplemento ? String(rawComplemento).trim() : undefined,
+            bairro: rawBairro ? String(rawBairro).trim() : undefined,
+            cidade: rawCidade ? String(rawCidade).trim() : undefined,
+            uf: rawUf ? String(rawUf).trim().toUpperCase() : undefined,
             setor: rawSetor ? String(rawSetor).trim() : 'Sem Setor',
             classe: rawClasse ? String(rawClasse).trim() : 'Geral',
             turma: rawTurma ? String(rawTurma).trim() : '',
+            turno: rawTurno ? String(rawTurno).trim() : 'Matutino',
             status: row.Status === 'Inativo' ? 'Inativo' : 'Ativo',
             valorBase: valorBase || undefined,
             descontoMensalidade: descontoMensalidade || undefined,
             diaVencimento: diaVencimento && !isNaN(Number(diaVencimento)) ? diaVencimento : '10',
+            sedeId: resolvedSede.sedeId,
+            unidade: resolvedSede.unidade,
           };
 
           novosAlunos.push(alunoObj);
@@ -462,7 +741,7 @@ const Alunos = () => {
     reader.readAsBinaryString(file);
   };
 
-  const activeAlunos = alunos.filter(a => a.status === 'Ativo').length;
+  const activeAlunos = sedeAlunos.filter(a => a.status === 'Ativo').length;
   
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const today = new Date();
@@ -483,7 +762,7 @@ const Alunos = () => {
     return list;
   }, [turmas]);
 
-  const displayedAlunos = alunos.filter(a => {
+  const displayedAlunos = sedeAlunos.filter(a => {
     if (a.status !== 'Ativo') return false;
     
     if (turmaFilter !== 'Todas') {
@@ -962,7 +1241,7 @@ const Alunos = () => {
     return mesRef;
   };
 
-  const groupedAlunos = alunos.reduce((acc, aluno) => {
+  const groupedAlunos = sedeAlunos.reduce((acc, aluno) => {
     if (aluno.status === 'Ativo') {
       const turmaLetra = aluno.turma || (aluno.classe ? 'A' : '');
       const groupKey = (aluno.setor && aluno.classe)
@@ -1140,9 +1419,9 @@ const Alunos = () => {
             <CardTitle>Listagem de Alunos</CardTitle>
             <CardDescription>Cadastre e gerencie as matrículas dos estudantes.</CardDescription>
           </div>
-          <div data-tour="btn-importar-alunos" className="flex gap-2 overflow-x-auto pb-1 items-center">
+          <div data-tour="btn-importar-alunos" className="flex flex-wrap gap-2 items-center">
             {selectedAlunosIds.length > 0 ? (
-              <div data-tour="acoes-lote-alunos" className="flex gap-2 items-center">
+              <div data-tour="acoes-lote-alunos" className="flex flex-wrap gap-2 items-center">
                 <Button 
                   variant="outline"
                   className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-300 font-semibold gap-1.5 text-xs shadow-xs"
@@ -1150,6 +1429,14 @@ const Alunos = () => {
                 >
                   <ArrowRightLeft className="h-4 w-4 text-indigo-600" />
                   Transferência em Massa ({selectedAlunosIds.length})
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 font-semibold gap-1.5 shadow-xs"
+                  onClick={() => setIsDeleteSelectedOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Excluir ({selectedAlunosIds.length})
                 </Button>
                 <Button 
                   variant="default"
@@ -1177,18 +1464,31 @@ const Alunos = () => {
               </div>
             ) : (
               displayedAlunos.length > 0 && (
-                <Button
-                  variant="outline"
-                  className="text-xs border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 font-semibold gap-1.5 shadow-xs"
-                  onClick={() => {
-                    setTransferAlunosIds(displayedAlunos.map(a => a.id));
-                    setIsTransferModalOpen(true);
-                  }}
-                  title="Transferir em massa todos os alunos filtrados na tabela"
-                >
-                  <ArrowRightLeft className="h-4 w-4 text-indigo-600" />
-                  Transferência em Massa ({displayedAlunos.length})
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="text-xs border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 font-semibold gap-1.5 shadow-xs"
+                    onClick={() => {
+                      setTransferAlunosIds(displayedAlunos.map(a => a.id));
+                      setIsTransferModalOpen(true);
+                    }}
+                    title="Transferir em massa todos os alunos filtrados na tabela"
+                  >
+                    <ArrowRightLeft className="h-4 w-4 text-indigo-600" />
+                    Transferência em Massa ({displayedAlunos.length})
+                  </Button>
+                  {sedeAlunos.length > 0 && isDirector && (
+                    <Button
+                      variant="outline"
+                      className="text-xs border-rose-200 text-rose-700 bg-rose-50/50 hover:bg-rose-100 font-semibold gap-1.5 shadow-xs"
+                      onClick={() => setIsZerarUnidadeOpen(true)}
+                      title={`Zerar dados desta unidade (${sedeAlunos.length} alunos)`}
+                    >
+                      <Trash2 className="h-4 w-4 text-rose-600" />
+                      Zerar Unidade ({sedeAlunos.length})
+                    </Button>
+                  )}
+                </div>
               )
             )}
             <input 
@@ -1200,19 +1500,20 @@ const Alunos = () => {
             />
             <Button 
               variant="outline"
+              size="sm"
               onClick={handleDownloadTemplate}
               title="Baixar planilha de exemplo para importação"
               className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
             >
-              <FileDown className="mr-2 h-4 w-4" />
+              <FileDown className="mr-1.5 h-4 w-4" />
               Modelo
             </Button>
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="mr-2 h-4 w-4" />
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="mr-1.5 h-4 w-4" />
               Importar
             </Button>
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" />
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="mr-1.5 h-4 w-4" />
               Exportar
             </Button>
           </div>
@@ -1306,13 +1607,25 @@ const Alunos = () => {
                       <div className="flex flex-col gap-1">
                         {aluno.setor && aluno.classe && aluno.turma ? (
                           <>
-                            <span className="text-xs text-muted-foreground uppercase">{aluno.setor}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs text-muted-foreground uppercase">{aluno.setor}</span>
+                              <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                <MapPin className="h-2.5 w-2.5 text-slate-500" />
+                                {aluno.unidade || 'Sede Principal (Papagaio)'}
+                              </span>
+                            </div>
                             <span className="inline-flex items-center gap-1 text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full w-fit">
                               {aluno.classe} - {aluno.turma}
                             </span>
                           </>
                         ) : (
-                          <span className="text-xs text-muted-foreground italic">Não matriculado</span>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground italic">Não matriculado</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 w-fit">
+                              <MapPin className="h-2.5 w-2.5 text-slate-500" />
+                              {aluno.unidade || 'Sede Principal (Papagaio)'}
+                            </span>
+                          </div>
                         )}
                         {aluno.valorBase && parseFloat(aluno.valorBase) > 0 && (
                           <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded w-fit">
@@ -1411,6 +1724,24 @@ const Alunos = () => {
                           }}>
                             <FileText className="mr-2 h-4 w-4 text-indigo-600" />
                             Editar Contrato
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="cursor-pointer text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50"
+                            onClick={() => setHistoricoAluno(aluno)}
+                          >
+                            <DollarSign className="mr-2 h-4 w-4 text-emerald-600" />
+                            Histórico Financeiro
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"
+                            onClick={() => {
+                              setAlunoToDelete(aluno);
+                              setIsDeleteSingleOpen(true);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4 text-red-600" />
+                            Excluir Aluno
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -2039,6 +2370,39 @@ const Alunos = () => {
                 <Upload className="h-4 w-4 mr-2" />
                 Importar Pagamentos
               </Button>
+              <Button 
+                variant="outline"
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200"
+                onClick={() => {
+                  const batch = reconcileAllLancamentosWithAlunos(lancamentos, alunos, mensalidades);
+                  if (batch.summary.mensalidadesBaixadasCount > 0 || batch.summary.spuriousRemovedCount > 0) {
+                    setMensalidades(batch.updatedMensalidades);
+                  }
+                  if (batch.summary.historicoAdicionadoCount > 0 || batch.summary.spuriousRemovedCount > 0) {
+                    setAlunos(batch.updatedAlunos);
+                  }
+                  setLancamentos(batch.updatedLancamentos);
+                  if (batch.summary.matchedAlunosCount > 0 || batch.summary.spuriousRemovedCount > 0) {
+                    const parts: string[] = [];
+                    if (batch.summary.mensalidadesBaixadasCount > 0) {
+                      parts.push(`${batch.summary.mensalidadesBaixadasCount} mensalidade(s) baixada(s)`);
+                    }
+                    if (batch.summary.historicoAdicionadoCount > 0) {
+                      parts.push(`${batch.summary.historicoAdicionadoCount} alocado(s) ao histórico`);
+                    }
+                    if (batch.summary.spuriousRemovedCount > 0) {
+                      parts.push(`${batch.summary.spuriousRemovedCount} mensalidade(s) indevida(s) removida(s)`);
+                    }
+                    toast.success(`Reconciliação concluída: ${parts.join(', ')}!`);
+                  } else {
+                    toast.info('Todas as entradas já estão sincronizadas com os alunos.');
+                  }
+                }}
+                title="Concilia entradas do financeiro dando baixa em mensalidades e registrando outros serviços"
+              >
+                <Sparkles className="h-4 w-4 mr-2 text-indigo-600" />
+                Conciliar com Financeiro
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -2362,6 +2726,8 @@ const Alunos = () => {
                   id: savedAlunoId,
                   matricula: matriculaGerada,
                   status: 'Ativo',
+                  sedeId: activeSedeId !== 'todas' ? activeSedeId : (matrizSede?.id || 'sede-matriz'),
+                  unidade: activeSede?.nome || matrizSede?.nome || 'Sede Principal (Papagaio)',
                   ...extractedData
                 };
                 setAlunos([...alunos, novoAluno]);
@@ -3785,6 +4151,104 @@ const Alunos = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(historicoAluno)} onOpenChange={(open) => !open && setHistoricoAluno(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <DollarSign className="h-5 w-5 text-emerald-600" />
+              Histórico Financeiro do Aluno
+            </DialogTitle>
+            {historicoAluno && (
+              <DialogDescription className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">{historicoAluno.nome}</span> • Matrícula: {historicoAluno.matricula || 'S/N'} • Turma: {historicoAluno.classe || 'Sem Turma'} {historicoAluno.turma || ''} • Responsável: {historicoAluno.nomeResponsavel || 'Não informado'} ({historicoAluno.contatoResponsavel || 'Sem telefone'})
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {historicoAluno && (
+            <div className="space-y-6 pt-2">
+              {/* Badges de resumo financeiro */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg border bg-emerald-50/50 border-emerald-200">
+                  <div className="text-[11px] text-emerald-700 font-medium">Mensalidades Pagas</div>
+                  <div className="text-xl font-bold text-emerald-800">
+                    {mensalidades.filter(m => m.alunoId === historicoAluno.id && m.status === 'Pago').length}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg border bg-amber-50/50 border-amber-200">
+                  <div className="text-[11px] text-amber-700 font-medium">Mensalidades em Aberto</div>
+                  <div className="text-xl font-bold text-amber-800">
+                    {mensalidades.filter(m => m.alunoId === historicoAluno.id && m.status !== 'Pago').length}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg border bg-blue-50/50 border-blue-200">
+                  <div className="text-[11px] text-blue-700 font-medium">Outros Serviços / Lançamentos</div>
+                  <div className="text-xl font-bold text-blue-800">
+                    {(historicoAluno.historicoFinanceiro || [])
+                      .filter(h => h.tipo === 'lancamento' || h.tipo === 'pagamento' || h.statusResultado === 'pago')
+                      .reduce((acc, h) => acc + (h.valor || h.valorCobrado || 0), 0)
+                      .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Linha do Tempo de Lançamentos e Cobranças */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-primary" />
+                  Timeline Financeira (Entradas, Serviços e Contatos)
+                </h3>
+                <HistoricoFinanceiroTimeline aluno={historicoAluno} />
+              </div>
+
+              {/* Tabela de Mensalidades do Aluno */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-muted/40 px-4 py-2 text-xs font-semibold border-b">
+                  Mensalidades Escolares Cadastradas
+                </div>
+                {mensalidades.filter(m => m.alunoId === historicoAluno.id).length === 0 ? (
+                  <div className="p-4 text-center text-xs text-muted-foreground">
+                    Nenhuma fatura de mensalidade cadastrada para este aluno.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Mês</TableHead>
+                        <TableHead className="text-xs">Vencimento</TableHead>
+                        <TableHead className="text-xs">Valor</TableHead>
+                        <TableHead className="text-xs">Status</TableHead>
+                        <TableHead className="text-xs">Pagamento</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {mensalidades
+                        .filter(m => m.alunoId === historicoAluno.id)
+                        .sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia))
+                        .map(m => (
+                          <TableRow key={m.id} className="text-xs">
+                            <TableCell className="font-semibold">{m.mesReferencia}</TableCell>
+                            <TableCell>{new Date(m.dataVencimento).toLocaleDateString('pt-BR')}</TableCell>
+                            <TableCell className="font-semibold">{m.valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                            <TableCell>
+                              <Badge variant={m.status === 'Pago' ? 'default' : 'outline'} className={m.status === 'Pago' ? 'bg-emerald-600 text-white' : ''}>
+                                {m.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {m.dataPagamento ? new Date(m.dataPagamento).toLocaleDateString('pt-BR') : '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <DocumentosImpressaoModal
         isOpen={isDocImpressaoOpen}
         onClose={() => setIsDocImpressaoOpen(false)}
@@ -3863,6 +4327,72 @@ const Alunos = () => {
         alunoNome={boletoModalData.alunoNome}
         bancoNome={boletoModalData.bancoNome}
       />
+
+      {/* Diálogo de Confirmação: Excluir Aluno Individual */}
+      <AlertDialog open={isDeleteSingleOpen} onOpenChange={setIsDeleteSingleOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Aluno</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o aluno <strong>{alunoToDelete?.nome}</strong>? Esta ação removerá o aluno e suas mensalidades desta unidade.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAlunoToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDeleteSingle}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de Confirmação: Excluir Selecionados */}
+      <AlertDialog open={isDeleteSelectedOpen} onOpenChange={setIsDeleteSelectedOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Alunos Selecionados</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir os <strong>{selectedAlunosIds.length}</strong> alunos selecionados? Esta ação é irreversível.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleDeleteSelected}
+            >
+              Excluir {selectedAlunosIds.length} Alunos
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de Confirmação: Zerar Unidade */}
+      <AlertDialog open={isZerarUnidadeOpen} onOpenChange={setIsZerarUnidadeOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Zerar Unidade Ativa
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação removerá todos os <strong>{sedeAlunos.length}</strong> alunos e lançamentos vinculados a esta unidade. Utilize caso a unidade tenha sido criada recentemente ou dados de teste tenham sido carregados por engano.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={handleZerarUnidade}
+            >
+              Sim, Zerar Unidade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

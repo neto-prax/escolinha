@@ -21,31 +21,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import directorImage from '@/assets/diretora-purple-edu.jpg';
 import { Logo } from '@/components/common/Logo';
-
-const pillars = [
-  {
-    icon: CircleDollarSign,
-    title: 'Financeiro sem planilhas soltas',
-    description: 'Mensalidades, caixa, despesas, salários e relatórios reunidos em uma visão clara.',
-    points: ['Acompanhamento de mensalidades', 'Relatórios financeiros diários'],
-  },
-  {
-    icon: GraduationCap,
-    title: 'Alunos sempre organizados',
-    description: 'Cadastros, matrículas, responsáveis e histórico escolar acessíveis pela equipe autorizada.',
-    points: ['Visão completa de cada aluno', 'Documentos e responsáveis vinculados'],
-  },
-  {
-    icon: MessageCircle,
-    title: 'Captação e WhatsApp',
-    description: 'Acompanhe interessados no funil comercial e centralize conversas com as famílias.',
-    points: ['CRM para novas matrículas', 'Histórico de atendimento'],
-  },
-];
+import { FluidProductShowcase } from '@/components/landing/FluidProductShowcase';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Landing = () => {
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [studentCount, setStudentCount] = useState(450);
+
+  const accessUrl = user ? '/app/dashboard' : '/login';
 
   const estimate = useMemo(() => {
     const monthlyHours = Math.round(studentCount * 0.12);
@@ -53,7 +37,10 @@ const Landing = () => {
     return { monthlyHours, yearlyValue };
   }, [studentCount]);
 
-  const scrollToContact = () => document.querySelector('#contato')?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToContact = () => {
+    const el = document.querySelector('#solucoes') || document.querySelector('#inicio');
+    el?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background font-sans text-foreground">
@@ -63,10 +50,12 @@ const Landing = () => {
             <Logo size="md" />
           </a>
 
-          <nav className="hidden items-center gap-8 md:flex" aria-label="Navegação principal">
+          <nav className="hidden items-center gap-6 md:flex" aria-label="Navegação principal">
             <a href="#solucoes" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Soluções</a>
             <a href="#calculadora" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Calculadora</a>
-            <Link to="/login" className="text-sm font-semibold text-muted-foreground transition-colors hover:text-primary">Área do cliente</Link>
+            <Button variant="ghost" asChild className="font-semibold text-sm">
+              <Link to={accessUrl}>Acessar a Plataforma</Link>
+            </Button>
             <Button onClick={scrollToContact} className="shadow-lg shadow-primary/20">Solicitar demonstração</Button>
           </nav>
 
@@ -86,7 +75,9 @@ const Landing = () => {
             <div className="flex flex-col gap-1">
               <a href="#solucoes" onClick={() => setMenuOpen(false)} className="rounded-md px-3 py-3 font-semibold">Soluções</a>
               <a href="#calculadora" onClick={() => setMenuOpen(false)} className="rounded-md px-3 py-3 font-semibold">Calculadora</a>
-              <Link to="/login" className="rounded-md px-3 py-3 font-semibold">Área do cliente</Link>
+              <Link to={accessUrl} onClick={() => setMenuOpen(false)} className="rounded-md px-3 py-3 font-semibold text-primary">
+                Acessar a Plataforma
+              </Link>
               <Button onClick={() => { setMenuOpen(false); scrollToContact(); }} className="mt-2">Solicitar demonstração</Button>
             </div>
           </nav>
@@ -112,7 +103,7 @@ const Landing = () => {
                   Solicitar demonstração <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 <Button size="lg" variant="outline" asChild className="h-13 px-7 text-base">
-                  <a href="#solucoes">Conhecer a plataforma</a>
+                  <Link to={accessUrl}>Acessar a Plataforma</Link>
                 </Button>
               </div>
               <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
@@ -190,27 +181,19 @@ const Landing = () => {
           </div>
         </section>
 
-        <section id="solucoes" className="bg-accent/40 py-20 sm:py-24">
+        <section id="solucoes" className="bg-accent/40 py-16 sm:py-24">
           <div className="container px-4 sm:px-6">
-            <div className="max-w-3xl">
-              <p className="text-sm font-bold uppercase text-primary">Plataforma completa</p>
-              <h2 className="mt-3 font-display text-3xl leading-tight sm:text-4xl">Três frentes que trabalham juntas</h2>
-              <p className="mt-4 text-lg text-muted-foreground">Uma visão contínua da jornada da família, do primeiro contato à rotina financeira.</p>
+            <div className="max-w-3xl mb-8">
+              <p className="text-sm font-bold uppercase text-primary">Plataforma Completa</p>
+              <h2 className="mt-2 font-display text-3xl leading-tight sm:text-4xl text-foreground">
+                Tudo o que sua escola precisa em uma só experiência
+              </h2>
+              <p className="mt-3 text-base sm:text-lg text-muted-foreground">
+                Role ou deslize para navegar fluidamente entre os produtos e módulos integrados da gestão escolar.
+              </p>
             </div>
-            <div className="mt-12 grid gap-5 md:grid-cols-3">
-              {pillars.map(({ icon: Icon, title, description, points }) => (
-                <Card key={title} className="group border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-xl">
-                  <CardContent className="p-6">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform group-hover:scale-105"><Icon className="h-5 w-5" /></span>
-                    <h3 className="mt-6 font-display text-lg leading-snug">{title}</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{description}</p>
-                    <ul className="mt-5 space-y-2">
-                      {points.map((point) => <li key={point} className="flex gap-2 text-sm text-foreground"><Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />{point}</li>)}
-                    </ul>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+
+            <FluidProductShowcase onSelectCta={scrollToContact} />
           </div>
         </section>
 
@@ -292,8 +275,12 @@ const Landing = () => {
       <footer className="bg-sidebar py-10 text-sidebar-foreground">
         <div className="container flex flex-col gap-6 px-4 sm:px-6 md:flex-row md:items-center md:justify-between">
           <Logo size="sm" lightText={false} />
+          <div className="flex flex-wrap items-center gap-6">
+            <Link to={accessUrl} className="text-sm font-semibold text-sidebar-foreground/75 transition-colors hover:text-sidebar-primary">
+              Acessar a Plataforma
+            </Link>
+          </div>
           <p className="text-sm text-sidebar-foreground/55">© 2026 Purple Edu. Gestão escolar conectada.</p>
-          <Link to="/login" className="text-sm font-semibold text-sidebar-foreground/75 transition-colors hover:text-sidebar-primary">Área do cliente</Link>
         </div>
       </footer>
     </div>

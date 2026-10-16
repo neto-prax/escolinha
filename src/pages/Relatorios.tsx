@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,15 +14,33 @@ import { Aluno, Mensalidade } from '@/types/aluno';
 import { Lancamento, Caixa } from '@/types/finance';
 import { formatDate } from '@/lib/utils';
 
+import { useSedes } from '@/hooks/useSedes';
+
 const Relatorios = () => {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   
-  const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
-  const [mensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
-  const [lancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
+  const { activeSedeId, isItemInActiveSede } = useSedes();
+  const [rawAlunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
+  const [rawMensalidades] = useLocalStorage<Mensalidade[]>('escolinha_mensalidades', []);
+  const [rawLancamentosStorage] = useLocalStorage<any[]>('escolinha_lancamentos', []);
   const [caixas] = useLocalStorage<Caixa[]>('escolinha_caixas', mockCaixas);
   const [employees] = useLocalStorage<any[]>('escolinha_employees_v2', []);
+
+  const alunos = useMemo(() => {
+    return rawAlunos.filter((a) => isItemInActiveSede(a.sedeId, a.unidade));
+  }, [rawAlunos, isItemInActiveSede]);
+
+  const alunoIdSet = useMemo(() => new Set(alunos.map((a) => a.id)), [alunos]);
+
+  const mensalidades = useMemo(() => {
+    if (activeSedeId === 'todas') return rawMensalidades;
+    return rawMensalidades.filter((m) => alunoIdSet.has(m.alunoId));
+  }, [rawMensalidades, alunoIdSet, activeSedeId]);
+
+  const lancamentosStorage = useMemo(() => {
+    return rawLancamentosStorage.filter((l: any) => isItemInActiveSede(l?.sedeId, l?.unidade));
+  }, [rawLancamentosStorage, isItemInActiveSede]);
 
   const lancamentos: Lancamento[] = lancamentosStorage.map((l) => ({
     ...l,

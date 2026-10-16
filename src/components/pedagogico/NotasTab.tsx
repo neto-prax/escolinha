@@ -17,6 +17,7 @@ import {
   DEFAULT_MATERIAS,
   DEFAULT_CONFIG_ACADEMICA,
 } from '@/types/pedagogico';
+import { calculateMedia as calcMediaCore, getAcademicStatus } from '@/utils/academicCalculations';
 
 export interface NotaAluno {
   id: string;
@@ -93,29 +94,21 @@ export const NotasTab: React.FC = () => {
   const [parecerPedagogico, setParecerPedagogico] = useState('');
 
   const calculateMedia = (n1: number, n2: number, _nExame?: number) => {
-    const tipo = configAcademica?.mediaParcial?.tipoCalculo || 'aritmetica';
-    if (tipo === 'ponderada') {
-      const p = configAcademica?.mediaParcial?.pesosAvaliacoes || { prova: 6, trabalho: 4 };
-      const pesoN1 = p.prova || 6;
-      const pesoN2 = p.trabalho || 4;
-      const soma = Number(n1) * pesoN1 + Number(n2) * pesoN2;
-      const media = soma / (pesoN1 + pesoN2);
-      return Number(media.toFixed(1));
-    } else if (tipo === 'somatoria') {
-      return Number((Number(n1) + Number(n2)).toFixed(1));
-    } else {
-      const media = (Number(n1) + Number(n2)) / 2;
-      return Number(media.toFixed(1));
-    }
+    return calcMediaCore(n1, n2, {
+      tipoCalculo: (configAcademica?.mediaParcial?.tipoCalculo as any) || 'aritmetica',
+      pesosAvaliacoes: configAcademica?.mediaParcial?.pesosAvaliacoes,
+    });
   };
 
   const getStatusBadge = (media: number) => {
-    const notaAprovacao = configAcademica?.mediaFinal?.notaAprovacaoDireta ?? 7.0;
-    const notaExameMin = configAcademica?.mediaFinal?.notaMinimaExame ?? 4.0;
+    const status = getAcademicStatus(media, {
+      notaAprovacaoDireta: configAcademica?.mediaFinal?.notaAprovacaoDireta,
+      notaMinimaExame: configAcademica?.mediaFinal?.notaMinimaExame,
+    });
 
-    if (media >= notaAprovacao) {
+    if (status === 'aprovado') {
       return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold">Aprovado Direto</Badge>;
-    } else if (media >= notaExameMin) {
+    } else if (status === 'recuperacao') {
       return <Badge className="bg-amber-100 text-amber-800 border-amber-300 font-semibold">Recuperação / Exame</Badge>;
     } else {
       return <Badge className="bg-rose-100 text-rose-800 border-rose-300 font-semibold">Reprovado</Badge>;

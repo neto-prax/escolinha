@@ -14,12 +14,6 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
         if (cached !== null) {
           return JSON.parse(cached) as T;
         }
-        if (schoolId && scopedKey !== key) {
-          const unscopedCached = window.localStorage.getItem(key);
-          if (unscopedCached !== null) {
-            return JSON.parse(unscopedCached) as T;
-          }
-        }
       }
     } catch (e) {
       console.warn(`Erro ao ler cache inicial "${scopedKey}":`, e);
@@ -40,11 +34,8 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       setStoredValue(valueToStore);
       setValueScope(scopedKey);
       
-      // Salva tanto na chave isolada por escola quanto na chave padrão
+      // Salva apenas na chave isolada por escola
       window.localStorage.setItem(scopedKey, JSON.stringify(valueToStore));
-      if (scopedKey !== key) {
-        window.localStorage.setItem(key, JSON.stringify(valueToStore));
-      }
       window.localStorage.setItem(`${scopedKey}_updated_at`, String(Date.now()));
 
       window.dispatchEvent(new CustomEvent('local-storage-sync', {
@@ -80,14 +71,6 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
         if (cached !== null) {
           localValue = JSON.parse(cached) as T;
           hasLocal = true;
-        } else if (schoolId && scopedKey !== key) {
-          // Fallback para chave sem prefixo de escola
-          const unscopedCached = window.localStorage.getItem(key);
-          if (unscopedCached !== null) {
-            localValue = JSON.parse(unscopedCached) as T;
-            hasLocal = true;
-            window.localStorage.setItem(scopedKey, unscopedCached);
-          }
         }
       } catch (error) {
         console.warn(`Erro ao ler cache local "${scopedKey}":`, error);
@@ -133,9 +116,6 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
         setValueScope(scopedKey);
         try {
           window.localStorage.setItem(scopedKey, JSON.stringify(finalValue));
-          if (scopedKey !== key) {
-            window.localStorage.setItem(key, JSON.stringify(finalValue));
-          }
         } catch { /* armazenamento indisponível */ }
         window.dispatchEvent(new CustomEvent('local-storage-sync', {
           detail: { key: scopedKey, newValue: finalValue },

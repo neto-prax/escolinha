@@ -22,6 +22,11 @@ version: "2.5.0"
 
 # 🎓 Purple Edu — Sistema de Gestão Escolar Completa (ERP SaaS)
 
+> [!TIP]
+> **Central Oficial de Documentação**: A documentação completa e modular do projeto está reunida na pasta [**`doc/`**](./doc/README.md).
+> - Visão unificada integral: [**`doc/DOCUMENTACAO_COMPLETA.md`**](./doc/DOCUMENTACAO_COMPLETA.md)
+> - Guias por módulos temáticos: Arquitetura, Banco de Dados, Pedagógico, Financeiro, Secretaria, WhatsApp, Comercial, Estoque e Instalação/Deploy.
+
 > [!NOTE]
 > Este documento foi formatado especialmente para leitura e navegação no **Obsidian**, utilizando Markdown rico, Callouts, Diagramas Mermaid dinâmicos e referências diretas à estrutura do código-fonte.
 

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -39,9 +40,17 @@ import {
   SlidersHorizontal,
   Bot,
   Check,
+  RotateCcw,
+  ChevronUp,
+  ChevronDown,
+  AlertTriangle,
 } from 'lucide-react';
-import { WhatsAppChatConversation, WhatsAppTrigger } from '@/types/mensagens';
-import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
+import { WhatsAppChatConversation, WhatsAppTrigger, WhatsAppGreetingConfig } from '@/types/mensagens';
+import {
+  useWhatsAppTriggers,
+  buildGreetingMenuText,
+  DEFAULT_GREETING_CONFIG,
+} from '@/hooks/useWhatsAppTriggers';
 import { toast } from 'sonner';
 
 /* =========================================================================
@@ -275,7 +284,197 @@ export function WhatsAppAdjustableTriggerModal({
     triggers: hookTriggers = [],
     updateTrigger: hookUpdateTrigger,
     addTrigger: hookAddTrigger,
+    greetingConfig,
+    saveGreetingConfig,
   } = useWhatsAppTriggers();
+
+  const [greetingDraft, setGreetingDraft] = useState<WhatsAppGreetingConfig>(greetingConfig);
+  const [isSavingGreeting, setIsSavingGreeting] = useState(false);
+
+  useEffect(() => {
+    if (greetingConfig) {
+      setGreetingDraft(greetingConfig);
+    }
+  }, [greetingConfig]);
+
+  const [customSectors, setCustomSectors] = useState<SectorItem[]>([]);
+  const [newSectorName, setNewSectorName] = useState('');
+
+  const normalizeSector = (str: string) =>
+    str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  // Garante todos os setores padrão essenciais mesclados com os do banco e customizados
+  const effectiveSectors: SectorItem[] = useMemo(() => {
+    const defaultSectors: SectorItem[] = [
+      { id: 'comercial', name: 'Comercial & Matrículas' },
+      { id: 'financeiro', name: 'Financeiro' },
+      { id: 'secretaria', name: 'Secretaria' },
+      { id: 'pedagogico', name: 'Coordenação Pedagógica' },
+      { id: 'suporte', name: 'Suporte & Atendimento' },
+    ];
+
+    const baseList = Array.isArray(allSectors) && allSectors.length > 0 ? allSectors : [];
+    const existingNames = new Set(baseList.map((s) => normalizeSector(s.name)));
+
+    const missingDefaults = defaultSectors.filter(
+      (def) =>
+        !existingNames.has(normalizeSector(def.name)) &&
+        !baseList.some((db) => db.id === def.id || normalizeSector(db.name).includes(normalizeSector(def.id)))
+    );
+
+    return [...baseList, ...missingDefaults, ...customSectors];
+  }, [allSectors, customSectors]);
+
+  // Checa se o setor está ativo no menu (por id ou correspondência de nome)
+  const isSectorEnabled = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    return greetingDraft.enabledSectors.some(
+      (id) =>
+        id === sectorId ||
+        normalizeSector(id) === cleanName ||
+        cleanName.includes(normalizeSector(id)) ||
+        normalizeSector(id).includes(cleanName)
+    );
+  };
+
+  // Obtém o número da opção (1, 2, 3...)
+  const getOrderNumber = (sectorId: string, sectorName: string): number | null => {
+    const cleanName = normalizeSector(sectorName);
+    const idx = greetingDraft.enabledSectors.findIndex(
+      (id) =>
+        id === sectorId ||
+        normalizeSector(id) === cleanName ||
+        cleanName.includes(normalizeSector(id)) ||
+        normalizeSector(id).includes(cleanName)
+    );
+    return idx >= 0 ? idx + 1 : null;
+  };
+
+  // Obtém a mensagem de encaminhamento configurada
+  const getSectorGreeting = (sectorId: string, sectorName: string): string => {
+    if (greetingDraft.sectorGreetings[sectorId]) {
+      return greetingDraft.sectorGreetings[sectorId];
+    }
+    const cleanName = normalizeSector(sectorName);
+    for (const [key, msg] of Object.entries(greetingDraft.sectorGreetings)) {
+      if (
+        normalizeSector(key) === cleanName ||
+        cleanName.includes(normalizeSector(key)) ||
+        normalizeSector(key).includes(cleanName)
+      ) {
+        return msg;
+      }
+    }
+    return '';
+  };
+
+  const handleToggleGreetingSector = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    const isCurrentlyEnabled = isSectorEnabled(sectorId, sectorName);
+
+    setGreetingDraft((prev) => {
+      let nextList: string[];
+      if (isCurrentlyEnabled) {
+        nextList = prev.enabledSectors.filter(
+          (id) =>
+            id !== sectorId &&
+            normalizeSector(id) !== cleanName &&
+            !cleanName.includes(normalizeSector(id)) &&
+            !normalizeSector(id).includes(cleanName)
+        );
+      } else {
+        nextList = [...prev.enabledSectors, sectorId];
+      }
+      return { ...prev, enabledSectors: nextList };
+    });
+  };
+
+  const handleMoveSectorUp = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    setGreetingDraft((prev) => {
+      const idx = prev.enabledSectors.findIndex(
+        (id) =>
+          id === sectorId ||
+          normalizeSector(id) === cleanName ||
+          cleanName.includes(normalizeSector(id)) ||
+          normalizeSector(id).includes(cleanName)
+      );
+      if (idx <= 0) return prev;
+      const copy = [...prev.enabledSectors];
+      [copy[idx - 1], copy[idx]] = [copy[idx], copy[idx - 1]];
+      return { ...prev, enabledSectors: copy };
+    });
+  };
+
+  const handleMoveSectorDown = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    setGreetingDraft((prev) => {
+      const idx = prev.enabledSectors.findIndex(
+        (id) =>
+          id === sectorId ||
+          normalizeSector(id) === cleanName ||
+          cleanName.includes(normalizeSector(id)) ||
+          normalizeSector(id).includes(cleanName)
+      );
+      if (idx < 0 || idx >= prev.enabledSectors.length - 1) return prev;
+      const copy = [...prev.enabledSectors];
+      [copy[idx], copy[idx + 1]] = [copy[idx + 1], copy[idx]];
+      return { ...prev, enabledSectors: copy };
+    });
+  };
+
+  const handleUpdateSectorGreeting = (sectorId: string, text: string) => {
+    setGreetingDraft((prev) => ({
+      ...prev,
+      sectorGreetings: {
+        ...prev.sectorGreetings,
+        [sectorId]: text,
+      },
+    }));
+  };
+
+  const handleAddNewSector = () => {
+    const clean = newSectorName.trim();
+    if (!clean) return;
+    const newId = `custom-sec-${Date.now()}`;
+    const newSec: SectorItem = { id: newId, name: clean };
+    setCustomSectors((prev) => [...prev, newSec]);
+    setGreetingDraft((prev) => ({
+      ...prev,
+      enabledSectors: [...prev.enabledSectors, newId],
+      sectorGreetings: {
+        ...prev.sectorGreetings,
+        [newId]: `Perfeito! Transferindo para o setor ${clean}. Em instantes um atendente irá te responder.`,
+      },
+    }));
+    setNewSectorName('');
+    toast.success(`Setor "${clean}" adicionado ao menu!`);
+  };
+
+  const handleSaveGreetingSettings = async () => {
+    setIsSavingGreeting(true);
+    try {
+      await saveGreetingConfig(greetingDraft);
+      toast.success('Mensagem de saudação & menu inicial salvas com sucesso!');
+    } finally {
+      setIsSavingGreeting(false);
+    }
+  };
+
+  const handleDispatchGreetingToCurrentChat = async () => {
+    const formatted = buildGreetingMenuText(
+      greetingDraft.message,
+      effectiveSectors,
+      greetingDraft.enabledSectors,
+      { schoolName, contactName: conversation?.contact_name }
+    );
+    await onDispatchTrigger({
+      message: formatted,
+      targetStatus: 'open',
+    });
+    toast.success('Mensagem de saudação com menu enviada para a conversa!');
+    onOpenChange(false);
+  };
 
   // Usa gatilhos do hook ou das props com fallback resiliente
   const triggersList = useMemo(() => {
@@ -287,8 +486,8 @@ export function WhatsAppAdjustableTriggerModal({
   const updateFn = onUpdateTrigger || hookUpdateTrigger;
   const addFn = onAddTrigger || hookAddTrigger;
 
-  // Abas do Modal: 'dispatch' (Disparar no Contato) ou 'manage' (Alterar/Editar Gatilho)
-  const [modalTab, setModalTab] = useState<'dispatch' | 'manage'>('dispatch');
+  // Abas do Modal: 'dispatch' (Disparar no Contato), 'manage' (Alterar/Editar Gatilho) ou 'greeting' (Saudação & Menu)
+  const [modalTab, setModalTab] = useState<'dispatch' | 'manage' | 'greeting'>('dispatch');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Estado do Modo Disparo
@@ -534,7 +733,7 @@ export function WhatsAppAdjustableTriggerModal({
               </div>
               <div>
                 <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-                  <span>Central de Gatilhos WAKG</span>
+                  <span>Central de Gatilhos</span>
                   <Badge variant="outline" className="text-[10px] font-medium border-amber-500/30 text-amber-600 dark:text-amber-400">
                     {triggersList.length} Gatilhos
                   </Badge>
@@ -546,11 +745,11 @@ export function WhatsAppAdjustableTriggerModal({
               </div>
             </div>
 
-            {/* Alternador de Modos: Disparar ou Alterar/Gerenciar */}
+            {/* Alternador de Modos: Disparar, Alterar ou Saudação */}
             <Tabs
               value={modalTab}
               onValueChange={(val) => {
-                const nextTab = val as 'dispatch' | 'manage';
+                const nextTab = val as 'dispatch' | 'manage' | 'greeting';
                 setModalTab(nextTab);
                 if (nextTab === 'manage' && (!editingTriggerId || editingTriggerId === 'new')) {
                   const target = currentTrigger || triggersList[0];
@@ -568,7 +767,17 @@ export function WhatsAppAdjustableTriggerModal({
                 <TabsTrigger value="manage" className="text-xs px-2.5 h-7 gap-1.5 data-[state=active]:font-semibold">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-amber-500" />
                   <span className="hidden sm:inline">Alterar Gatilhos</span>
-                  <span className="sm:hidden">Alterar</span>
+                  <span className="sm:hidden">Gatilhos</span>
+                </TabsTrigger>
+                <TabsTrigger value="greeting" className="text-xs px-2.5 h-7 gap-1.5 data-[state=active]:font-semibold">
+                  <Bot className="w-3.5 h-3.5 text-primary" />
+                  <span className="hidden sm:inline">Saudação & Menu</span>
+                  <span className="sm:hidden">Saudação</span>
+                  {greetingDraft.enabled ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block ml-0.5" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 inline-block ml-0.5" />
+                  )}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -628,6 +837,49 @@ export function WhatsAppAdjustableTriggerModal({
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
                       Escreva livremente sem modelo pré-definido.
+                    </p>
+                  </div>
+
+                  {/* Opção Boas-Vindas & Menu Inicial */}
+                  <div
+                    onClick={() => {
+                      setSelectedTriggerId('greeting-template');
+                      const formatted = buildGreetingMenuText(
+                        greetingDraft.message,
+                        allSectors,
+                        greetingDraft.enabledSectors,
+                        { schoolName, contactName: conversation?.contact_name }
+                      );
+                      setMessage(formatted);
+                      setTargetSectorId('keep');
+                      setTargetStatus('open');
+                    }}
+                    className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                      selectedTriggerId === 'greeting-template'
+                        ? 'bg-primary/10 border-primary shadow-2xs ring-1 ring-primary/40'
+                        : 'bg-card border-border/70 hover:bg-muted/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-primary flex items-center gap-1.5">
+                        <Bot className="w-3.5 h-3.5" /> Boas-Vindas & Menu
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModalTab('greeting');
+                        }}
+                        className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary gap-1"
+                        title="Editar modelo de saudação e setores"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                        <span>Editar</span>
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                      {greetingDraft.message}
                     </p>
                   </div>
 
@@ -1064,6 +1316,318 @@ export function WhatsAppAdjustableTriggerModal({
                 </div>
               </DialogFooter>
             </form>
+          </div>
+        )}
+
+        {/* ---------------- ABA 3: EDITAR MENSAGEM DE SAUDAÇÃO & MENU ---------------- */}
+        {modalTab === 'greeting' && (
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-muted/10">
+            {/* Faixa Superior: Status Ativo & Ações Rápidas */}
+            <div className="px-4 sm:px-6 py-3 border-b bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center space-x-2.5 bg-muted/40 px-3 py-1.5 rounded-lg border">
+                  <Switch
+                    id="modal-greeting-active"
+                    checked={greetingDraft.enabled}
+                    onCheckedChange={(checked) =>
+                      setGreetingDraft((prev) => ({ ...prev, enabled: checked }))
+                    }
+                  />
+                  <Label htmlFor="modal-greeting-active" className="text-xs font-semibold cursor-pointer">
+                    {greetingDraft.enabled ? 'Saudação Ativa na 1ª Mensagem' : 'Saudação Pausada'}
+                  </Label>
+                </div>
+                <Badge
+                  variant={greetingDraft.enabled ? 'default' : 'secondary'}
+                  className="text-[10px] hidden sm:inline-flex"
+                >
+                  {greetingDraft.enabled ? 'Disparado na 1ª mensagem' : 'Desativado'}
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setGreetingDraft(DEFAULT_GREETING_CONFIG);
+                    toast.info('Restaurado para o modelo padrão.');
+                  }}
+                  className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                  title="Restaurar padrão inicial"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Restaurar Padrão
+                </Button>
+              </div>
+            </div>
+
+            {/* Corpo com Grid de 2 Colunas */}
+            <ScrollArea className="flex-1 p-4 sm:p-5">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 max-w-5xl mx-auto">
+                {/* COLUNA ESQUERDA: Editor da Mensagem & Variáveis (5 colunas) */}
+                <div className="lg:col-span-5 space-y-4 flex flex-col">
+                  {/* Card do Texto da Saudação */}
+                  <div className="p-4 rounded-xl border bg-card shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <MessageSquare className="w-4 h-4 text-primary" />
+                        Texto da Mensagem Inicial
+                      </Label>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {greetingDraft.message.length} carac.
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      Mensagem enviada no WhatsApp. A tag <code className="text-primary font-semibold bg-primary/10 px-1 py-0.5 rounded">{'{SECTORS_LIST}'}</code> será substituída pelas opções numeradas dos setores abaixo.
+                    </p>
+
+                    {/* Botões Rápidos de Tags */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setGreetingDraft((prev) => ({
+                            ...prev,
+                            message: prev.message.includes('{SECTORS_LIST}')
+                              ? prev.message
+                              : `${prev.message}\n\n{SECTORS_LIST}`,
+                          }))
+                        }
+                        className="h-7 px-2.5 text-xs text-primary border-primary/30 bg-primary/5 hover:bg-primary/10 font-semibold"
+                      >
+                        + {'{SECTORS_LIST}'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setGreetingDraft((prev) => ({ ...prev, message: `${prev.message} {{nome}}` }))
+                        }
+                        className="h-7 px-2 text-xs hover:bg-muted/50"
+                      >
+                        + {'{{nome}}'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setGreetingDraft((prev) => ({ ...prev, message: `${prev.message} {{escola}}` }))
+                        }
+                        className="h-7 px-2 text-xs hover:bg-muted/50"
+                      >
+                        + {'{{escola}}'}
+                      </Button>
+                    </div>
+
+                    {/* Textarea com padding e altura ideais (sem corte) */}
+                    <Textarea
+                      value={greetingDraft.message}
+                      onChange={(e) => setGreetingDraft((prev) => ({ ...prev, message: e.target.value }))}
+                      placeholder="Olá! Seja bem-vindo(a)..."
+                      rows={7}
+                      className="text-xs font-mono p-3 leading-relaxed resize-y bg-background min-h-[140px]"
+                    />
+
+                    {!greetingDraft.message.includes('{SECTORS_LIST}') && (
+                      <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>
+                          Atenção: A tag <code className="font-semibold">{'{SECTORS_LIST}'}</code> não está no texto. Os setores abaixo não serão listados se ela não estiver incluída.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card de Mini-Prévia do Menu no Chat */}
+                  <div className="p-3.5 rounded-xl border bg-card/60 shadow-2xs space-y-2">
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      Prévia das Opções no WhatsApp
+                    </span>
+                    <div className="bg-[#eef2f5] dark:bg-[#1a232a] p-3 rounded-lg border font-mono text-[11px] leading-relaxed text-foreground whitespace-pre-wrap">
+                      {effectiveSectors
+                        .filter((s) => isSectorEnabled(s.id, s.name))
+                        .map((s) => `*${getOrderNumber(s.id, s.name)}* - ${s.name}`)
+                        .join('\n') || '(Nenhum setor selecionado no momento)'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* COLUNA DIREITA: Lista de Setores e Mensagens de Transferência (7 colunas) */}
+                <div className="lg:col-span-7 space-y-3 flex flex-col">
+                  <div className="p-4 rounded-xl border bg-card shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Building2 className="w-4 h-4 text-primary" />
+                          Setores no Menu Interativo
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Selecione os setores, ordene a numeração e personalize a resposta ao encaminhar.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs font-semibold bg-muted/30">
+                        {effectiveSectors.filter((s) => isSectorEnabled(s.id, s.name)).length} de {effectiveSectors.length} ativos
+                      </Badge>
+                    </div>
+
+                    {/* Campo Rápido para Criar Novo Setor */}
+                    <div className="flex items-center gap-2 pt-1 pb-1">
+                      <Input
+                        value={newSectorName}
+                        onChange={(e) => setNewSectorName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddNewSector())}
+                        placeholder="Nome de outro setor (ex: Biblioteca, Cantina, Eventos...)"
+                        className="h-8 text-xs bg-background"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleAddNewSector}
+                        disabled={!newSectorName.trim()}
+                        className="h-8 text-xs px-3 gap-1 shrink-0 font-medium"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Adicionar</span>
+                      </Button>
+                    </div>
+
+                    {/* Lista dos Setores em Cards Individuais */}
+                    <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+                      {effectiveSectors.map((sector) => {
+                        const isEnabled = isSectorEnabled(sector.id, sector.name);
+                        const orderNumber = getOrderNumber(sector.id, sector.name);
+                        const sectorGreeting = getSectorGreeting(sector.id, sector.name);
+
+                        return (
+                          <div
+                            key={sector.id}
+                            className={`p-3 rounded-lg border transition-all space-y-2.5 ${
+                              isEnabled
+                                ? 'bg-background border-border shadow-2xs ring-1 ring-primary/10'
+                                : 'bg-muted/10 border-dashed border-border/60 opacity-60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                <Checkbox
+                                  id={`modal-sec-${sector.id}`}
+                                  checked={isEnabled}
+                                  onCheckedChange={() => handleToggleGreetingSector(sector.id, sector.name)}
+                                />
+                                <Label
+                                  htmlFor={`modal-sec-${sector.id}`}
+                                  className="text-xs font-semibold cursor-pointer flex items-center gap-2 truncate"
+                                >
+                                  {isEnabled && orderNumber !== null && (
+                                    <Badge className="h-5 w-5 p-0 flex items-center justify-center text-[10px] font-bold bg-primary text-primary-foreground shrink-0">
+                                      {orderNumber}
+                                    </Badge>
+                                  )}
+                                  <span className="truncate">{sector.name}</span>
+                                </Label>
+                              </div>
+
+                              {isEnabled && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleMoveSectorUp(sector.id, sector.name)}
+                                    disabled={orderNumber === 1}
+                                    className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                                    title="Mover para cima"
+                                  >
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleMoveSectorDown(sector.id, sector.name)}
+                                    disabled={orderNumber === effectiveSectors.filter((s) => isSectorEnabled(s.id, s.name)).length}
+                                    className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-20"
+                                    title="Mover para baixo"
+                                  >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Campo de Mensagem de Transferência do Setor */}
+                            {isEnabled && (
+                              <div className="pl-6 space-y-1 pt-0.5 border-t border-border/40">
+                                <Label className="text-[10px] text-muted-foreground font-medium">
+                                  Resposta enviada ao transferir para {sector.name}:
+                                </Label>
+                                <Input
+                                  value={sectorGreeting}
+                                  onChange={(e) => handleUpdateSectorGreeting(sector.id, e.target.value)}
+                                  placeholder={`Ex: Perfeito! Transferindo para o setor ${sector.name}. Em instantes um atendente irá te responder.`}
+                                  className="h-8 text-xs bg-muted/20"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+
+            {/* Rodapé Fixo */}
+            <DialogFooter className="p-3 sm:p-4 border-t bg-card flex-shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setModalTab('dispatch')}
+                className="text-xs w-full sm:w-auto"
+              >
+                Voltar aos Gatilhos
+              </Button>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {conversation && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleDispatchGreetingToCurrentChat}
+                    className="text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5 h-8"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    Enviar neste Chat Agora
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  onClick={handleSaveGreetingSettings}
+                  disabled={isSavingGreeting}
+                  className="bg-primary text-primary-foreground font-medium gap-1.5 text-xs h-8 shadow-2xs"
+                >
+                  {isSavingGreeting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      Salvar Mensagem de Saudação
+                    </>
+                  )}
+                </Button>
+              </div>
+            </DialogFooter>
           </div>
         )}
       </DialogContent>

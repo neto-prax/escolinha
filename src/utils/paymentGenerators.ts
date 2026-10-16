@@ -41,7 +41,7 @@ export interface BoletoData {
 /**
  * Calcula CRC16 CCITT (0xFFFF) exigido pelo padrão BR Code do Banco Central
  */
-function crc16(data: string): string {
+export function crc16(data: string): string {
   let crc = 0xFFFF;
   for (let i = 0; i < data.length; i++) {
     crc ^= (data.charCodeAt(i) << 8);
@@ -59,7 +59,7 @@ function crc16(data: string): string {
 /**
  * Normaliza textos removendo acentos para conformidade com padrões bancários
  */
-function normalizeAscii(str: string): string {
+export function normalizeAscii(str: string): string {
   return str
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -131,22 +131,29 @@ export function formatChavePix(raw: string): string {
     return digits;
   }
 
-  // CPF: 11 dígitos
-  if (digits.length === 11 && (trimmed.includes('.') || trimmed.includes('-'))) {
-    return digits;
-  }
-
-  // Telefone celular brasileiro (com DDD): adiciona +55
+  // Telefone celular brasileiro com formatação explícita de telefone (+, parênteses ou 12/13 dígitos)
   if (trimmed.startsWith('+')) {
     return `+${digits}`;
   }
-  if (digits.length === 10 || digits.length === 11) {
-    if (trimmed.includes('(') || trimmed.includes(')') || trimmed.includes('-') || digits.length === 11) {
-      return `+55${digits}`;
-    }
+  if (trimmed.includes('(') || trimmed.includes(')')) {
+    return `+55${digits}`;
   }
   if (digits.length === 12 || digits.length === 13) {
     return digits.startsWith('55') ? `+${digits}` : `+55${digits}`;
+  }
+
+  // CPF: 11 dígitos com pontuação padrão (ex: 123.456.789-01)
+  if (digits.length === 11 && trimmed.includes('.')) {
+    return digits;
+  }
+
+  // Telefone celular com traço e sem ponto (ex: 7599876-5432)
+  if (digits.length === 11 && trimmed.includes('-') && !trimmed.includes('.')) {
+    return `+55${digits}`;
+  }
+
+  if (digits.length === 11) {
+    return digits;
   }
 
   return trimmed;

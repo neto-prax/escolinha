@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { WhatsAppTrigger, TriggerMatchResult } from '@/types/mensagens';
+import { WhatsAppTrigger, TriggerMatchResult, WhatsAppGreetingConfig } from '@/types/mensagens';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
@@ -74,7 +74,7 @@ export const DEFAULT_TRIGGERS: WhatsAppTrigger[] = [
   },
 ];
 
-function normalizeText(text: string): string {
+export function normalizeText(text: string): string {
   return text
     .toLowerCase()
     .normalize('NFD')
@@ -82,11 +82,153 @@ function normalizeText(text: string): string {
     .trim();
 }
 
+export const DEFAULT_GREETING_MESSAGE = `Olá! 👋 Bem-vindo(a) à {{escola}}!
+
+Para direcionar seu atendimento ao setor responsável, por favor digite o número da opção desejada:
+
+{SECTORS_LIST}
+
+Como podemos te ajudar hoje?`;
+
+export const DEFAULT_GREETING_CONFIG: WhatsAppGreetingConfig = {
+  enabled: true,
+  message: DEFAULT_GREETING_MESSAGE,
+  enabledSectors: ['comercial', 'financeiro', 'secretaria', 'pedagogico'],
+  sectorGreetings: {
+    comercial: 'Transferindo seu atendimento para a equipe de Matrículas & Comercial. Um momento por favor! 🎒',
+    financeiro: 'Localizamos seu contato. Para 2ª via de boleto, PIX ou pagamentos, estou transferindo você para o setor Financeiro! 💳',
+    secretaria: 'Seu atendimento foi direcionado para a Secretaria Escolar. Em instantes um responsável irá te atender! 📑',
+    pedagogico: 'Conectando você com a Coordenação Pedagógica. Um momento por favor! 👩‍🏫',
+  },
+  defaultSectorId: null,
+  onlyFirstMessage: true,
+};
+
+export function findSectorByIdOrSlug(
+  allSectors: { id: string; name: string }[],
+  idOrSlug: string
+): { id: string; name: string } | undefined {
+  if (!idOrSlug) return undefined;
+  const cleanKey = normalizeText(idOrSlug);
+  return allSectors.find((s) => {
+    if (s.id === idOrSlug) return true;
+    const cleanName = normalizeText(s.name);
+    if (cleanName === cleanKey) return true;
+    if (cleanKey.length >= 3 && cleanName.includes(cleanKey)) return true;
+    if (cleanName.length >= 3 && cleanKey.includes(cleanName)) return true;
+    return false;
+  });
+}
+
+/**
+ * Monta o texto de saudação substituindo {SECTORS_LIST} e tags dinâmicas
+ */
+export function buildGreetingMenuText(
+  template: string,
+  allSectors: { id: string; name: string }[],
+  enabledSectorIds: string[],
+  context?: { schoolName?: string; contactName?: string }
+): string {
+  const schoolName = context?.schoolName || 'Purple Edu';
+  const contactName = context?.contactName || 'Responsável';
+
+  const orderedSectors = enabledSectorIds
+    .map((id) => findSectorByIdOrSlug(allSectors, id))
+    .filter((s): s is { id: string; name: string } => Boolean(s));
+
+  const sectorsToDisplay = orderedSectors.length > 0 ? orderedSectors : allSectors;
+
+  const sectorsList = sectorsToDisplay
+    .map((s, idx) => `*${idx + 1}* - ${s.name}`)
+    .join('\n');
+
+  let baseTemplate = template && template.trim() ? template : DEFAULT_GREETING_MESSAGE;
+
+  if (baseTemplate.includes('{SECTORS_LIST}')) {
+    baseTemplate = baseTemplate.replace('{SECTORS_LIST}', sectorsList || '*1* - Atendimento Geral');
+  } else {
+    baseTemplate = `${baseTemplate}\n\n${sectorsList || '*1* - Atendimento Geral'}`;
+  }
+
+  return baseTemplate
+    .replace(/\{\{escola\}\}/gi, schoolName)
+    .replace(/\{\{nome\}\}/gi, contactName.split(' ')[0] || contactName);
+}
+
+export interface SectorMenuEvaluationResult {
+  matched: boolean;
+  sectorId?: string;
+  sectorName?: string;
+  matchedSector?: { id: string; name: string };
+}
+
+/**
+ * Avalia se uma mensagem é uma resposta a um menu de setores (número ou nome)
+ */
+export function evaluateSectorMenuResponse(
+  input: string,
+  allSectors: { id: string; name: string }[],
+  enabledSectorIds: string[]
+): SectorMenuEvaluationResult {
+  if (!input || !input.trim()) return { matched: false };
+
+  const clean = normalizeText(input);
+
+  const orderedSectors = enabledSectorIds
+    .map((id) => findSectorByIdOrSlug(allSectors, id))
+    .filter((s): s is { id: string; name: string } => Boolean(s));
+
+  const sectorsToSearch = orderedSectors.length > 0 ? orderedSectors : allSectors;
+
+  // 1. Resposta numérica: "1", "2", "opcao 1", "#1", "1.", etc.
+  const numMatch = clean.match(/^(?:opcao\s*|opção\s*|#)?([1-9][0-9]?)\.?$/i) || clean.match(/\b([1-9][0-9]?)\b/);
+  if (numMatch) {
+    const optionIndex = parseInt(numMatch[1], 10) - 1;
+    if (optionIndex >= 0 && optionIndex < sectorsToSearch.length) {
+      const selected = sectorsToSearch[optionIndex];
+      return {
+        matched: true,
+        sectorId: selected.id,
+        sectorName: selected.name,
+        matchedSector: selected,
+      };
+    }
+  }
+
+  // 2. Resposta por nome aproximado do setor ou palavras-chave
+  for (const sector of sectorsToSearch) {
+    const cleanSectorName = normalizeText(sector.name);
+    const sectorKeywords = cleanSectorName
+      .split(/[\s,&/-]+/)
+      .filter((w) => w.length > 3 && !['setor', 'para', 'com'].includes(w));
+
+    if (
+      clean === cleanSectorName ||
+      clean.includes(cleanSectorName) ||
+      cleanSectorName.includes(clean) ||
+      sectorKeywords.some((kw) => clean.includes(kw))
+    ) {
+      return {
+        matched: true,
+        sectorId: sector.id,
+        sectorName: sector.name,
+        matchedSector: sector,
+      };
+    }
+  }
+
+  return { matched: false };
+}
+
 export function useWhatsAppTriggers() {
   const { school } = useAuth();
   const [triggersRaw, setTriggers] = useLocalStorage<WhatsAppTrigger[]>(
     'purple_whatsapp_triggers_v1',
     DEFAULT_TRIGGERS
+  );
+  const [greetingConfigRaw, setGreetingConfigRaw] = useLocalStorage<WhatsAppGreetingConfig>(
+    'purple_whatsapp_greeting_v1',
+    DEFAULT_GREETING_CONFIG
   );
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -97,6 +239,18 @@ export function useWhatsAppTriggers() {
     }
     return DEFAULT_TRIGGERS;
   }, [triggersRaw]);
+
+  // Garante que a configuração de saudação tenha todos os campos válidos
+  const greetingConfig = useMemo<WhatsAppGreetingConfig>(() => {
+    return {
+      ...DEFAULT_GREETING_CONFIG,
+      ...(greetingConfigRaw || {}),
+      sectorGreetings: {
+        ...DEFAULT_GREETING_CONFIG.sectorGreetings,
+        ...(greetingConfigRaw?.sectorGreetings || {}),
+      },
+    };
+  }, [greetingConfigRaw]);
 
   // Sync with Supabase school settings if available
   useEffect(() => {
@@ -114,10 +268,27 @@ export function useWhatsAppTriggers() {
         if (error || !data || !mounted) return;
         const settings = data.settings as Record<string, unknown> | null;
         const automation = settings?.automation as Record<string, unknown> | undefined;
-        const remoteTriggers = automation?.triggers as WhatsAppTrigger[] | undefined;
 
-        if (Array.isArray(remoteTriggers) && remoteTriggers.length > 0) {
-          setTriggers(remoteTriggers);
+        if (automation) {
+          if (Array.isArray(automation.triggers) && automation.triggers.length > 0) {
+            setTriggers(automation.triggers as WhatsAppTrigger[]);
+          }
+
+          if (automation.sector_selection_message || automation.sector_selection_enabled !== undefined) {
+            setGreetingConfigRaw({
+              enabled: Boolean(automation.sector_selection_enabled),
+              message: String(automation.sector_selection_message || DEFAULT_GREETING_MESSAGE),
+              enabledSectors:
+                Array.isArray(automation.enabled_sectors) && automation.enabled_sectors.length > 0
+                  ? (automation.enabled_sectors as string[])
+                  : DEFAULT_GREETING_CONFIG.enabledSectors,
+              sectorGreetings:
+                (automation.sector_greetings as Record<string, string>) ||
+                DEFAULT_GREETING_CONFIG.sectorGreetings,
+              defaultSectorId: (automation.default_sector_id as string) || null,
+              onlyFirstMessage: automation.only_first_message !== false,
+            });
+          }
         }
       } catch (err) {
         console.warn('Could not sync remote triggers:', err);
@@ -128,9 +299,9 @@ export function useWhatsAppTriggers() {
     return () => {
       mounted = false;
     };
-  }, [school?.id, setTriggers]);
+  }, [school?.id, setTriggers, setGreetingConfigRaw]);
 
-  // Persist to Supabase if school exists
+  // Persist triggers to Supabase
   const persistToRemote = useCallback(
     async (updatedTriggers: WhatsAppTrigger[]) => {
       if (!school?.id) return;
@@ -164,6 +335,62 @@ export function useWhatsAppTriggers() {
       }
     },
     [school?.id]
+  );
+
+  // Persist greeting & menu config to Supabase
+  const saveGreetingConfig = useCallback(
+    async (newConfig: WhatsAppGreetingConfig) => {
+      setGreetingConfigRaw(newConfig);
+      if (!school?.id) return;
+      setIsSyncing(true);
+      try {
+        const { data: currentSchool } = await supabase
+          .from('schools')
+          .select('settings')
+          .eq('id', school.id)
+          .single();
+
+        const currentSettings = (currentSchool?.settings || {}) as Record<string, unknown>;
+        const currentAutomation = (currentSettings.automation || {}) as Record<string, unknown>;
+
+        await supabase
+          .from('schools')
+          .update({
+            settings: {
+              ...currentSettings,
+              automation: {
+                ...currentAutomation,
+                sector_selection_enabled: newConfig.enabled,
+                sector_selection_message: newConfig.message,
+                enabled_sectors: newConfig.enabledSectors,
+                sector_greetings: newConfig.sectorGreetings,
+                default_sector_id: newConfig.defaultSectorId,
+                only_first_message: newConfig.onlyFirstMessage,
+              },
+            } as unknown as Json,
+          })
+          .eq('id', school.id);
+
+        toast.success('Configurações de saudação salvas!');
+      } catch (err) {
+        console.warn('Erro ao salvar saudação:', err);
+        toast.error('Erro ao salvar configurações de saudação.');
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    [school?.id, setGreetingConfigRaw]
+  );
+
+  const updateGreetingConfig = useCallback(
+    (updates: Partial<WhatsAppGreetingConfig>) => {
+      setGreetingConfigRaw((prev) => ({
+        ...DEFAULT_GREETING_CONFIG,
+        ...(prev || {}),
+        ...updates,
+      }));
+    },
+    [setGreetingConfigRaw]
   );
 
   const addTrigger = useCallback(
@@ -232,72 +459,29 @@ export function useWhatsAppTriggers() {
     [setTriggers, persistToRemote]
   );
 
-  // Evaluates a incoming message against triggers
+  // Evaluates an incoming message against triggers (pure evaluation)
   const evaluateMessage = useCallback(
     (
       text: string,
-      context?: {
-        contactName?: string;
-        studentName?: string;
-        schoolName?: string;
-        currentSectorName?: string;
-      }
+      context?: TriggerContext,
+      options?: { trackAcionamento?: boolean }
     ): TriggerMatchResult => {
-      if (!text || !text.trim()) {
-        return { matched: false };
+      const result = evaluateTriggerMatch(triggers, text, context);
+      if (options?.trackAcionamento && result.matched && result.trigger) {
+        // Increment acionamentos counter only when explicitly requested
+        const updated = triggers.map((t) =>
+          t.id === result.trigger?.id ? { ...t, totalAcionamentos: (t.totalAcionamentos || 0) + 1 } : t
+        );
+        setTriggers(updated);
       }
-
-      const cleanInput = normalizeText(text);
-      const activeTriggers = (Array.isArray(triggers) ? triggers : [])
-        .filter((t) => t && t.ativo)
-        .sort((a, b) => (a.prioridade || 0) - (b.prioridade || 0));
-
-      for (const trigger of activeTriggers) {
-        if (!trigger) continue;
-        if (trigger.tipoCorrespondencia === 'qualquer_primeira') {
-          return buildMatchResult(trigger, cleanInput, context);
-        }
-
-        const keywords = Array.isArray(trigger.palavrasChave)
-          ? trigger.palavrasChave
-          : Array.isArray((trigger as any).keywords)
-          ? (trigger as any).keywords
-          : [];
-
-        for (const keyword of keywords) {
-          if (!keyword || typeof keyword !== 'string') continue;
-          const cleanKw = normalizeText(keyword);
-          if (!cleanKw) continue;
-
-          let matches = false;
-          if (trigger.tipoCorrespondencia === 'exata') {
-            matches = cleanInput === cleanKw;
-          } else if (trigger.tipoCorrespondencia === 'inicio') {
-            matches = cleanInput.startsWith(cleanKw);
-          } else {
-            // 'contem' default
-            matches = cleanInput.includes(cleanKw);
-          }
-
-          if (matches) {
-            // Increment acionamentos counter
-            const updated = triggers.map((t) =>
-              t.id === trigger.id ? { ...t, totalAcionamentos: (t.totalAcionamentos || 0) + 1 } : t
-            );
-            setTriggers(updated);
-
-            return buildMatchResult(trigger, keyword, context);
-          }
-        }
-      }
-
-      return { matched: false };
+      return result;
     },
     [triggers, setTriggers]
   );
 
   return {
     triggers: Array.isArray(triggers) ? triggers : [],
+    greetingConfig,
     isSyncing,
     addTrigger,
     updateTrigger,
@@ -306,18 +490,76 @@ export function useWhatsAppTriggers() {
     resetDefaultTriggers,
     importTriggers,
     evaluateMessage,
+    saveGreetingConfig,
+    updateGreetingConfig,
   };
 }
 
-function buildMatchResult(
+export interface TriggerContext {
+  contactName?: string;
+  studentName?: string;
+  schoolName?: string;
+  currentSectorName?: string;
+}
+
+/**
+ * Função pura que avalia se uma mensagem dispara algum gatilho configurado.
+ * Avalia em ordem de prioridade (menor número = maior prioridade).
+ */
+export function evaluateTriggerMatch(
+  triggers: WhatsAppTrigger[],
+  text: string,
+  context?: TriggerContext
+): TriggerMatchResult {
+  if (!text || !text.trim()) {
+    return { matched: false };
+  }
+
+  const cleanInput = normalizeText(text);
+  const activeTriggers = (Array.isArray(triggers) ? triggers : [])
+    .filter((t) => t && t.ativo)
+    .sort((a, b) => (a.prioridade || 0) - (b.prioridade || 0));
+
+  for (const trigger of activeTriggers) {
+    if (!trigger) continue;
+    if (trigger.tipoCorrespondencia === 'qualquer_primeira') {
+      return buildMatchResult(trigger, cleanInput, context);
+    }
+
+    const keywords = Array.isArray(trigger.palavrasChave)
+      ? trigger.palavrasChave
+      : Array.isArray((trigger as any).keywords)
+      ? (trigger as any).keywords
+      : [];
+
+    for (const keyword of keywords) {
+      if (!keyword || typeof keyword !== 'string') continue;
+      const cleanKw = normalizeText(keyword);
+      if (!cleanKw) continue;
+
+      let matches = false;
+      if (trigger.tipoCorrespondencia === 'exata') {
+        matches = cleanInput === cleanKw;
+      } else if (trigger.tipoCorrespondencia === 'inicio') {
+        matches = cleanInput.startsWith(cleanKw);
+      } else {
+        // 'contem' default
+        matches = cleanInput.includes(cleanKw);
+      }
+
+      if (matches) {
+        return buildMatchResult(trigger, keyword, context);
+      }
+    }
+  }
+
+  return { matched: false };
+}
+
+export function buildMatchResult(
   trigger: WhatsAppTrigger,
   matchedKeyword: string,
-  context?: {
-    contactName?: string;
-    studentName?: string;
-    schoolName?: string;
-    currentSectorName?: string;
-  }
+  context?: TriggerContext
 ): TriggerMatchResult {
   const nome = context?.contactName || 'Responsável';
   const aluno = context?.studentName || 'seu filho(a)';

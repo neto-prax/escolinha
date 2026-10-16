@@ -18,6 +18,8 @@ export interface Aluno {
   nomeResponsavel: string;
   contatoResponsavel: string;
   status: 'Ativo' | 'Inativo';
+  sedeId?: string;
+  unidade?: string;
   
   // Dados Pessoais & Documentos
   estadoCivil?: string;
@@ -96,26 +98,37 @@ export interface Aluno {
   mesInicio?: number;
 
   // Histórico Financeiro e Cobranças
-  historicoFinanceiro?: CobrancaHistorico[];
+  historicoFinanceiro?: HistoricoFinanceiroItem[];
 }
 
-export interface CobrancaHistorico {
+export type TipoHistoricoItem = 'cobranca' | 'lancamento' | 'pagamento';
+
+export interface HistoricoFinanceiroItem {
   id: string;
   data: string; // ISO date/time
+  tipo?: TipoHistoricoItem;
+  categoria?: string;
+  descricao?: string;
+  valor?: number;
+  formaPagamento?: string;
+  lancamentoId?: string;
+  // Campos de cobrança (retrocompatibilidade)
   colaboradorId?: string;
-  colaboradorNome: string;
-  responsavelNome: string;
+  colaboradorNome?: string;
+  responsavelNome?: string;
   responsavelContato?: string;
   parentesco?: string;
-  mesReferencia: string; // ex: '2026-09'
-  valorCobrado: number;
-  canal: 'whatsapp' | 'ligacao';
+  mesReferencia?: string; // ex: '2026-09'
+  valorCobrado?: number;
+  canal?: 'whatsapp' | 'ligacao' | 'sistema';
   bloqueadoWhatsapp?: boolean;
-  statusResultado: 'promessa_pagamento' | 'recusou' | 'sem_contato' | 'mensagem_enviada' | 'ligacao_realizada' | 'outro';
+  statusResultado?: 'promessa_pagamento' | 'recusou' | 'sem_contato' | 'mensagem_enviada' | 'ligacao_realizada' | 'outro' | 'pago' | 'registrado';
   dataPromessa?: string;
   observacoes?: string;
   judicializada?: boolean;
 }
+
+export type CobrancaHistorico = HistoricoFinanceiroItem;
 
 export interface Mensalidade {
   id: string;

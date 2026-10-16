@@ -70,7 +70,7 @@ export function WhatsAppMediaRenderer({ message }: WhatsAppMediaRendererProps) {
             playsInline
             preload="metadata"
             onError={() => setFailed(true)}
-            className="max-h-80 w-full min-w-48 bg-muted object-contain"
+            className="max-h-80 w-full max-w-xs sm:max-w-sm min-w-0 bg-muted object-contain"
           />
         ) : (
           <img
@@ -78,7 +78,11 @@ export function WhatsAppMediaRenderer({ message }: WhatsAppMediaRendererProps) {
             alt={description || (type === 'sticker' ? 'Figurinha recebida' : 'Imagem recebida')}
             loading="lazy"
             onError={() => setFailed(true)}
-            className={type === 'sticker' ? 'h-40 w-40 object-contain' : 'max-h-80 w-full min-w-48 object-cover'}
+            className={
+              type === 'sticker'
+                ? 'h-32 w-32 sm:h-40 sm:w-40 object-contain'
+                : 'max-h-80 w-full max-w-xs sm:max-w-sm min-w-0 object-cover'
+            }
           />
         )}
       </button>

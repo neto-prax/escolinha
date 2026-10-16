@@ -5,6 +5,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { usePermissions } from '@/hooks/usePermissions';
 import { DashboardTab } from '@/components/financeiro/DashboardTab';
 import { DashboardTurmasTab } from '@/components/financeiro/DashboardTurmasTab';
+import { useSedes } from '@/hooks/useSedes';
 import { TeacherDashboard } from '@/components/dashboard/TeacherDashboard';
 import { SecretaryDashboard } from '@/components/dashboard/SecretaryDashboard';
 import { Lancamento, Orcamento, Salario, Caixa, Cartao } from '@/types/finance';
@@ -71,18 +72,39 @@ const Dashboard = () => {
     setActiveDashboardView(defaultView);
   }, [defaultView]);
 
+  const { activeSedeId, isItemInActiveSede } = useSedes();
+
+  const sedeAlunos = useMemo(() => {
+    return alunos.filter((a) => isItemInActiveSede(a.sedeId, a.unidade));
+  }, [alunos, isItemInActiveSede]);
+
+  const alunoIdSet = useMemo(() => new Set(sedeAlunos.map((a) => a.id)), [sedeAlunos]);
+
+  const sedeMensalidades = useMemo(() => {
+    if (activeSedeId === 'todas') return mensalidades;
+    return mensalidades.filter((m) => alunoIdSet.has(m.alunoId));
+  }, [mensalidades, alunoIdSet, activeSedeId]);
+
+  const sedeLancamentosStorage = useMemo(() => {
+    return lancamentosStorage.filter((l: any) => isItemInActiveSede(l?.sedeId, l?.unidade));
+  }, [lancamentosStorage, isItemInActiveSede]);
+
+  const sedeLancamentosV2Storage = useMemo(() => {
+    return lancamentosV2Storage.filter((l: any) => isItemInActiveSede(l?.sedeId, l?.unidade));
+  }, [lancamentosV2Storage, isItemInActiveSede]);
+
   // Unifica e integra lançamentos com mensalidades escolares pagas
   const lancamentos: Lancamento[] = useMemo(() => {
-    const combined = [...lancamentosStorage, ...lancamentosV2Storage];
-    return getIntegratedLancamentos(combined, mensalidades, alunos);
-  }, [lancamentosStorage, lancamentosV2Storage, mensalidades, alunos]);
+    const combined = [...sedeLancamentosStorage, ...sedeLancamentosV2Storage];
+    return getIntegratedLancamentos(combined, sedeMensalidades, sedeAlunos);
+  }, [sedeLancamentosStorage, sedeLancamentosV2Storage, sedeMensalidades, sedeAlunos]);
 
   // Indicadores Reais da Escola
   const schoolMetrics = useMemo(() => {
-    const totalAlunosAtivos = alunos.filter((a) => a.status === 'Ativo').length;
+    const totalAlunosAtivos = sedeAlunos.filter((a) => a.status === 'Ativo').length;
 
     // Previsão Contratual Líquida Mensal dos alunos ativos
-    const previsaoMensal = alunos
+    const previsaoMensal = sedeAlunos
       .filter((a) => a.status === 'Ativo')
       .reduce((sum, a) => {
         const base = Number(a.valorBase) || 650;
@@ -99,7 +121,7 @@ const Dashboard = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const mensalidadesAtrasadas = mensalidades.filter((m) => {
+    const mensalidadesAtrasadas = sedeMensalidades.filter((m) => {
       if (m.status === 'Pago') return false;
       if (m.status === 'Atrasado') return true;
       if (m.status === 'Pendente') {
@@ -121,7 +143,7 @@ const Dashboard = () => {
       inadimplenciaQtd: mensalidadesAtrasadas.length,
       totalAtrasado,
     };
-  }, [alunos, mensalidades, lancamentos]);
+  }, [sedeAlunos, sedeMensalidades, lancamentos]);
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);

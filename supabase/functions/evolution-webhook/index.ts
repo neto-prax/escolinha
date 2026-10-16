@@ -120,71 +120,126 @@ async function persistInboundMedia(
   return supabase.storage.from('message-media').getPublicUrl(path).data.publicUrl;
 }
 
+const DEFAULT_SECTOR_NAMES: Record<string, string> = {
+  comercial: 'Comercial & Matrículas',
+  financeiro: 'Financeiro',
+  secretaria: 'Secretaria',
+  pedagogico: 'Coordenação Pedagógica',
+  suporte: 'Suporte & Recepção',
+};
+
+async function dispatchOutgoingText(
+  supabase: any,
+  schoolId: string,
+  phone: string,
+  text: string
+): Promise<string | null> {
+  const UAZAPI_URL = Deno.env.get('UAZAPI_URL')?.replace(/\/$/, '');
+  const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN');
+
+  let targetUrl = UAZAPI_URL;
+  let targetToken = UAZAPI_TOKEN;
+
+  if (!targetUrl || !targetToken) {
+    const { data: inst } = await supabase
+      .from('evolution_instances')
+      .select('api_url, api_key')
+      .eq('school_id', schoolId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (inst) {
+      targetUrl = targetUrl || inst.api_url?.replace(/\/$/, '');
+      targetToken = targetToken || inst.api_key;
+    }
+  }
+
+  if (targetUrl && targetToken) {
+    try {
+      const response = await fetch(`${targetUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', token: targetToken },
+        body: JSON.stringify({ number: phone, text }),
+      });
+      const resData = await response.json().catch(() => ({}));
+      return resData?.id || null;
+    } catch (e) {
+      console.warn('dispatchOutgoingText error:', e);
+    }
+  }
+  return null;
+}
+
 async function sendWelcomeMessage(
   supabase: any,
   instanceName: string,
   phone: string,
   schoolId: string,
-  conversationId: string
+  conversationId: string,
+  contactName?: string
 ) {
   try {
-    const { data: school, error: schoolError } = await supabase
+    const { data: school } = await supabase
       .from('schools')
-      .select('settings')
+      .select('settings, name')
       .eq('id', schoolId)
-      .single();
+      .maybeSingle();
 
-    if (schoolError || !school?.settings?.automation) {
-      return;
+    const automation = school?.settings?.automation || {};
+    if (automation.sector_selection_enabled === false) {
+      return false;
     }
 
-    const automation = school.settings.automation;
-    if (!automation.sector_selection_enabled) {
-      return;
-    }
+    const rawEnabledSectors: string[] =
+      Array.isArray(automation.enabled_sectors) && automation.enabled_sectors.length > 0
+        ? automation.enabled_sectors
+        : ['comercial', 'financeiro', 'secretaria', 'pedagogico'];
 
-    const enabledSectorIds = automation.enabled_sectors || [];
-    if (enabledSectorIds.length === 0) {
-      return;
-    }
-
-    const { data: sectorsData, error: sectorsError } = await supabase
+    // Consulta setores ativos do banco sem forçar filtro IN com IDs não-UUID
+    const { data: dbSectors } = await supabase
       .from('sectors')
       .select('id, name')
-      .in('id', enabledSectorIds)
+      .eq('school_id', schoolId)
       .eq('is_active', true);
 
-    if (sectorsError || !sectorsData || sectorsData.length === 0) {
-      return;
-    }
+    const activeDbSectors = dbSectors || [];
 
-    const sectors = enabledSectorIds
-      .map((id: string) => sectorsData.find((s: any) => s.id === id))
-      .filter(Boolean);
+    const sectors = rawEnabledSectors.map((idOrSlug: string) => {
+      const foundDb = activeDbSectors.find(
+        (s: any) =>
+          s.id === idOrSlug ||
+          s.name.toLowerCase() === idOrSlug.toLowerCase() ||
+          idOrSlug.toLowerCase().includes(s.name.toLowerCase())
+      );
+      if (foundDb) return foundDb;
+      const defName = DEFAULT_SECTOR_NAMES[idOrSlug.toLowerCase()] || idOrSlug;
+      return { id: idOrSlug, name: defName };
+    });
 
-    const sectorsList = sectors.map((s: any, i: number) => `${i + 1}. ${s.name}`).join('\n');
+    const sectorsList = sectors.map((s: any, i: number) => `*${i + 1}* - ${s.name}`).join('\n');
 
     let welcomeMessage =
       automation.sector_selection_message ||
-      'Olá! 👋 Bem-vindo(a)!\n\nPor favor escolha o setor:\n\n{SECTORS_LIST}\n\nDigite o número correspondente.';
+      'Olá! 👋 Bem-vindo(a) à {{escola}}!\n\nPara direcionar seu atendimento ao setor responsável, por favor digite o número da opção desejada:\n\n{SECTORS_LIST}\n\nComo podemos te ajudar hoje?';
 
-    welcomeMessage = welcomeMessage.replace('{SECTORS_LIST}', sectorsList);
+    const firstName = contactName?.split(' ')[0] || 'Responsável';
+    const schoolName = school?.name || 'Purple Edu';
 
-    const UAZAPI_URL = Deno.env.get('UAZAPI_URL')?.replace(/\/$/, '');
-    const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN');
+    welcomeMessage = welcomeMessage
+      .replace('{SECTORS_LIST}', sectorsList)
+      .replace(/\{\{nome\}\}/gi, firstName)
+      .replace(/\{\{responsavel\}\}/gi, contactName || 'Responsável')
+      .replace(/\{\{aluno\}\}/gi, 'seu dependente')
+      .replace(/\{\{escola\}\}/gi, schoolName);
 
-    let resultKeyId: string | null = null;
-
-    if (UAZAPI_URL && UAZAPI_TOKEN) {
-      const response = await fetch(`${UAZAPI_URL}/send/text`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', token: UAZAPI_TOKEN },
-        body: JSON.stringify({ number: phone, text: welcomeMessage }),
-      });
-      const resData = await response.json().catch(() => ({}));
-      resultKeyId = resData?.id || null;
+    const resultKeyId = await dispatchOutgoingText(supabase, schoolId, phone, welcomeMessage);
+    if (!resultKeyId) {
+      console.warn(`[AutoGreeting] Gateway backend não configurado para envio direto para ${phone}, delegando disparo.`);
+      return false;
     }
 
+    const nowIso = new Date().toISOString();
     await supabase.from('whatsapp_messages').insert({
       conversation_id: conversationId,
       direction: 'outgoing',
@@ -192,10 +247,19 @@ async function sendWelcomeMessage(
       message_type: 'text',
       status: 'sent',
       external_id: resultKeyId,
-      created_at: new Date().toISOString(),
+      created_at: nowIso,
     });
+
+    await supabase.from('whatsapp_conversations').update({
+      last_message: welcomeMessage,
+      last_message_at: nowIso,
+    }).eq('id', conversationId);
+
+    console.log(`[AutoGreeting] Mensagem de saudação enviada com sucesso para ${phone}`);
+    return true;
   } catch (error) {
     console.error('Error sending welcome message:', error);
+    return false;
   }
 }
 
@@ -284,6 +348,96 @@ async function processAutomationTriggers(
       t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
     const cleanInput = normalize(incomingText);
+
+    // 1. Processar resposta ao Menu de Setores (caso a saudação inicial com menu esteja ativa)
+    if (
+      automation?.sector_selection_enabled &&
+      Array.isArray(automation?.enabled_sectors) &&
+      automation.enabled_sectors.length > 0
+    ) {
+      const { data: dbSectors } = await supabase
+        .from('sectors')
+        .select('id, name')
+        .eq('school_id', schoolId)
+        .eq('is_active', true);
+
+      const activeDbSectors = dbSectors || [];
+      const orderedSectors = automation.enabled_sectors.map((idOrSlug: string) => {
+        const found = activeDbSectors.find(
+          (s: any) =>
+            s.id === idOrSlug ||
+            s.name.toLowerCase() === idOrSlug.toLowerCase() ||
+            idOrSlug.toLowerCase().includes(s.name.toLowerCase())
+        );
+        if (found) return found;
+        const defName = DEFAULT_SECTOR_NAMES[idOrSlug.toLowerCase()] || idOrSlug;
+        return { id: idOrSlug, name: defName };
+      });
+
+      let chosenSector: any = null;
+
+      // Se digitou número (ex: "1", "1.", "#1", "opcao 1")
+      const numMatch = cleanInput.match(/^(?:opcao\s*|opção\s*|#)?(\d+)\.?$/i);
+      if (numMatch) {
+        const optionIndex = parseInt(numMatch[1], 10) - 1;
+        if (optionIndex >= 0 && optionIndex < orderedSectors.length) {
+          chosenSector = orderedSectors[optionIndex];
+        }
+      } else {
+        // Se digitou o nome do setor diretamente
+        chosenSector = orderedSectors.find((s: any) => {
+          const secName = normalize(s.name);
+          return cleanInput === secName || cleanInput.includes(secName);
+        });
+      }
+
+      if (chosenSector) {
+        const rawTransferMessage =
+          automation.sector_greetings?.[chosenSector.id] ||
+          `Perfeito! Transferindo para o setor ${chosenSector.name}. Em instantes um atendente irá te responder.`;
+
+        const firstName = contactName?.split(' ')[0] || 'Responsável';
+        const schoolName = school?.name || 'Purple Edu';
+        const finalTransferMessage = rawTransferMessage
+          .replace(/\{\{nome\}\}/gi, firstName)
+          .replace(/\{\{responsavel\}\}/gi, contactName || 'Responsável')
+          .replace(/\{\{aluno\}\}/gi, 'seu dependente')
+          .replace(/\{\{escola\}\}/gi, schoolName)
+          .replace(/\{\{setor\}\}/gi, chosenSector.name);
+
+        const resultKeyId = await dispatchOutgoingText(supabase, schoolId, phone, finalTransferMessage);
+        if (!resultKeyId) {
+          console.warn(`[AutoTrigger] Gateway backend não configurado para envio de transferência para ${phone}, delegando.`);
+          return;
+        }
+
+        const nowIso = new Date().toISOString();
+          await supabase.from('whatsapp_messages').insert({
+            conversation_id: conversationId,
+            direction: 'outgoing',
+            body: finalTransferMessage,
+            message_type: 'text',
+            status: 'sent',
+            external_id: resultKeyId,
+            created_at: nowIso,
+          });
+
+          await supabase
+            .from('whatsapp_conversations')
+            .update({
+              sector_id: chosenSector.id,
+              ticket_status: 'open',
+              last_message: finalTransferMessage,
+              last_message_at: nowIso,
+            })
+            .eq('id', conversationId);
+
+          console.log(`[AutoTrigger] Menu de saudação roteou conversa ${conversationId} para setor ${chosenSector.name}`);
+          return;
+        }
+      }
+    }
+
     const activeTriggers = triggers
       .filter((t: any) => t.ativo !== false)
       .sort((a: any, b: any) => (a.prioridade || 99) - (b.prioridade || 99));
@@ -485,6 +639,7 @@ serve(async (req) => {
     let mediaCaption: string | null = null;
     let isFromMe = false;
     let isGroup = false;
+    let senderAvatar: string | null = null;
 
     if (isUazapi) {
       const msg = messagePayload;
@@ -496,6 +651,18 @@ serve(async (req) => {
       pushName = msg.senderName || msg.pushName || payload.chat?.name || payload.contact?.name || 'Responsável';
       body = msg.text || msg.body || (typeof msg.content === 'string' ? msg.content : '') || '';
       messageType = normalizeMessageType(msg.messageType || msg.mediaType || msg.type || 'text');
+
+      senderAvatar =
+        (typeof msg.image === 'string' && msg.image) ||
+        (typeof msg.imagePreview === 'string' && msg.imagePreview) ||
+        (typeof msg.profilePicUrl === 'string' && msg.profilePicUrl) ||
+        (typeof msg.senderProfilePic === 'string' && msg.senderProfilePic) ||
+        (typeof payload.chat?.image === 'string' && payload.chat.image) ||
+        (typeof payload.chat?.imagePreview === 'string' && payload.chat.imagePreview) ||
+        (typeof payload.chat?.profilePicUrl === 'string' && payload.chat.profilePicUrl) ||
+        (typeof payload.contact?.profilePicUrl === 'string' && payload.contact.profilePicUrl) ||
+        (typeof payload.profilePicUrl === 'string' && payload.profilePicUrl) ||
+        null;
 
       if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
         mediaUrl = msg.fileURL || msg.fileUrl || msg.mediaUrl || msg.url || msg.content?.fileURL || msg.content?.fileUrl || msg.content?.file || msg.content?.url || null;
@@ -510,6 +677,12 @@ serve(async (req) => {
       phone = String(message.key?.remoteJid || '').replace(/@.*/, '').replace(/\D/g, '');
       messageId = String(message.key?.id || `evo-${Date.now()}`);
       pushName = message.pushName || 'Responsável';
+
+      senderAvatar =
+        (typeof message.profilePicUrl === 'string' && message.profilePicUrl) ||
+        (typeof payload.data?.profilePicUrl === 'string' && payload.data.profilePicUrl) ||
+        (typeof payload.data?.senderPhoto === 'string' && payload.data.senderPhoto) ||
+        null;
 
       if (message.message?.conversation) {
         body = message.message.conversation;
@@ -551,6 +724,13 @@ serve(async (req) => {
       pushName = akgData.pushName || akgData.senderName || 'Responsável';
       body = akgData.content || akgData.text || '';
       messageType = normalizeMessageType(akgData.type || 'text');
+
+      senderAvatar =
+        (typeof akgData.profilePictureUrl === 'string' && akgData.profilePictureUrl) ||
+        (typeof akgData.profilePicUrl === 'string' && akgData.profilePicUrl) ||
+        (typeof akgData.avatar === 'string' && akgData.avatar) ||
+        (typeof akgData.picture === 'string' && akgData.picture) ||
+        null;
 
       if (['image', 'video', 'audio', 'document', 'sticker'].includes(messageType)) {
         mediaUrl = akgData.fileUrl || akgData.mediaUrl || akgData.url || null;
@@ -695,6 +875,47 @@ serve(async (req) => {
 
     let isNewConversation = false;
 
+    // Resolve or upsert contact record to store profile picture
+    let contactId = conversation?.contact_id || null;
+    if (schoolId && formattedPhone) {
+      try {
+        const { data: existingContact } = await supabase
+          .from('contacts')
+          .select('id, avatar_url')
+          .eq('school_id', schoolId)
+          .or(`phone.eq.${formattedPhone},phone.eq.${cleanPhone},phone.eq.${without55}`)
+          .maybeSingle();
+
+        if (existingContact?.id) {
+          contactId = existingContact.id;
+          if (senderAvatar && existingContact.avatar_url !== senderAvatar) {
+            await supabase
+              .from('contacts')
+              .update({ avatar_url: senderAvatar })
+              .eq('id', existingContact.id);
+          }
+        } else if (senderAvatar || (pushName && pushName !== 'Responsável')) {
+          const { data: createdContact } = await supabase
+            .from('contacts')
+            .insert({
+              school_id: schoolId,
+              phone: formattedPhone,
+              full_name: pushName && pushName !== 'Responsável' ? pushName : formattedPhone,
+              avatar_url: senderAvatar || null,
+              contact_type: 'whatsapp',
+              contact_types: ['whatsapp'],
+            })
+            .select('id')
+            .maybeSingle();
+          if (createdContact?.id) {
+            contactId = createdContact.id;
+          }
+        }
+      } catch (contactErr) {
+        console.warn('Error resolving/updating contact profile pic:', contactErr);
+      }
+    }
+
     if (!conversation) {
       isNewConversation = true;
       const { data: newConv, error: createError } = await supabase
@@ -703,6 +924,7 @@ serve(async (req) => {
           school_id: schoolId,
           phone: formattedPhone,
           contact_name: pushName,
+          contact_id: contactId,
           status: 'open',
           ticket_status: 'open',
           unread_count: isFromMe ? 0 : 1,
@@ -724,6 +946,9 @@ serve(async (req) => {
         last_message: body,
         last_message_at: nowIso,
       };
+      if (contactId && !conversation.contact_id) {
+        updates.contact_id = contactId;
+      }
       if (!isFromMe) {
         updates.unread_count = (conversation.unread_count || 0) + 1;
       }
@@ -779,13 +1004,38 @@ serve(async (req) => {
       throw msgError;
     }
 
-    // Send welcome message if it's a new incoming conversation
-    if (isNewConversation && !isFromMe) {
-      await sendWelcomeMessage(supabase, instanceCandidates[0] || '', formattedPhone, schoolId, conversation.id);
+    // Send welcome message if it's the contact's first message or new conversation
+    let shouldSendGreeting = false;
+    if (!isFromMe) {
+      if (isNewConversation) {
+        shouldSendGreeting = true;
+      } else {
+        const { count: outgoingCount } = await supabase
+          .from('whatsapp_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('conversation_id', conversation.id)
+          .eq('direction', 'outgoing');
+
+        if (!outgoingCount || outgoingCount === 0) {
+          shouldSendGreeting = true;
+        }
+      }
     }
 
-    // Process automatic triggers for incoming messages
-    if (!isFromMe && body) {
+    let welcomeSent = false;
+    if (shouldSendGreeting) {
+      welcomeSent = await sendWelcomeMessage(
+        supabase,
+        instanceCandidates[0] || '',
+        formattedPhone,
+        schoolId,
+        conversation.id,
+        pushName || conversation.contact_name
+      );
+    }
+
+    // Process automatic triggers for incoming messages (if welcome menu was not just dispatched)
+    if (!isFromMe && body && !welcomeSent) {
       await processAutomationTriggers(
         supabase,
         formattedPhone,

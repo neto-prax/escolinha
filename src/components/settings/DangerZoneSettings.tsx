@@ -1,8 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, AlertTriangle, Users, Briefcase, DollarSign } from 'lucide-react';
+import { Trash2, AlertTriangle, Users, Briefcase, DollarSign, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { getSchoolId, getSchoolStorageKey, removeAllCloudState, listCloudStateKeys } from '@/lib/cloudState';
+import { supabase } from '@/integrations/supabase/client';
 
 const clearKeys = async (keys: string[]) => {
   const schoolId = await getSchoolId();
@@ -46,8 +47,38 @@ export const DangerZoneSettings = () => {
     }
   };
 
+  const handleClearWhatsApp = async () => {
+    if (confirm('Tem certeza que deseja apagar TODAS as conversas, mensagens e anexos do WhatsApp desta escola? O aparelho continuará conectado, mas o histórico será zerado.')) {
+      const schoolId = await getSchoolId();
+      if (!schoolId) {
+        toast.error('Escola não identificada. Entre novamente antes de apagar os dados.');
+        return;
+      }
+      try {
+        const { data: convs } = await supabase
+          .from('whatsapp_conversations')
+          .select('id')
+          .eq('school_id', schoolId);
+        const convIds = (convs || []).map((c: any) => c.id);
+        if (convIds.length > 0) {
+          await (supabase.from('whatsapp_messages') as any).delete().in('conversation_id', convIds);
+        }
+        await (supabase.from('whatsapp_messages') as any).delete().eq('school_id', schoolId);
+        await (supabase.from('whatsapp_conversations') as any).delete().eq('school_id', schoolId);
+
+        localStorage.removeItem('purple_whatsapp_active_conv');
+        localStorage.setItem(getSchoolStorageKey('wa_auto_sync_disabled', schoolId), 'true');
+
+        toast.success('Conversas e mensagens do WhatsApp foram apagadas com sucesso.');
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (err: any) {
+        toast.error('Erro ao apagar conversas: ' + (err?.message || 'Falha'));
+      }
+    }
+  };
+
   const handleClearAll = async () => {
-    if (confirm('ATENÇÃO: Você está prestes a apagar TODOS os dados da escola (Alunos, Colaboradores, Financeiro, Turmas e Configurações). Deseja continuar?')) {
+    if (confirm('ATENÇÃO: Você está prestes a apagar TODOS os dados da escola (Alunos, Colaboradores, Financeiro, WhatsApp, Turmas e Configurações). Deseja continuar?')) {
       const promptText = prompt('Digite "APAGAR TUDO" para confirmar a exclusão de todos os dados:');
       if (promptText === 'APAGAR TUDO') {
         const schoolId = await getSchoolId();
@@ -55,15 +86,36 @@ export const DangerZoneSettings = () => {
           toast.error('Escola não identificada. Entre novamente antes de apagar os dados.');
           return;
         }
+
+        // 1. Apaga conversas e mensagens de WhatsApp desta escola no Supabase
+        try {
+          const { data: convs } = await supabase
+            .from('whatsapp_conversations')
+            .select('id')
+            .eq('school_id', schoolId);
+          const convIds = (convs || []).map((c: any) => c.id);
+          if (convIds.length > 0) {
+            await (supabase.from('whatsapp_messages') as any).delete().in('conversation_id', convIds);
+          }
+          await (supabase.from('whatsapp_messages') as any).delete().eq('school_id', schoolId);
+          await (supabase.from('whatsapp_conversations') as any).delete().eq('school_id', schoolId);
+        } catch (e) {
+          console.warn('Erro ao limpar whatsapp_conversations no reset geral:', e);
+        }
+
+        // 2. Limpa dados locais e na tabela app_state
         const scopedPrefix = `s_${schoolId}_`;
         const localKeys: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           if (key?.startsWith(scopedPrefix)) localKeys.push(key.slice(scopedPrefix.length));
         }
+        localStorage.removeItem('purple_whatsapp_active_conv');
+        localStorage.setItem(getSchoolStorageKey('wa_auto_sync_disabled', schoolId), 'true');
+
         const cloudKeys = await listCloudStateKeys();
         await clearKeys(Array.from(new Set([...localKeys, ...cloudKeys])));
-        toast.success('ESCOLA RESETADA. Todos os dados foram apagados com sucesso.');
+        toast.success('ESCOLA RESETADA. Todos os dados (incluindo WhatsApp) foram apagados com sucesso.');
         setTimeout(() => window.location.reload(), 1500);
       } else {
         toast.error('Operação cancelada. O texto digitado não confere.');
@@ -128,6 +180,20 @@ export const DangerZoneSettings = () => {
             </Button>
           </div>
 
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 border rounded-lg bg-background">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 font-medium">
+                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                Apagar Conversas do WhatsApp
+              </div>
+              <p className="text-sm text-muted-foreground">Remove todas as conversas, mensagens e anexos do WhatsApp gravados para esta escola.</p>
+            </div>
+            <Button variant="destructive" onClick={handleClearWhatsApp} className="whitespace-nowrap">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Limpar WhatsApp
+            </Button>
+          </div>
+
           <div className="mt-8 pt-6 border-t border-destructive/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-destructive/10 border border-destructive/30">
               <div className="space-y-1">
@@ -136,7 +202,7 @@ export const DangerZoneSettings = () => {
                   RESETAR ESCOLA COMPLETA
                 </div>
                 <p className="text-sm text-destructive/80 font-medium">
-                  Apaga absolutamente TODOS os dados: alunos, colaboradores, financeiro, turmas e configurações locais.
+                  Apaga absolutamente TODOS os dados: alunos, colaboradores, financeiro, WhatsApp, turmas e configurações locais.
                 </p>
               </div>
               <Button variant="destructive" size="lg" onClick={handleClearAll} className="whitespace-nowrap shadow-md">

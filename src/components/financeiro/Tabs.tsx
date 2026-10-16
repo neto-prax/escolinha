@@ -35,13 +35,13 @@ export function Tabs({ tabs, defaultTabId, activeTabId: controlledActiveId, onTa
   };
 
   return (
-    <div className="w-full">
-      <div className="flex border-b border-gray-200 print:hidden overflow-x-auto">
+    <div className="w-full min-w-0">
+      <div className="flex border-b border-gray-200 print:hidden overflow-x-auto no-scrollbar -mx-1 px-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => handleSelect(tab.id)}
-            className={`py-2 px-6 font-medium text-sm transition-colors duration-200 focus:outline-none whitespace-nowrap ${
+            className={`py-2 px-3 sm:px-5 font-medium text-xs sm:text-sm transition-colors duration-200 focus:outline-none whitespace-nowrap shrink-0 ${
               effectiveActiveTabId === tab.id
                 ? 'border-b-2 border-purple-600 text-purple-600'
                 : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -51,7 +51,7 @@ export function Tabs({ tabs, defaultTabId, activeTabId: controlledActiveId, onTa
           </button>
         ))}
       </div>
-      <div className="p-4 mt-4 bg-white rounded-lg shadow-sm border border-gray-100 print:p-0 print:mt-0 print:border-0 print:shadow-none">
+      <div className="p-2.5 sm:p-4 mt-3 sm:mt-4 bg-white rounded-lg shadow-sm border border-gray-100 overflow-x-hidden print:p-0 print:mt-0 print:border-0 print:shadow-none">
         {tabs.find((tab) => tab.id === effectiveActiveTabId)?.content}
       </div>
     </div>

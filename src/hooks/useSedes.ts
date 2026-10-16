@@ -170,11 +170,32 @@ export function useSedes() {
     toast.success(`Sede "${target.nome}" removida.`);
   };
 
+  const matrizSede = useMemo(() => {
+    return sedes.find((s) => s.tipo === 'Matriz') || sedes[0] || null;
+  }, [sedes]);
+
+  // Verifica se um item pertence à sede ativa no momento
+  const isItemInActiveSede = useCallback(
+    (itemSedeId?: string, itemUnidadeNome?: string): boolean => {
+      const matrizId = matrizSede?.id || 'sede-matriz';
+      return checkItemInActiveSede({
+        itemSedeId,
+        itemUnidadeNome,
+        activeSedeId: effectiveActiveSedeId,
+        matrizId,
+        sedes,
+      });
+    },
+    [effectiveActiveSedeId, matrizSede, sedes]
+  );
+
   return {
     sedes,
     userAllowedSedes,
     activeSedeId: effectiveActiveSedeId,
     activeSede,
+    matrizSede,
+    isItemInActiveSede,
     setActiveSedeId,
     canAccessAllSedes,
     isRestrictedToSingleSede,
@@ -184,4 +205,122 @@ export function useSedes() {
     updateSede,
     deleteSede,
   };
+}
+
+export interface CheckItemInActiveSedeParams {
+  itemSedeId?: string;
+  itemUnidadeNome?: string;
+  activeSedeId: string;
+  matrizId?: string;
+  sedes?: { id: string; nome: string; codigo?: string }[];
+}
+
+/**
+ * Função pura que valida o isolamento de dados entre sedes/unidades escolares.
+ * Regras:
+ * 1. 'todas': visualização consolidada global.
+ * 2. itemSedeId explícito: deve coincidir exatamente com a sede ativa.
+ * 3. itemUnidadeNome gravado: deve coincidir com o nome ou código de uma sede correspondente à ativa.
+ * 4. Dados legados (sem sedeId nem unidade): pertencem exclusivamente à Matriz,
+ *    garantindo que novas sedes recém-criadas NÃO herdem dados órfãos da Matriz.
+ */
+export function checkItemInActiveSede({
+  itemSedeId,
+  itemUnidadeNome,
+  activeSedeId,
+  matrizId = 'sede-matriz',
+  sedes = [],
+}: CheckItemInActiveSedeParams): boolean {
+  // Visão global 'Todas as Sedes': exibe tudo consolidado
+  if (activeSedeId === 'todas') return true;
+
+  // 1. Se tem sedeId explícito gravado
+  if (itemSedeId) {
+    return itemSedeId === activeSedeId;
+  }
+
+  // 2. Se tem unidade/nome gravado
+  if (itemUnidadeNome && itemUnidadeNome !== 'Todas') {
+    const matched = sedes.find(
+      (s) =>
+        s.nome.trim().toLowerCase() === itemUnidadeNome.trim().toLowerCase() ||
+        (s.codigo && s.codigo.trim().toLowerCase() === itemUnidadeNome.trim().toLowerCase())
+    );
+    if (matched) {
+      return matched.id === activeSedeId;
+    }
+  }
+
+  // 3. Se não tem sedeId nem unidade (dados legados da escola original):
+  // Pertence exclusivamente à Matriz principal, NÃO aparecendo em novas sedes.
+  return activeSedeId === matrizId;
+}
+
+export interface ResolveSedeParams {
+  rawSede?: any;
+  sedes?: { id: string; nome: string; codigo?: string; tipo?: string }[];
+  activeSede?: { id: string; nome: string } | null;
+  matrizSede?: { id: string; nome: string } | null;
+}
+
+/**
+ * Resolve o sedeId e o nome da unidade para importação ou cadastro de alunos.
+ * Mapeia termos flexíveis como "Papagaio", "PAP", "Sede Papagaio", "Senador", etc.
+ * Padrão da instituição: Sede Principal (Papagaio).
+ */
+export function resolveSedeFromImport({
+  rawSede,
+  sedes = [],
+  activeSede,
+  matrizSede,
+}: ResolveSedeParams): { sedeId: string; unidade: string } {
+  // Localiza a sede Papagaio
+  const papagaioSede =
+    sedes.find(
+      (s) =>
+        s.nome.toLowerCase().includes('papagaio') ||
+        (s.codigo && s.codigo.toLowerCase() === 'pap')
+    ) ||
+    matrizSede ||
+    sedes.find((s) => s.tipo === 'Matriz') ||
+    sedes[0] || {
+      id: 'sede-matriz',
+      nome: 'Sede Principal (Papagaio)',
+    };
+
+  if (rawSede !== undefined && rawSede !== null && String(rawSede).trim() !== '') {
+    const clean = String(rawSede).trim().toLowerCase();
+
+    // 1. Busca exata por id, nome ou código
+    const exact = sedes.find(
+      (s) =>
+        s.id.toLowerCase() === clean ||
+        s.nome.toLowerCase() === clean ||
+        (s.codigo && s.codigo.toLowerCase() === clean)
+    );
+    if (exact) return { sedeId: exact.id, unidade: exact.nome };
+
+    // 2. Busca parcial por nome ou código
+    const partial = sedes.find(
+      (s) =>
+        s.nome.toLowerCase().includes(clean) ||
+        clean.includes(s.nome.toLowerCase()) ||
+        (s.codigo && clean.includes(s.codigo.toLowerCase()))
+    );
+    if (partial) return { sedeId: partial.id, unidade: partial.nome };
+
+    // 3. Menção explícita a Papagaio
+    if (clean.includes('papagaio') || clean === 'pap') {
+      return { sedeId: papagaioSede.id, unidade: papagaioSede.nome };
+    }
+  }
+
+  // Se não foi informada sede na linha:
+  // Se o usuário estiver operando em uma sede ativa específica diferente de 'todas', usa ela
+  if (activeSede && activeSede.id !== 'todas') {
+    return { sedeId: activeSede.id, unidade: activeSede.nome };
+  }
+
+  // Fallback padrão institucional: Sede Papagaio
+  return { sedeId: papagaioSede.id, unidade: papagaioSede.nome };
 }

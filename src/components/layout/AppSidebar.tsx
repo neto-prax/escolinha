@@ -64,7 +64,7 @@ const navigationGroups: NavGroup[] = [
     label: 'Principal',
     items: [
       { title: 'Dashboard', url: '/app/dashboard', icon: LayoutDashboard, module: 'dashboard' },
-      { title: 'Conversas WAKG', url: '/app/mensagens', icon: MessageSquare, module: 'mensagens' },
+      { title: 'Conversas', url: '/app/mensagens', icon: MessageSquare, module: 'mensagens' },
       { title: 'Comercial', url: '/app/comercial', icon: Target, module: 'comercial' },
       { title: 'Alunos', url: '/app/alunos', icon: GraduationCap, module: 'alunos' },
       { title: 'Pedagógico', url: '/app/pedagogico', icon: BookOpen, module: 'pedagogico' },
@@ -91,7 +91,7 @@ const navigationGroups: NavGroup[] = [
 export const AppSidebar = () => {
   const { school, user, isSuperAdmin: authIsSuperAdmin } = useAuth();
   const { activeSede } = useSedes();
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
   const { data: dbIsSuperAdmin } = useQuery({
@@ -172,6 +172,9 @@ export const AppSidebar = () => {
                         <SidebarMenuButton asChild tooltip={item.title}>
                           <NavLink
                             to={item.url}
+                            onClick={() => {
+                              if (isMobile) setOpenMobile(false);
+                            }}
                             className="flex items-center gap-3 text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                             activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                           >

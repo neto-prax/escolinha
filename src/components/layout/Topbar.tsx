@@ -44,15 +44,15 @@ export const Topbar = () => {
   const primaryRole = roles[0];
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-topbar px-4 lg:px-6 print:hidden">
-      <SidebarTrigger />
+    <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center gap-1.5 sm:gap-3 lg:gap-4 border-b bg-topbar px-2.5 sm:px-4 lg:px-6 print:hidden min-w-0 max-w-full">
+      <SidebarTrigger className="shrink-0" />
 
       {/* Logo oficial da página inicial & Seletor de Sedes no Nome Purple Edu (Seta Verde e Seta Preta) */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-purple-100/70 dark:hover:bg-purple-950/60 transition-all border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/30 text-left cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-[#6b26d9]"
+            className="flex items-center gap-1.5 sm:gap-2.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl hover:bg-purple-100/70 dark:hover:bg-purple-950/60 transition-all border border-purple-200/70 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/30 text-left cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-[#6b26d9] min-w-0 shrink"
             title={
               isRestrictedToSingleSede
                 ? `Acesso exclusivo à unidade ${activeSede?.nome || 'fixa'}`
@@ -61,17 +61,17 @@ export const Topbar = () => {
           >
             <Logo size="sm" iconOnly />
             <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-[#6b26d9] transition-colors leading-none">
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white group-hover:text-[#6b26d9] transition-colors leading-none truncate">
                   Purple Edu
                 </span>
                 {canSwitchSedes ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[#6b26d9] transition-transform group-data-[state=open]:rotate-180" />
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[#6b26d9] transition-transform group-data-[state=open]:rotate-180 shrink-0" />
                 ) : (
-                  <MapPin className="h-3 w-3 text-[#6b26d9]" />
+                  <MapPin className="h-3 w-3 text-[#6b26d9] shrink-0" />
                 )}
               </div>
-              <span className="text-[11px] text-[#6b26d9] dark:text-[#a78bfa] font-medium truncate max-w-[150px] sm:max-w-[210px] mt-0.5">
+              <span className="text-[10px] sm:text-[11px] text-[#6b26d9] dark:text-[#a78bfa] font-medium truncate max-w-[90px] sm:max-w-[210px] mt-0.5">
                 {activeSedeId === 'todas' ? 'Todas as Sedes' : activeSede?.nome || school?.name || 'Sede Principal'}
               </span>
             </div>
@@ -169,15 +169,15 @@ export const Topbar = () => {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 font-medium text-xs transition-all shadow-xs cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-200 font-medium text-xs transition-all shadow-xs cursor-pointer group outline-none focus-visible:ring-2 focus-visible:ring-amber-500 min-w-0 shrink"
               title="Alternar escola em visualização (Modo Super Admin)"
             >
-              <Shield className="h-4 w-4 fill-amber-500 text-amber-600 shrink-0" />
+              <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-amber-500 text-amber-600 shrink-0" />
               <div className="flex flex-col text-left min-w-0">
-                <span className="text-[9px] uppercase font-extrabold tracking-wider text-amber-600 dark:text-amber-400 leading-none">
+                <span className="text-[8px] sm:text-[9px] uppercase font-extrabold tracking-wider text-amber-600 dark:text-amber-400 leading-none">
                   Super Admin
                 </span>
-                <span className="font-semibold text-xs text-foreground truncate max-w-[130px] sm:max-w-[170px] leading-tight mt-0.5">
+                <span className="font-semibold text-[11px] sm:text-xs text-foreground truncate max-w-[75px] sm:max-w-[170px] leading-tight mt-0.5">
                   {school?.name || 'Selecione a Escola'}
                 </span>
               </div>
@@ -222,8 +222,8 @@ export const Topbar = () => {
         </DropdownMenu>
       )}
 
-      {/* Busca global */}
-      <div className="flex-1 max-w-md mx-auto">
+      {/* Busca global (visível em tablets/desktop, espaçador flexível no mobile) */}
+      <div className="hidden md:block flex-1 max-w-md mx-auto">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -232,13 +232,14 @@ export const Topbar = () => {
           />
         </div>
       </div>
+      <div className="flex-1 md:hidden" />
 
       {/* Ações */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         {/* Notificações */}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+        <Button variant="ghost" size="icon" className="relative h-8 w-8 sm:h-9 sm:w-9">
+          <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+          <Badge className="absolute -top-0.5 -right-0.5 h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center p-0 text-[10px] sm:text-xs">
             3
           </Badge>
         </Button>
@@ -246,8 +247,8 @@ export const Topbar = () => {
         {/* Menu do usuário */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 px-2">
-              <Avatar className="h-8 w-8">
+            <Button variant="ghost" className="flex items-center gap-1.5 sm:gap-2 px-1 sm:px-2 h-8 sm:h-9">
+              <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
                 <AvatarImage src={profile?.avatar_url || undefined} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                   {initials}

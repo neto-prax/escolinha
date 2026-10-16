@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { getSchoolStorageKey } from '@/lib/cloudState';
 
 export const WA_AKG_DEFAULT_API_KEY = 'wag_vJGLccAD1L4JciTdBeHTxqDMx5ywrkxr';
 export const WA_AKG_DEFAULT_SESSION = 'cd4iyk';
@@ -556,6 +557,18 @@ export async function syncWaAkgChats(schoolId: string): Promise<{ synced: number
 
       const formattedPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
       const contactName = chat.name || chat.pushName || formattedPhone;
+      const profilePic = chat.profilePictureUrl || chat.profilePicUrl || chat.image || chat.picture || chat.avatar || chat.photo || null;
+
+      if (profilePic && typeof window !== 'undefined') {
+        try {
+          const cacheKey = getSchoolStorageKey('wa_contact_avatars', schoolId);
+          const current = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+          current[cleanPhone] = profilePic;
+          current[formattedPhone] = profilePic;
+          localStorage.setItem(cacheKey, JSON.stringify(current));
+        } catch {}
+      }
+
       const lastMsgText = typeof chat.lastMessage === 'string'
         ? chat.lastMessage
         : chat.lastMessage?.text || chat.lastMessage?.message?.conversation || chat.lastMessage?.message?.extendedTextMessage?.text || '[Mensagem]';

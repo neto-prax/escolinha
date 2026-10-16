@@ -4,7 +4,7 @@ import { SectorUsersManager } from '@/components/settings/SectorUsersManager';
 import { AutomationSettings } from '@/components/settings/AutomationSettings';
 import { FinancialSettings } from '@/components/settings/FinancialSettings';
 import { PedagogicoSettings } from '@/components/settings/PedagogicoSettings';
-import { UazapiSettings } from '@/components/settings/UazapiSettings';
+import { WhatsAppConfigHub } from '@/components/settings/WhatsAppConfigHub';
 import { DangerZoneSettings } from '@/components/settings/DangerZoneSettings';
 import { AdministrativoSettings } from '@/components/settings/AdministrativoSettings';
 import { SedesManager } from '@/components/settings/SedesManager';
@@ -93,45 +93,45 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
           }}
           className="space-y-6"
         >
-          <TabsList className="bg-slate-100 p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200">
+          <TabsList className="bg-slate-100 p-1 rounded-xl flex flex-wrap gap-1 border border-slate-200 w-full sm:w-auto justify-start">
             {canAccessGeral && (
-              <TabsTrigger value="geral" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
-                <Settings2 className="h-4 w-4" />
+              <TabsTrigger value="geral" className="gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
+                <Settings2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Geral
               </TabsTrigger>
             )}
 
             {canAccessSedes && (
-              <TabsTrigger value="sedes" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-[#6b26d9] data-[state=active]:shadow-sm">
-                <MapPin className="h-4 w-4" />
+              <TabsTrigger value="sedes" className="gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-[#6b26d9] data-[state=active]:shadow-sm">
+                <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Sedes & Unidades
               </TabsTrigger>
             )}
 
             {canAccessWhatsapp && (
-              <TabsTrigger value="whatsapp" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
-                <Phone className="h-4 w-4" />
+              <TabsTrigger value="whatsapp" className="gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
+                <Phone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 WhatsApp
               </TabsTrigger>
             )}
 
             {canAccessFinanceiro && (
-              <TabsTrigger value="financeiro" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
-                <CreditCard className="h-4 w-4" />
+              <TabsTrigger value="financeiro" className="gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
+                <CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Financeiro
               </TabsTrigger>
             )}
 
             {canAccessPedagogico && (
-              <TabsTrigger value="pedagogico" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
-                <FileText className="h-4 w-4" />
+              <TabsTrigger value="pedagogico" className="gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
+                <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Pedagógico
               </TabsTrigger>
             )}
 
             {canAccessAdministrativo && (
-              <TabsTrigger value="administrativo" className="gap-2 px-4 py-2 font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
-                <Briefcase className="h-4 w-4" />
+              <TabsTrigger value="administrativo" className="gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
+                <Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Administrativo
               </TabsTrigger>
             )}
@@ -153,7 +153,13 @@ const Configuracoes = ({ hideHeader = false }: { hideHeader?: boolean }) => {
 
         {/* 2. WHATSAPP */}
         <TabsContent value="whatsapp" className="space-y-6">
-          <UazapiSettings />
+          <WhatsAppConfigHub
+            initialSubTab={
+              ['atendimento', 'gatilhos', 'fluxos', 'conexao'].includes(searchParams.get('section') || '')
+                ? (searchParams.get('section') as any)
+                : 'atendimento'
+            }
+          />
         </TabsContent>
 
         {/* 3. FINANCEIRO */}

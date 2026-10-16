@@ -13,12 +13,14 @@ export interface TurmaConfig {
   nome: string;
   letras: string[];
   valorPadrao?: number;
+  sedeId?: string;
 }
 
 export interface Lancamento {
   id: string;
   data: Date;
   unidade: Unidade;
+  sedeId?: string;
   descricao: string;
   categoria: Categoria;
   tipoCusto: TipoCusto;

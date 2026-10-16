@@ -12,14 +12,20 @@ import { Target, Kanban as KanbanIcon, ShieldAlert } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 import { DEFAULT_TURMAS_CONFIG } from '@/constants/turmas';
+import { useSedes } from '@/hooks/useSedes';
 
 export default function Comercial() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'kanban';
 
+  const { isItemInActiveSede } = useSedes();
   const [turmas] = useLocalStorage<TurmaConfig[]>('escolinha_turmas_v3', DEFAULT_TURMAS_CONFIG);
   const [alunos] = useLocalStorage<Aluno[]>('escolinha_alunos', []);
   const { canAccessScreen, canAccessTab } = usePermissions();
+
+  const sedeAlunos = React.useMemo(() => {
+    return alunos.filter((a) => isItemInActiveSede(a.sedeId, a.unidade));
+  }, [alunos, isItemInActiveSede]);
 
   const handleTabChange = (val: string) => {
     setSearchParams({ tab: val });
@@ -76,13 +82,13 @@ export default function Comercial() {
 
         {showKanban && (
           <TabsContent value="kanban" className="m-0 focus-visible:outline-none">
-            <KanbanTab turmas={turmas} alunos={alunos} />
+            <KanbanTab turmas={turmas} alunos={sedeAlunos} />
           </TabsContent>
         )}
 
         {showMetas && (
           <TabsContent value="metas" className="m-0 focus-visible:outline-none">
-            <MetasTab turmas={turmas} alunos={alunos} />
+            <MetasTab turmas={turmas} alunos={sedeAlunos} />
           </TabsContent>
         )}
       </Tabs>

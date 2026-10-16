@@ -31,9 +31,10 @@ interface LancamentosTabProps {
   onAddCategoria: (novaCategoria: string) => void;
   onFecharCaixa: (caixaId: string) => void;
   onImportLancamentos?: (novosLancamentos: Omit<Lancamento, 'id'>[]) => void;
+  onReconciliarComAlunos?: () => void;
 }
 
-export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categorias, turmas, onAddLancamento, onUpdateLancamento, onAddCategoria, onFecharCaixa, onImportLancamentos }: LancamentosTabProps) {
+export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categorias, turmas, onAddLancamento, onUpdateLancamento, onAddCategoria, onFecharCaixa, onImportLancamentos, onReconciliarComAlunos }: LancamentosTabProps) {
   const { sedes, activeSede } = useSedes();
   const [tipo, setTipo] = useState<TipoLancamento>('Entrada');
   const [descricao, setDescricao] = useState('');
@@ -41,6 +42,14 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
   const [data, setData] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('Administrativo');
   const [unidade, setUnidade] = useState<Unidade>(activeSede?.nome || 'Todas');
+
+  useEffect(() => {
+    if (activeSede?.nome) {
+      setUnidade(activeSede.nome);
+    } else {
+      setUnidade('Todas');
+    }
+  }, [activeSede?.nome]);
   const [turmasSelecionadas, setTurmasSelecionadas] = useState<TurmaConfig[]>([]);
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>('PIX');
   const [status, setStatus] = useState<'Pago' | 'Em Aberto'>('Pago');
@@ -174,16 +183,41 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
   };
 
   const handleDownloadTemplate = () => {
-    const templateData = [{
-      Data: '15/01/2024',
-      Tipo: 'Entrada',
-      Descricao: 'Descrição do lançamento',
-      Valor: 150.00,
-      Categoria: 'Mensalidades',
-      Unidade: 'Todas',
-      'Forma de Pagamento': 'PIX',
-      Status: 'Pago'
-    }];
+    const templateData = [
+      {
+        Data: '15/01/2024',
+        Tipo: 'Entrada',
+        Descricao: 'Mensalidade Março - João da Silva',
+        Aluno: 'João da Silva',
+        Valor: 450.00,
+        Categoria: 'Mensalidades',
+        Unidade: 'Todas',
+        'Forma de Pagamento': 'PIX',
+        Status: 'Pago'
+      },
+      {
+        Data: '15/01/2024',
+        Tipo: 'Entrada',
+        Descricao: 'Fardamento Escolar Completo - João da Silva',
+        Aluno: 'João da Silva',
+        Valor: 180.00,
+        Categoria: 'Fardamento / Estoque',
+        Unidade: 'Todas',
+        'Forma de Pagamento': 'Cartão',
+        Status: 'Pago'
+      },
+      {
+        Data: '16/01/2024',
+        Tipo: 'Saída',
+        Descricao: 'Material de Limpeza / Consumo',
+        Aluno: '',
+        Valor: 120.00,
+        Categoria: 'Material de Consumo',
+        Unidade: 'Todas',
+        'Forma de Pagamento': 'PIX',
+        Status: 'Pago'
+      }
+    ];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo");
@@ -225,23 +259,41 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
             (s) => s.nome.toLowerCase() === (row.Unidade || '').toString().trim().toLowerCase()
           );
 
+          const rawTipo = String(row.Tipo || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const isSaida = rawTipo === 'saida' || rawTipo === 'despesa';
+
+          const rawStatus = String(row.Status || '').trim().toLowerCase();
+          const isAberto = rawStatus.includes('aberto') || rawStatus === 'pendente';
+
+          const alunoNomeColuna = String(row.Aluno || row['Nome do Aluno'] || row.Estudante || '').trim();
+          const matriculaColuna = String(row['Matrícula'] || row.Matricula || '').trim();
+          
+          let descFinal = String(row.Descricao || 'Importado').trim();
+          if (alunoNomeColuna && !descFinal.toLowerCase().includes(alunoNomeColuna.toLowerCase())) {
+            descFinal = `${descFinal} - ${alunoNomeColuna}`;
+          }
+
+          let observacoesFinal = '';
+          if (alunoNomeColuna) observacoesFinal += `Aluno: ${alunoNomeColuna} `;
+          if (matriculaColuna) observacoesFinal += `Matrícula: ${matriculaColuna} `;
+
           return {
-            tipo: row.Tipo === 'Saída' ? 'Saída' : 'Entrada',
-            descricao: row.Descricao || 'Importado',
+            tipo: isSaida ? 'Saída' : 'Entrada',
+            descricao: descFinal,
             valor: Number(row.Valor) || 0,
             data: parsedDate,
             categoria: categorias.includes(row.Categoria) ? row.Categoria : categorias[0],
             unidade: matchedSede ? matchedSede.nome : (row.Unidade === 'Todas' ? 'Todas' : 'Todas'),
             formaPagamento: row['Forma de Pagamento'] || 'PIX',
-            status: row.Status === 'Em Aberto' ? 'Em Aberto' : 'Pago',
+            status: isAberto ? 'Em Aberto' : 'Pago',
             tipoCusto: 'Variável',
             caixaId: caixas[0]?.id,
+            observacoes: observacoesFinal.trim() || undefined,
           };
         });
 
         if (onImportLancamentos && novosLancamentos.length > 0) {
           onImportLancamentos(novosLancamentos);
-          toast.success(`${novosLancamentos.length} lançamentos importados com sucesso!`);
         }
       } catch (error) {
         console.error(error);
@@ -561,6 +613,7 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
       data: new Date(data + 'T12:00:00'),
       categoria,
       unidade,
+      sedeId: activeSede?.id,
       turmas: turmasDoAluno,
       formaPagamento,
       status,
@@ -716,6 +769,16 @@ export function LancamentosTab({ lancamentos, orcamentos, caixas, cartoes, categ
           <Upload size={18} />
           Importar
         </button>
+        {onReconciliarComAlunos && (
+          <button 
+            onClick={onReconciliarComAlunos}
+            className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg font-medium shadow-xs transition-colors"
+            title="Aloca entradas com nome de alunos, dá baixa em mensalidades e adiciona demais itens ao histórico financeiro"
+          >
+            <Sparkles size={18} className="text-indigo-600" />
+            Conciliar com Alunos
+          </button>
+        )}
         <button 
           onClick={handleExport}
           className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium shadow-sm transition-colors"

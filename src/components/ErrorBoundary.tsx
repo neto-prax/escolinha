@@ -46,3 +46,50 @@ export class ErrorBoundary extends React.Component<Props, State> {
     );
   }
 }
+
+export class LocalErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallbackTitle?: string; onReset?: () => void },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[LocalErrorBoundary]', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-8 rounded-xl border border-destructive/20 bg-destructive/5 text-center space-y-3">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <h3 className="font-semibold text-sm">{this.props.fallbackTitle || 'Não foi possível carregar este módulo'}</h3>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto break-words">
+            {this.state.error.message || 'Erro inesperado ao renderizar.'}
+          </p>
+          <div className="flex items-center justify-center gap-2 pt-1">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                this.setState({ error: null });
+                this.props.onReset?.();
+              }}
+            >
+              Recarregar Módulo
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => window.location.reload()}>
+              Recarregar Página
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}

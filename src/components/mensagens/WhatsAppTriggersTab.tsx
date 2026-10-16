@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Sparkles,
   Plus,
@@ -33,6 +33,10 @@ import {
   Send,
   Loader2,
   MessageSquare,
+  Smartphone,
+  ChevronUp,
+  ChevronDown,
+  Save,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,6 +44,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -55,11 +62,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useWhatsAppTriggers } from '@/hooks/useWhatsAppTriggers';
-import { useWhatsAppInbox } from '@/hooks/useWhatsAppInbox';
+import {
+  useWhatsAppTriggers,
+  buildGreetingMenuText,
+  evaluateSectorMenuResponse,
+  DEFAULT_GREETING_MESSAGE,
+  DEFAULT_GREETING_CONFIG,
+} from '@/hooks/useWhatsAppTriggers';
+import { useWhatsAppSectors } from '@/hooks/useWhatsAppSectors';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { WhatsAppTrigger, TipoCorrespondenciaTrigger } from '@/types/mensagens';
+import { WhatsAppTrigger, TipoCorrespondenciaTrigger, WhatsAppGreetingConfig } from '@/types/mensagens';
 import { toast } from 'sonner';
 
 /* --------------------------------------------------------------------------
@@ -189,6 +202,7 @@ const SCHOOL_TRIGGER_TEMPLATES: SchoolTriggerTemplate[] = [
 export function WhatsAppTriggersTab() {
   const {
     triggers = [],
+    greetingConfig,
     addTrigger,
     updateTrigger,
     deleteTrigger,
@@ -196,10 +210,205 @@ export function WhatsAppTriggersTab() {
     resetDefaultTriggers,
     importTriggers,
     evaluateMessage,
+    saveGreetingConfig,
   } = useWhatsAppTriggers();
 
-  const { allAvailableSectors = [] } = useWhatsAppInbox();
+  const { allAvailableSectors = [] } = useWhatsAppSectors();
   const { school, profile } = useAuth();
+
+  // Sub-aba ativa dentro de Gatilhos: 'keywords' (Palavras-Chave) ou 'greeting' (Saudação & Menu)
+  const [activeSubTab, setActiveSubTab] = useState<'keywords' | 'greeting'>('keywords');
+  const [greetingDraft, setGreetingDraft] = useState<WhatsAppGreetingConfig>(() => ({
+    ...DEFAULT_GREETING_CONFIG,
+    ...(greetingConfig || {}),
+    enabledSectors: Array.isArray(greetingConfig?.enabledSectors)
+      ? greetingConfig.enabledSectors
+      : DEFAULT_GREETING_CONFIG.enabledSectors,
+    sectorGreetings: {
+      ...DEFAULT_GREETING_CONFIG.sectorGreetings,
+      ...(greetingConfig?.sectorGreetings || {}),
+    },
+  }));
+  const [isSavingGreeting, setIsSavingGreeting] = useState(false);
+  const [testMenuInput, setTestMenuInput] = useState('1');
+
+  useEffect(() => {
+    if (greetingConfig) {
+      setGreetingDraft({
+        ...DEFAULT_GREETING_CONFIG,
+        ...greetingConfig,
+        enabledSectors: Array.isArray(greetingConfig.enabledSectors)
+          ? greetingConfig.enabledSectors
+          : DEFAULT_GREETING_CONFIG.enabledSectors,
+        sectorGreetings: {
+          ...DEFAULT_GREETING_CONFIG.sectorGreetings,
+          ...(greetingConfig.sectorGreetings || {}),
+        },
+      });
+    }
+  }, [greetingConfig]);
+
+  const normalizeSector = (str?: string | null) =>
+    String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  const effectiveSectors = useMemo(() => {
+    const defaultSectors = [
+      { id: 'comercial', name: 'Comercial & Matrículas', is_active: true },
+      { id: 'financeiro', name: 'Financeiro', is_active: true },
+      { id: 'secretaria', name: 'Secretaria', is_active: true },
+      { id: 'pedagogico', name: 'Coordenação Pedagógica', is_active: true },
+      { id: 'suporte', name: 'Suporte & Recepção', is_active: true },
+    ];
+
+    const baseList = Array.isArray(allAvailableSectors) && allAvailableSectors.length > 0 ? allAvailableSectors : [];
+    const existingNames = new Set(baseList.map((s) => normalizeSector(s?.name)));
+
+    const missingDefaults = defaultSectors.filter(
+      (def) =>
+        !existingNames.has(normalizeSector(def.name)) &&
+        !baseList.some((db) => db?.id === def.id || (db?.name && normalizeSector(db.name).includes(normalizeSector(def.id))))
+    );
+
+    return [...baseList, ...missingDefaults];
+  }, [allAvailableSectors]);
+
+  const enabledSectorsList = useMemo(() => {
+    const list = greetingDraft?.enabledSectors;
+    if (Array.isArray(list) && list.length > 0) {
+      return list.filter((x): x is string => typeof x === 'string');
+    }
+    return DEFAULT_GREETING_CONFIG.enabledSectors;
+  }, [greetingDraft?.enabledSectors]);
+
+  const isSectorEnabled = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    return enabledSectorsList.some(
+      (id) =>
+        id === sectorId ||
+        normalizeSector(id) === cleanName ||
+        (cleanName && cleanName.includes(normalizeSector(id))) ||
+        (normalizeSector(id) && normalizeSector(id).includes(cleanName))
+    );
+  };
+
+  const getOrderNumber = (sectorId: string, sectorName: string): number | null => {
+    const cleanName = normalizeSector(sectorName);
+    const idx = enabledSectorsList.findIndex(
+      (id) =>
+        id === sectorId ||
+        normalizeSector(id) === cleanName ||
+        (cleanName && cleanName.includes(normalizeSector(id))) ||
+        (normalizeSector(id) && normalizeSector(id).includes(cleanName))
+    );
+    return idx >= 0 ? idx + 1 : null;
+  };
+
+  const getSectorGreeting = (sectorId: string, sectorName: string): string => {
+    if (greetingDraft?.sectorGreetings?.[sectorId]) {
+      return greetingDraft.sectorGreetings[sectorId];
+    }
+    const cleanName = normalizeSector(sectorName);
+    for (const [key, msg] of Object.entries(greetingDraft?.sectorGreetings || {})) {
+      if (
+        normalizeSector(key) === cleanName ||
+        (cleanName && cleanName.includes(normalizeSector(key))) ||
+        (normalizeSector(key) && normalizeSector(key).includes(cleanName))
+      ) {
+        return msg;
+      }
+    }
+    return '';
+  };
+
+  const testMenuResult = useMemo(() => {
+    return evaluateSectorMenuResponse(testMenuInput, effectiveSectors, enabledSectorsList);
+  }, [testMenuInput, effectiveSectors, enabledSectorsList]);
+
+  const greetingPreviewText = useMemo(() => {
+    return buildGreetingMenuText(
+      greetingDraft?.message || DEFAULT_GREETING_MESSAGE,
+      effectiveSectors,
+      enabledSectorsList,
+      { schoolName: school?.name || 'Purple Edu', contactName: 'Mariana Silva' }
+    );
+  }, [greetingDraft?.message, effectiveSectors, enabledSectorsList, school?.name]);
+
+  const handleToggleGreetingSector = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    const isCurrentlyEnabled = isSectorEnabled(sectorId, sectorName);
+
+    setGreetingDraft((prev) => {
+      const currentList = Array.isArray(prev.enabledSectors) ? prev.enabledSectors : DEFAULT_GREETING_CONFIG.enabledSectors;
+      let nextList: string[];
+      if (isCurrentlyEnabled) {
+        nextList = currentList.filter(
+          (id) =>
+            id !== sectorId &&
+            normalizeSector(id) !== cleanName &&
+            !(cleanName && cleanName.includes(normalizeSector(id))) &&
+            !(normalizeSector(id) && normalizeSector(id).includes(cleanName))
+        );
+      } else {
+        nextList = [...currentList, sectorId];
+      }
+      return { ...prev, enabledSectors: nextList };
+    });
+  };
+
+  const handleMoveSectorUp = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    setGreetingDraft((prev) => {
+      const currentList = Array.isArray(prev.enabledSectors) ? prev.enabledSectors : DEFAULT_GREETING_CONFIG.enabledSectors;
+      const idx = currentList.findIndex(
+        (id) =>
+          id === sectorId ||
+          normalizeSector(id) === cleanName ||
+          (cleanName && cleanName.includes(normalizeSector(id))) ||
+          (normalizeSector(id) && normalizeSector(id).includes(cleanName))
+      );
+      if (idx <= 0) return prev;
+      const copy = [...currentList];
+      [copy[idx - 1], copy[idx]] = [copy[idx], copy[idx - 1]];
+      return { ...prev, enabledSectors: copy };
+    });
+  };
+
+  const handleMoveSectorDown = (sectorId: string, sectorName: string) => {
+    const cleanName = normalizeSector(sectorName);
+    setGreetingDraft((prev) => {
+      const currentList = Array.isArray(prev.enabledSectors) ? prev.enabledSectors : DEFAULT_GREETING_CONFIG.enabledSectors;
+      const idx = currentList.findIndex(
+        (id) =>
+          id === sectorId ||
+          normalizeSector(id) === cleanName ||
+          (cleanName && cleanName.includes(normalizeSector(id))) ||
+          (normalizeSector(id) && normalizeSector(id).includes(cleanName))
+      );
+      if (idx < 0 || idx >= currentList.length - 1) return prev;
+      const copy = [...currentList];
+      [copy[idx], copy[idx + 1]] = [copy[idx + 1], copy[idx]];
+      return { ...prev, enabledSectors: copy };
+    });
+  };
+
+  const handleUpdateSectorGreeting = (sectorId: string, text: string) => {
+    setGreetingDraft((prev) => ({
+      ...prev,
+      sectorGreetings: {
+        ...prev.sectorGreetings,
+        [sectorId]: text,
+      },
+    }));
+  };
+
+  const handleSaveGreetingSettings = async () => {
+    setIsSavingGreeting(true);
+    try {
+      await saveGreetingConfig(greetingDraft);
+    } finally {
+      setIsSavingGreeting(false);
+    }
+  };
 
   // Test bench state
   const [testInput, setTestInput] = useState('olá, gostaria de saber como faço a matrícula e qual o valor');
@@ -255,12 +464,14 @@ export function WhatsAppTriggersTab() {
   };
 
   // Evaluate test bench live with current school branding
-  const testResult = evaluateMessage(testInput, {
-    contactName: profile?.full_name || 'Carlos Silva (Responsável)',
-    studentName: 'Lucas Silva (Aluno)',
-    schoolName: school?.name || 'Purple Edu',
-    currentSectorName: 'Secretaria',
-  });
+  const testResult = useMemo(() => {
+    return evaluateMessage(testInput, {
+      contactName: profile?.full_name || 'Carlos Silva (Responsável)',
+      studentName: 'Lucas Silva (Aluno)',
+      schoolName: school?.name || 'Purple Edu',
+      currentSectorName: 'Secretaria',
+    });
+  }, [evaluateMessage, testInput, profile?.full_name, school?.name]);
 
   // Filter triggers with complete null safety
   const safeList = useMemo(() => (Array.isArray(triggers) ? triggers.filter(Boolean) : []), [triggers]);
@@ -523,7 +734,58 @@ export function WhatsAppTriggersTab() {
 
   return (
     <div className="space-y-6">
-      {/* ---------------- CABEÇALHO DA ABA ---------------- */}
+      {/* ---------------- SELETOR DE SUB-ABAS DE GATILHOS ---------------- */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+        <Tabs
+          value={activeSubTab}
+          onValueChange={(val) => setActiveSubTab(val as 'keywords' | 'greeting')}
+          className="w-full sm:w-auto"
+        >
+          <TabsList className="grid grid-cols-2 w-full sm:w-[500px] h-10 p-1 bg-muted/70">
+            <TabsTrigger value="keywords" className="gap-2 text-xs font-semibold data-[state=active]:shadow-xs">
+              <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
+              <span>Gatilhos por Palavras-Chave ({safeList.length})</span>
+            </TabsTrigger>
+            <TabsTrigger value="greeting" className="gap-2 text-xs font-semibold data-[state=active]:shadow-xs">
+              <Bot className="w-4 h-4 text-primary" />
+              <span>Mensagem de Saudação & Menu</span>
+              {greetingDraft.enabled ? (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" title="Ativo na 1ª mensagem" />
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-muted-foreground/40 inline-block" title="Pausado" />
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {activeSubTab === 'greeting' && (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleSaveGreetingSettings}
+              disabled={isSavingGreeting}
+              className="gap-1.5 text-xs h-8 font-semibold shadow-xs"
+            >
+              {isSavingGreeting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  Salvar Saudação
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ---------------- ABA 1: GATILHOS POR PALAVRAS-CHAVE ---------------- */}
+      {activeSubTab === 'keywords' && (
+        <div className="space-y-6">
+          {/* ---------------- CABEÇALHO DA ABA ---------------- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
@@ -1051,6 +1313,431 @@ export function WhatsAppTriggersTab() {
           </div>
         )}
       </div>
+    </div>
+  )}
+
+      {/* ---------------- ABA 2: MENSAGEM DE SAUDAÇÃO & MENU INICIAL ---------------- */}
+      {activeSubTab === 'greeting' && (
+        <div className="space-y-6">
+          {/* Card de Configuração Geral */}
+          <Card className="border-border shadow-xs">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Bot className="w-5 h-5 text-primary" />
+                      Mensagem de Boas-Vindas & Menu Inicial
+                    </CardTitle>
+                    <Badge variant={greetingDraft.enabled ? 'default' : 'secondary'} className="text-[10px] font-semibold">
+                      {greetingDraft.enabled ? 'Ativo na 1ª mensagem' : 'Desativado'}
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">
+                    Disparado automaticamente apenas na primeira mensagem enviada por um contato novo ou em uma nova conversa aberta.
+                  </CardDescription>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center space-x-2 bg-muted/40 px-3 py-2 rounded-lg border">
+                    <Switch
+                      id="greeting-toggle"
+                      checked={greetingDraft.enabled}
+                      onCheckedChange={(checked) =>
+                        setGreetingDraft((prev) => ({ ...prev, enabled: checked }))
+                      }
+                    />
+                    <Label htmlFor="greeting-toggle" className="text-xs font-semibold cursor-pointer">
+                      {greetingDraft.enabled ? 'Saudação Ativa' : 'Saudação Pausada'}
+                    </Label>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setGreetingDraft(DEFAULT_GREETING_CONFIG);
+                      toast.info('Mensagem e setores restaurados para o padrão.');
+                    }}
+                    className="h-9 text-xs gap-1.5"
+                    title="Restaurar padrão inicial"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
+                    Restaurar Padrão
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+
+          {/* Grid Principal: Editor de Mensagem e Setores + Preview WhatsApp & Testador */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Coluna Esquerda (7 cols): Editor e Setores */}
+            <div className="lg:col-span-7 space-y-6">
+              {/* Editor de Texto da Saudação */}
+              <Card className="border-border shadow-xs">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-primary" />
+                      Texto da Mensagem de Boas-Vindas
+                    </span>
+                    <span className="text-[11px] font-normal text-muted-foreground">
+                      Variáveis Dinâmicas Disponíveis
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Escreva o texto inicial de boas-vindas. Inclua a tag <code className="text-primary font-semibold font-mono bg-primary/10 px-1 py-0.5 rounded">{'{SECTORS_LIST}'}</code> onde o menu de setores deve ser listado.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Botões de atalho para tags */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setGreetingDraft((prev) => ({
+                          ...prev,
+                          message: prev.message.includes('{SECTORS_LIST}')
+                            ? prev.message
+                            : `${prev.message}\n\n{SECTORS_LIST}`,
+                        }))
+                      }
+                      className="text-xs h-7 px-2.5 bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary font-semibold"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      {'{SECTORS_LIST}'} (Menu de Setores)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setGreetingDraft((prev) => ({
+                          ...prev,
+                          message: `${prev.message} {{nome}}`,
+                        }))
+                      }
+                      className="text-xs h-7 px-2"
+                    >
+                      + {'{{nome}}'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setGreetingDraft((prev) => ({
+                          ...prev,
+                          message: `${prev.message} {{escola}}`,
+                        }))
+                      }
+                      className="text-xs h-7 px-2"
+                    >
+                      + {'{{escola}}'}
+                    </Button>
+                  </div>
+
+                  <Textarea
+                    rows={7}
+                    value={greetingDraft.message}
+                    onChange={(e) =>
+                      setGreetingDraft((prev) => ({ ...prev, message: e.target.value }))
+                    }
+                    placeholder="Digite a mensagem de saudação..."
+                    className="font-mono text-xs leading-relaxed resize-y"
+                  />
+
+                  {!greetingDraft.message.includes('{SECTORS_LIST}') && (
+                    <div className="p-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>
+                        Atenção: A tag <code className="font-semibold">{'{SECTORS_LIST}'}</code> não está no texto. Os setores ativos abaixo não serão exibidos numerados na mensagem se ela não for adicionada.
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Configuração dos Setores do Menu */}
+              <Card className="border-border shadow-xs">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-primary" />
+                        Setores Inclusos no Menu & Mensagem de Transferência
+                      </CardTitle>
+                      <CardDescription className="text-xs mt-0.5">
+                        Marque os setores que deseja que apareçam numerados e personalize a mensagem de confirmação de encaminhamento para cada um.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {effectiveSectors.filter((s) => isSectorEnabled(s.id, s.name)).length} de {effectiveSectors.length} selecionados
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="divide-y divide-border border rounded-lg overflow-hidden bg-card">
+                    {effectiveSectors.map((sector) => {
+                      const isEnabled = isSectorEnabled(sector.id, sector.name);
+                      const orderNumber = getOrderNumber(sector.id, sector.name);
+                      const sectorGreeting = getSectorGreeting(sector.id, sector.name);
+
+                      return (
+                        <div
+                          key={sector.id}
+                          className={`p-3.5 space-y-2.5 transition-colors ${
+                            isEnabled ? 'bg-background' : 'bg-muted/10 opacity-70'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <Checkbox
+                                id={`sector-check-${sector.id}`}
+                                checked={isEnabled}
+                                onCheckedChange={() => handleToggleGreetingSector(sector.id, sector.name)}
+                              />
+                              <Label
+                                htmlFor={`sector-check-${sector.id}`}
+                                className="text-xs font-semibold cursor-pointer flex items-center gap-2"
+                              >
+                                {isEnabled && orderNumber !== null && (
+                                  <Badge className="h-5 w-5 p-0 flex items-center justify-center text-[11px] font-bold bg-primary text-primary-foreground">
+                                    {orderNumber}
+                                  </Badge>
+                                )}
+                                <span>{sector.name}</span>
+                              </Label>
+                            </div>
+
+                            {isEnabled && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleMoveSectorUp(sector.id, sector.name)}
+                                  disabled={orderNumber === 1}
+                                  className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                  title="Mover para cima no menu"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleMoveSectorDown(sector.id, sector.name)}
+                                  disabled={
+                                    orderNumber ===
+                                    effectiveSectors.filter((s) => isSectorEnabled(s.id, s.name)).length
+                                  }
+                                  className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                  title="Mover para baixo no menu"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+
+                          {isEnabled && (
+                            <div className="pl-7 space-y-1">
+                              <Label className="text-[11px] text-muted-foreground">
+                                Mensagem enviada ao transferir para {sector.name}:
+                              </Label>
+                              <Input
+                                value={sectorGreeting}
+                                onChange={(e) => handleUpdateSectorGreeting(sector.id, e.target.value)}
+                                placeholder={`Ex: Perfeito! Transferindo para o setor ${sector.name}. Em instantes um atendente irá te responder.`}
+                                className="h-8 text-xs bg-muted/20"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveGreetingSettings}
+                      disabled={isSavingGreeting}
+                      className="gap-1.5 text-xs font-semibold"
+                    >
+                      {isSavingGreeting ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          Salvando Configurações...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          Salvar Mensagem de Saudação
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Coluna Direita (5 cols): Mockup WhatsApp Live & Simulador de Resposta */}
+            <div className="lg:col-span-5 space-y-6">
+              {/* Mockup WhatsApp */}
+              <Card className="border-border shadow-xs overflow-hidden">
+                <CardHeader className="py-3 px-4 bg-muted/40 border-b">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-4 h-4 text-emerald-600" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Pré-visualização no WhatsApp
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-background">
+                      {greetingDraft.enabled ? 'Ativo' : 'Pausado'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {/* Celular / WhatsApp mockup frame */}
+                  <div className="bg-[#e5ddd5] dark:bg-[#0b141a] p-4 min-h-[380px] flex flex-col justify-between space-y-4 font-sans text-xs">
+                    {/* Header do Chat simulado */}
+                    <div className="bg-[#f0f2f5] dark:bg-[#202c33] rounded-lg p-2.5 flex items-center justify-between border shadow-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
+                          {school?.name?.slice(0, 2).toUpperCase() || 'PE'}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground text-xs leading-none">
+                            {school?.name || 'Escola Purple'}
+                          </p>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                            online
+                          </span>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
+                        1ª Mensagem
+                      </Badge>
+                    </div>
+
+                    {/* Balões de conversa */}
+                    <div className="space-y-3 flex-1 flex flex-col justify-end">
+                      {/* Mensagem do contato (inbound) */}
+                      <div className="flex justify-start">
+                        <div className="max-w-[85%] bg-white dark:bg-[#202c33] p-2.5 rounded-lg rounded-tl-none shadow-xs text-foreground space-y-1">
+                          <p className="text-xs">Olá, gostaria de mais informações!</p>
+                          <span className="text-[9px] text-muted-foreground block text-right">
+                            10:30
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Mensagem automática da escola com menu */}
+                      {greetingDraft.enabled ? (
+                        <div className="flex justify-end">
+                          <div className="max-w-[90%] bg-[#d9fdd3] dark:bg-[#005c4b] p-3 rounded-lg rounded-tr-none shadow-xs text-foreground space-y-1.5">
+                            <p className="text-xs whitespace-pre-wrap leading-relaxed text-zinc-900 dark:text-zinc-100">
+                              {greetingPreviewText}
+                            </p>
+                            <div className="flex items-center justify-end gap-1 text-[9px] text-emerald-800/80 dark:text-emerald-200/80">
+                              <span>10:30</span>
+                              <CheckCircle2 className="w-3 h-3 text-sky-500 inline" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-3 text-center rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+                          A mensagem de boas-vindas está desativada no momento.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Simulador Interativo de Escolha de Setor */}
+              <Card className="border-border shadow-xs">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Play className="w-4 h-4 text-emerald-600" />
+                    Simulador Interativo de Escolha do Menu
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Teste o que acontece quando o contato responde com um número (1, 2, ...) ou com o nome do setor.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Resposta digitada pelo usuário:</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={testMenuInput}
+                        onChange={(e) => setTestMenuInput(e.target.value)}
+                        placeholder="Ex: 1, 2, financeiro, matricula..."
+                        className="h-9 text-xs"
+                      />
+                      <div className="flex gap-1">
+                        {enabledSectorsList.slice(0, 3).map((secId, idx) => (
+                          <Button
+                            key={secId}
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setTestMenuInput(String(idx + 1))}
+                            className="h-9 px-2.5 text-xs font-mono"
+                          >
+                            {idx + 1}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Resultado do Teste */}
+                  <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-muted-foreground">Detecção Automática:</span>
+                      {testMenuResult.matched ? (
+                        <Badge className="bg-emerald-600 text-white text-[10px] gap-1 font-semibold">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Setor: {testMenuResult.matchedSector?.name}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-amber-600 border-amber-300 dark:border-amber-800 text-[10px] gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          Nenhum setor identificado
+                        </Badge>
+                      )}
+                    </div>
+
+                    {testMenuResult.matched && (
+                      <div className="space-y-1.5 pt-1 border-t text-xs">
+                        <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
+                          <ArrowRight className="w-3 h-3 text-primary" />
+                          <span>Ação: Conversa será roteada para a fila de <strong>{testMenuResult.matchedSector?.name}</strong></span>
+                        </div>
+                        <div className="bg-background p-2 rounded border text-[11px] text-foreground">
+                          <span className="font-semibold text-muted-foreground block text-[10px]">Mensagem de encaminhamento disparada:</span>
+                          <span className="italic">
+                            "{greetingDraft?.sectorGreetings?.[testMenuResult.matchedSector?.id || ''] ||
+                              `Perfeito! Transferindo para o setor ${testMenuResult.matchedSector?.name}. Em instantes um atendente irá te responder.`}"
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ---------------- MODAL DE MODELOS PRONTOS ESCOLARES ---------------- */}
       <Dialog open={libraryModalOpen} onOpenChange={setLibraryModalOpen}>

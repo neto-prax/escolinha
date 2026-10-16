@@ -1,4 +1,8 @@
-# Connect School Hub
+# Connect School Hub — Purple Edu ERP
+
+> 📖 **Central de Documentação do Projeto**: Acesse a pasta [**`doc/`**](./doc/README.md) para a documentação técnica completa, manual de arquitetura, modelagem de dados, guias por módulo e manuais de instalação/deploy.
+> - **Documentação Completa Unificada**: [**`doc/DOCUMENTACAO_COMPLETA.md`**](./doc/DOCUMENTACAO_COMPLETA.md)
+> - **Índice e Guia dos Módulos**: [**`doc/README.md`**](./doc/README.md)
 
 Crie um ERP SaaS para gestão escolar completa chamado “Interagir ERP”, com visual claro (light theme), design moderno, minimalista, acessível, com layout administrativo profissional (sidebar + topbar), foco em usabilidade e rapidez. O sistema deve ter controle de acesso por perfil (RBAC) e permissões por setor.
 
