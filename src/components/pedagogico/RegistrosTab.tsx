@@ -214,7 +214,9 @@ const NovoRegistroDialog = ({ open, onOpenChange, turmas, onSaved }: {
         const f = files[i];
         const uploaded = completed.current.get(f);
         if (uploaded) { arquivos.push(uploaded); continue; }
-        const sess = await driveAction<{ upload_url: string }>({ action: 'upload-session', turma_id: turma.id, turma_nome: turma.nome, file_name: f.name, mime_type: f.type, size: f.size, origin: window.location.origin });
+        const sedeId = (() => { try { return JSON.parse(localStorage.getItem('escolinha_active_sede_id') || '"todas"'); } catch { return 'todas'; } })();
+        const sedeNome = (() => { try { return (JSON.parse(localStorage.getItem('escolinha_sedes') || '[]') as { id: string; nome: string }[]).find(s => s.id === sedeId)?.nome; } catch { return undefined; } })();
+        const sess = await driveAction<{ upload_url: string }>({ action: 'upload-session', turma_id: turma.id, turma_nome: turma.nome, sede_id: sedeNome ? sedeId : 'geral', sede_nome: sedeNome || 'Todas as Sedes', file_name: f.name, mime_type: f.type, size: f.size, origin: window.location.origin });
         const result = await uploadToDrive(sess.upload_url, f, (p) => setProgress((prev) => ({ ...prev, [i]: p })));
         const arquivo: Arquivo = { drive_file_id: result.id, nome: result.name || f.name, mime_type: result.mimeType || f.type, tamanho_bytes: f.size, web_view_link: result.webViewLink || `https://drive.google.com/file/d/${result.id}/view` };
         completed.current.set(f, arquivo);

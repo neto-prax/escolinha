@@ -1,12 +1,12 @@
 import { useMemo, useEffect, useCallback } from 'react';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { Sede, DEFAULT_SEDES } from '@/types/sede';
+import { Sede } from '@/types/sede';
 import { useAuth } from '@/contexts/AuthContext';
 import { AllUserPermissions } from '@/hooks/usePermissions';
 import { toast } from 'sonner';
 
 export function useSedes() {
-  const [sedes, setSedes] = useLocalStorage<Sede[]>('escolinha_sedes', DEFAULT_SEDES);
+  const [sedes, setSedes] = useLocalStorage<Sede[]>('escolinha_sedes', []);
   const [storedActiveSedeId, setStoredActiveSedeId] = useLocalStorage<string>('escolinha_active_sede_id', 'todas');
   const [permissionsStore] = useLocalStorage<AllUserPermissions>('escolinha_user_permissions_v2', {});
 
