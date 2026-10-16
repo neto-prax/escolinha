@@ -46,7 +46,19 @@ export const RegistrosTab = () => {
   const { user, profile } = useAuth();
   const schoolId = profile?.school_id;
   const qc = useQueryClient();
-  const [turmas] = useLocalStorage<TurmaPedagogica[]>('escolinha_turmas_pedagogico_v1', DEFAULT_TURMAS_PEDAGOGICO);
+  const [todasTurmas] = useLocalStorage<TurmaPedagogica[]>('escolinha_turmas_pedagogico_v1', DEFAULT_TURMAS_PEDAGOGICO);
+  const { roles } = useAuth();
+  const isOnlyTeacher = roles.includes('teacher') && !roles.some((r) => r === 'director' || r === 'admin');
+  const turmas = useMemo(() => {
+    if (!isOnlyTeacher) return todasTurmas;
+    const ids = [user?.id, profile?.id].filter(Boolean).map(String);
+    const nome = (profile?.full_name || '').trim().toLowerCase();
+    const isMe = (id?: string, n?: string) => (!!id && ids.includes(String(id))) || (!!nome && (n || '').trim().toLowerCase() === nome);
+    return todasTurmas.filter((t) =>
+      isMe(t.professorRegenteId, t.professorRegenteNome) ||
+      Object.values(t.gradeHoraria?.slots ?? {}).some((s: any) => isMe(s?.professorId, s?.professorNome) || (s?.subSlots ?? s?.aulas ?? []).some?.((x: any) => isMe(x?.professorId, x?.professorNome)))
+    );
+  }, [todasTurmas, isOnlyTeacher, user?.id, profile?.id, profile?.full_name]);
   const { data: drive } = useGoogleDriveStatus();
 
   const [filtroTurma, setFiltroTurma] = useState('all');
@@ -191,8 +203,8 @@ const NovoRegistroDialog = ({ open, onOpenChange, turmas, onSaved }: {
 
   const salvar = async () => {
     if (!user || !profile?.school_id) return toast.error('Faça login novamente para salvar.');
-    const turma = turmas.find((t) => t.id === turmaId);
-    if (!turma || !titulo.trim() || files.length === 0) return toast.error('Informe turma, título e pelo menos um arquivo.');
+    const turma = turmas.find((t) => t.id === turmaId) ?? { id: 'geral', nome: 'Geral' };
+    if (!titulo.trim() || files.length === 0) return toast.error('Informe título e pelo menos um arquivo.');
     if (!data) return toast.error('Informe a data do registro.');
     if (files.some(f => !/^(image|video)\//.test(f.type) || !f.size)) return toast.error('Selecione apenas fotos e vídeos não vazios.');
     setSaving(true);
@@ -231,10 +243,13 @@ const NovoRegistroDialog = ({ open, onOpenChange, turmas, onSaved }: {
         <fieldset disabled={saving} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label>Turma</Label>
-              <Select value={turmaId} onValueChange={(id) => { if (completed.current.size) { toast.error('Conclua este registro antes de trocar a turma.'); return; } setTurmaId(id); }}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>{turmas.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
+              <Label>Turma (opcional)</Label>
+              <Select value={turmaId || 'geral'} onValueChange={(id) => { if (completed.current.size) { toast.error('Conclua este registro antes de trocar a turma.'); return; } setTurmaId(id === 'geral' ? '' : id); }}>
+                <SelectTrigger><SelectValue placeholder="Geral" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="geral">Geral (sem turma)</SelectItem>
+                  {turmas.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div><Label>Data</Label><Input type="date" value={data} onChange={(e) => setData(e.target.value)} /></div>
