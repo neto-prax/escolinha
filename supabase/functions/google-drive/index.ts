@@ -72,7 +72,7 @@ const Schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('status') }),
   z.object({ action: z.literal('auth-url'), return_url: z.string().url() }),
   z.object({ action: z.literal('disconnect') }),
-  z.object({ action: z.literal('upload-session'), turma_id: z.string().min(1).max(200), turma_nome: z.string().min(1).max(200), file_name: z.string().min(1).max(500), mime_type: z.string().regex(/^(image|video)\/[\w.+-]+$/), size: z.number().int().positive().safe(), origin: z.string().url() }),
+  z.object({ action: z.literal('upload-session'), turma_id: z.string().min(1).max(200), turma_nome: z.string().min(1).max(200), sede_id: z.string().min(1).max(200).optional(), sede_nome: z.string().min(1).max(200).optional(), file_name: z.string().min(1).max(500), mime_type: z.string().regex(/^(image|video)\/[\w.+-]+$/), size: z.number().int().positive().safe(), origin: z.string().url() }),
 ]);
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -140,8 +140,12 @@ Deno.serve(async req => {
     let folders = (cfg.class_folders ?? {}) as Record<string, string>;
     if (!(await availableFolder(token, root))) { root = await folder(token, `Registros Escolares (${schoolId.slice(0, 8)})`); folders = {}; }
     if (!root) throw new Error('Pasta da escola indisponível.');
-    let turmaFolder = folders[body.turma_id];
-    if (!(await availableFolder(token, turmaFolder))) { turmaFolder = await folder(token, `${turmaNome} (${body.turma_id.slice(0, 8)})`, root); folders[body.turma_id] = turmaFolder; }
+    const sedeKey = `sede:${body.sede_id || 'geral'}`;
+    let sedeFolder = folders[sedeKey];
+    if (!(await availableFolder(token, sedeFolder))) { sedeFolder = await folder(token, String(body.sede_nome || 'Todas as Sedes').slice(0, 200), root); folders[sedeKey] = sedeFolder; }
+    const turmaKey = `${sedeKey}:${body.turma_id}`;
+    let turmaFolder = folders[turmaKey];
+    if (!(await availableFolder(token, turmaFolder))) { turmaFolder = await folder(token, `${turmaNome} (${body.turma_id.slice(0, 8)})`, sedeFolder); folders[turmaKey] = turmaFolder; }
     const { error } = await admin.from('school_google_drive').update({ root_folder_id: root, class_folders: folders, updated_at: new Date().toISOString() }).eq('school_id', schoolId);
     if (error) throw new Error('Não foi possível salvar as pastas.');
     const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,webViewLink', {
