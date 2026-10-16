@@ -141,7 +141,7 @@ Deno.serve(async req => {
     if (!(await availableFolder(token, root))) { root = await folder(token, `Registros Escolares (${schoolId.slice(0, 8)})`); folders = {}; }
     if (!root) throw new Error('Pasta da escola indisponível.');
     let turmaFolder = folders[body.turma_id];
-    if (!(await availableFolder(token, turmaFolder))) { turmaFolder = await folder(token, `${turma.nome} (${body.turma_id.slice(0, 8)})`, root); folders[body.turma_id] = turmaFolder; }
+    if (!(await availableFolder(token, turmaFolder))) { turmaFolder = await folder(token, `${turmaNome} (${body.turma_id.slice(0, 8)})`, root); folders[body.turma_id] = turmaFolder; }
     const { error } = await admin.from('school_google_drive').update({ root_folder_id: root, class_folders: folders, updated_at: new Date().toISOString() }).eq('school_id', schoolId);
     if (error) throw new Error('Não foi possível salvar as pastas.');
     const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size,webViewLink', {
