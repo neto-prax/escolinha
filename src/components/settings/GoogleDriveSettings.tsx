@@ -86,6 +86,8 @@ export const GoogleDriveSettings = () => {
             </div>
           </div>
         ) : (
+          <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">Endereço que deve estar cadastrado no Google Cloud: <code className="select-all">{`${window.location.origin}/google-drive/callback`}</code></p>
           <Button onClick={() => connect.mutate()} disabled={connect.isPending || !data?.can_manage}>
             {connect.isPending && <Loader2 className="mr-2 animate-spin" size={16} />}
             Conectar com Google
