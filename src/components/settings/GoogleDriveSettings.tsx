@@ -92,6 +92,7 @@ export const GoogleDriveSettings = () => {
             {connect.isPending && <Loader2 className="mr-2 animate-spin" size={16} />}
             Conectar com Google
           </Button>
+          </div>
         )}
       </CardContent>
     </Card>
