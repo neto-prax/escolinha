@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef } from 'react';
+import { runInBackground } from '@/lib/backgroundUploads';
 import { driveAction } from '@/lib/googleDrive';
 import { uploadToDrive } from '@/lib/driveUpload';
 import type { Json } from '@/integrations/supabase/types';
